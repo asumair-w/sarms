@@ -142,10 +142,10 @@
 .savedBanner {
   margin-top: 1rem;
   padding: 0.75rem 1rem;
-  background: #f0fdf4;
-  border: 1px solid #86efac;
+  background: #e8efe8;
+  border: 1px solid var(--sarms-primary, #5c7b5c);
   border-radius: 10px;
   font-size: 0.9rem;
-  color: #166534;
+  color: var(--sarms-primary, #5c7b5c);
   font-weight: 500;
 }
