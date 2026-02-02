@@ -2,6 +2,14 @@
 
 The deploy step fails because Cloudflare runs `npx wrangler deploy` with no arguments. Fix it in **one** of these ways:
 
+**Important:** If you use Option 1 or rely on the config file, ensure `wrangler.jsonc` and `wrangler.toml` are in your repo. Commit and push them:
+```bash
+git add wrangler.jsonc wrangler.toml
+git commit -m "Add wrangler config for deploy"
+git push
+```
+Then trigger a new build. Wrangler will discover the config and deploy the `dist/` folder.
+
 ---
 
 ## Option 1: Change the Deploy command (recommended)
