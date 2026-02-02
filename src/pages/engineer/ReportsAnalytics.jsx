@@ -13,7 +13,7 @@ const RECORD_TYPE_OPTIONS = [
   { id: 'inventory', label: 'Inventory' },
 ]
 
-const CHART_COLORS = ['#ef4444', '#eab308', '#3b82f6', '#22c55e', '#94a3b8']
+const CHART_COLORS = ['#8b6b5c', '#b89a4a', '#6b7b8a', '#5c7b5c', '#8b95a0']
 
 function inDateRange(iso, from, to) {
   if (!from && !to) return true

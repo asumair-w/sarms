@@ -26,10 +26,10 @@ export default function EngineerHome() {
     const s = { [TASK_STATUS.COMPLETED]: 0, [TASK_STATUS.IN_PROGRESS]: 0, [TASK_STATUS.APPROVED]: 0, [TASK_STATUS.PENDING_APPROVAL]: 0 }
     tasks.forEach((task) => { s[task.status] = (s[task.status] || 0) + 1 })
     return [
-      { labelKey: 'chartCompleted', value: s[TASK_STATUS.COMPLETED], color: '#22c55e' },
-      { labelKey: 'chartInProgress', value: s[TASK_STATUS.IN_PROGRESS], color: '#eab308' },
-      { labelKey: 'chartApproved', value: s[TASK_STATUS.APPROVED], color: '#3b82f6' },
-      { labelKey: 'chartPending', value: s[TASK_STATUS.PENDING_APPROVAL], color: '#94a3b8' },
+      { labelKey: 'chartCompleted', value: s[TASK_STATUS.COMPLETED], color: 'var(--sarms-chart-success)' },
+      { labelKey: 'chartInProgress', value: s[TASK_STATUS.IN_PROGRESS], color: 'var(--sarms-chart-warning)' },
+      { labelKey: 'chartApproved', value: s[TASK_STATUS.APPROVED], color: 'var(--sarms-chart-info)' },
+      { labelKey: 'chartPending', value: s[TASK_STATUS.PENDING_APPROVAL], color: 'var(--sarms-chart-muted)' },
     ].filter((d) => d.value > 0)
   }, [tasks])
   const doughnutTotal = useMemo(() => doughnutData.reduce((sum, d) => sum + d.value, 0) || 1, [doughnutData])
@@ -109,7 +109,7 @@ export default function EngineerHome() {
                       const end = (doughnutData.slice(0, i + 1).reduce((s, x) => s + x.value, 0) / doughnutTotal) * 100
                       return `${d.color} ${start}% ${end}%`
                     }).join(', ')})`
-                  : '#e2e8f0',
+                  : 'var(--sarms-border, #d4d4d4)',
               }}
             />
             <ul className={styles.doughnutLegend}>

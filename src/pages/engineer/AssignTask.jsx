@@ -22,10 +22,10 @@ const PRIORITY_LABEL = Object.fromEntries(PRIORITY_OPTIONS.map((p) => [p.id, p.l
 const OVERVIEW_ROWS = 20
 const COLS_PER_ROW = 5
 const OPERATION_PATH_STEPS = [
-  { id: TASK_STATUS.PENDING_APPROVAL, label: 'Pending Approval', color: '#94a3b8' },
-  { id: TASK_STATUS.APPROVED, label: 'Approved', color: '#3b82f6' },
-  { id: TASK_STATUS.IN_PROGRESS, label: 'In Progress', color: '#eab308' },
-  { id: TASK_STATUS.COMPLETED, label: 'Completed', color: '#22c55e' },
+  { id: TASK_STATUS.PENDING_APPROVAL, label: 'Pending Approval', color: '#8b95a0' },
+  { id: TASK_STATUS.APPROVED, label: 'Approved', color: '#6b7b8a' },
+  { id: TASK_STATUS.IN_PROGRESS, label: 'In Progress', color: '#b89a4a' },
+  { id: TASK_STATUS.COMPLETED, label: 'Completed', color: '#5c7b5c' },
 ]
 
 function workerNames(workerIds) {

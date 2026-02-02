@@ -239,9 +239,9 @@
   position: relative;
   min-height: 240px;
   padding: 1rem;
-  background: #f8fafc;
+  background: var(--sarms-card, #e8e8e8);
   border-radius: 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--sarms-border, #d4d4d4);
 }
 
 /* CSS bar chart */
@@ -262,20 +262,20 @@
   flex: 0 0 90px;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #334155;
+  color: var(--sarms-text, #333);
 }
 
 .barTrack {
   flex: 1;
   height: 24px;
-  background: #e2e8f0;
+  background: var(--sarms-border, #d4d4d4);
   border-radius: 6px;
   overflow: hidden;
 }
 
 .barFill {
   height: 100%;
-  background: linear-gradient(90deg, #22c55e, #16a34a);
+  background: var(--sarms-chart-bar, #6b8a6b);
   border-radius: 6px;
   min-width: 4px;
   transition: width 0.3s ease;
@@ -285,7 +285,7 @@
   flex: 0 0 28px;
   font-size: 0.9rem;
   font-weight: 600;
-  color: #166534;
+  color: var(--sarms-primary, #5c7b5c);
   text-align: right;
 }
 
@@ -295,7 +295,7 @@
   height: 160px;
   margin: 0 auto 1rem;
   border-radius: 50%;
-  border: 12px solid #f8fafc;
+  border: 12px solid var(--sarms-card, #e8e8e8);
   box-sizing: border-box;
 }
 
@@ -326,14 +326,14 @@
 
 .doughnutLegendValue {
   font-weight: 600;
-  color: #166534;
+  color: var(--sarms-primary, #5c7b5c);
   margin-left: 0.25rem;
 }
 
 .chartCaption {
   margin: 0.5rem 0 0;
   font-size: 0.8rem;
-  color: #64748b;
+  color: var(--sarms-text-muted, #555);
   text-align: center;
 }
 

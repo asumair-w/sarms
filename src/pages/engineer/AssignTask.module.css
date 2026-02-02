@@ -755,16 +755,16 @@
   padding: 0.6rem 1.25rem;
   font-size: 0.95rem;
   font-weight: 600;
-  color: #334155;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  color: var(--sarms-text, #333);
+  background: var(--sarms-card, #e8e8e8);
+  border: 1px solid var(--sarms-border, #d4d4d4);
   border-radius: 10px;
   cursor: pointer;
   transition: background 0.2s;
 }
 
 .btnSecondary:hover {
-  background: #e2e8f0;
+  background: #d8d8d8;
 }
 
 /* View task */
@@ -992,14 +992,14 @@
 .barTrack {
   flex: 1;
   height: 22px;
-  background: #e2e8f0;
+  background: var(--sarms-border, #d4d4d4);
   border-radius: 6px;
   overflow: hidden;
 }
 
 .barFill {
   height: 100%;
-  background: linear-gradient(90deg, #22c55e, #16a34a);
+  background: var(--sarms-chart-bar, #6b8a6b);
   border-radius: 6px;
   min-width: 4px;
   transition: width 0.3s ease;
@@ -1009,7 +1009,7 @@
   flex: 0 0 28px;
   font-size: 0.9rem;
   font-weight: 600;
-  color: #166534;
+  color: var(--sarms-primary, #5c7b5c);
   text-align: right;
 }
 

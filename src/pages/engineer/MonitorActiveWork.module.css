@@ -300,15 +300,16 @@
   font-size: 0.95rem;
   font-weight: 600;
   color: #fff;
-  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+  background: var(--sarms-primary, #5c7b5c);
   border: none;
   border-radius: 10px;
   cursor: pointer;
-  transition: transform 0.15s;
+  transition: transform 0.15s, background 0.15s;
 }
 
 .btnPrimary:hover:not(:disabled) {
   transform: translateY(-1px);
+  background: var(--sarms-primary-hover, #4a6b4a);
 }
 
 .btnPrimary:disabled {
@@ -320,14 +321,14 @@
   padding: 0.6rem 1.25rem;
   font-size: 0.95rem;
   font-weight: 600;
-  color: #334155;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  color: var(--sarms-text, #333);
+  background: var(--sarms-card, #e8e8e8);
+  border: 1px solid var(--sarms-border, #d4d4d4);
   border-radius: 10px;
   cursor: pointer;
   transition: background 0.2s;
 }
 
 .btnSecondary:hover {
-  background: #e2e8f0;
+  background: #d8d8d8;
 }

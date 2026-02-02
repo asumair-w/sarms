@@ -10,6 +10,12 @@
   --sarms-success: #22c55e;
   --sarms-warning: #eab308;
   --sarms-warning-bg: #fef9c3;
+  /* Muted chart palette (aligned with system) */
+  --sarms-chart-success: #5c7b5c;
+  --sarms-chart-warning: #b89a4a;
+  --sarms-chart-info: #6b7b8a;
+  --sarms-chart-muted: #8b95a0;
+  --sarms-chart-bar: #6b8a6b;
 }
 
 /* Arabic: SaudiWeb-Regular (from public/fonts) */

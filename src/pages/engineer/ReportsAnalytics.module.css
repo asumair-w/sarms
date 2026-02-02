@@ -69,15 +69,16 @@
   font-size: 0.95rem;
   font-weight: 600;
   color: #fff;
-  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+  background: var(--sarms-primary, #5c7b5c);
   border: none;
   border-radius: 10px;
   cursor: pointer;
-  transition: transform 0.15s;
+  transition: transform 0.15s, background 0.15s;
 }
 
 .applyBtn:hover {
   transform: translateY(-1px);
+  background: var(--sarms-primary-hover, #4a6b4a);
 }
 
 .cards {
@@ -147,20 +148,20 @@
   flex: 0 0 90px;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #334155;
+  color: var(--sarms-text, #333);
 }
 
 .barTrack {
   flex: 1;
   height: 24px;
-  background: #e2e8f0;
+  background: var(--sarms-border, #d4d4d4);
   border-radius: 6px;
   overflow: hidden;
 }
 
 .barFill {
   height: 100%;
-  background: linear-gradient(90deg, #22c55e, #16a34a);
+  background: var(--sarms-chart-bar, #6b8a6b);
   border-radius: 6px;
   min-width: 4px;
   transition: width 0.3s ease;
@@ -170,7 +171,7 @@
   flex: 0 0 32px;
   font-size: 0.9rem;
   font-weight: 600;
-  color: #166534;
+  color: var(--sarms-primary, #5c7b5c);
   text-align: right;
 }
 
@@ -179,7 +180,7 @@
   height: 180px;
   margin: 0 auto 1rem;
   border-radius: 50%;
-  border: 12px solid #f8fafc;
+  border: 12px solid var(--sarms-card, #e8e8e8);
   box-sizing: border-box;
 }
 
@@ -198,7 +199,7 @@
   align-items: center;
   gap: 0.35rem;
   font-size: 0.85rem;
-  color: #334155;
+  color: var(--sarms-text, #333);
 }
 
 .pieLegendDot {
@@ -210,7 +211,7 @@
 
 .pieLegendValue {
   font-weight: 600;
-  color: #166534;
+  color: var(--sarms-primary, #5c7b5c);
   margin-left: 0.25rem;
 }
 
@@ -226,31 +227,32 @@
   font-size: 0.95rem;
   font-weight: 600;
   color: #fff;
-  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+  background: var(--sarms-primary, #5c7b5c);
   border: none;
   border-radius: 10px;
   cursor: pointer;
-  transition: transform 0.15s;
+  transition: transform 0.15s, background 0.15s;
 }
 
 .btnPrimary:hover {
   transform: translateY(-1px);
+  background: var(--sarms-primary-hover, #4a6b4a);
 }
 
 .btnSecondary {
   padding: 0.6rem 1.25rem;
   font-size: 0.95rem;
   font-weight: 600;
-  color: #334155;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  color: var(--sarms-text, #333);
+  background: var(--sarms-card, #e8e8e8);
+  border: 1px solid var(--sarms-border, #d4d4d4);
   border-radius: 10px;
   cursor: pointer;
   transition: background 0.2s;
 }
 
 .btnSecondary:hover {
-  background: #e2e8f0;
+  background: #d8d8d8;
 }
 
 .exportHint {
