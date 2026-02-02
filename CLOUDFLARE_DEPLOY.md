@@ -1,44 +1,59 @@
-# Cloudflare deploy
+# Cloudflare deploy fix
 
-The deploy step fails because Cloudflare runs `npx wrangler deploy` with no arguments. Fix it in **one** of these ways:
+Your deploy fails because Cloudflare runs **Deploy command**: `npx wrangler deploy` with no arguments. Wrangler then doesn’t know what to deploy.
 
-**Important:** If you use Option 1 or rely on the config file, ensure `wrangler.jsonc` and `wrangler.toml` are in your repo. Commit and push them:
-```bash
-git add wrangler.jsonc wrangler.toml
-git commit -m "Add wrangler config for deploy"
-git push
-```
-Then trigger a new build. Wrangler will discover the config and deploy the `dist/` folder.
+You have to change the settings in the **Cloudflare dashboard** (the repo cannot override the deploy command). Use one of these:
 
 ---
 
-## Option 1: Change the Deploy command (recommended)
+## Option A: Use only Build (recommended if you use Cloudflare Pages)
 
-1. Cloudflare dashboard → your project → **Settings** → **Builds & deployments**.
-2. Set **Deploy command** to **exactly**:
-   ```bash
-   npx wrangler deploy --assets=./dist
-   ```
-   Or use the npm script:
-   ```bash
-   npm run deploy:cf
-   ```
-3. Keep **Build command**: `npm run build`.
-4. Save and redeploy.
+If this is a **Cloudflare Pages** project:
+
+1. Go to **Workers & Pages** → your project → **Settings** → **Builds & deployments**.
+2. Set **Build command** to: `npm run build`
+3. Set **Build output directory** (or “Build output path”) to: `dist`
+4. **Remove or clear the Deploy command** if there is one, or set it to: `true`
+
+Pages will build and then deploy the `dist` folder automatically. No separate deploy command is needed.
 
 ---
 
-## Option 2: Do deploy inside the Build command
+## Option B: Deploy from the Build command (when a Deploy command is required)
 
-If you cannot change the Deploy command, run deploy from the build step and make the deploy step a no-op:
+If your project has a separate “Deploy command” and you can’t remove it:
 
 1. Set **Build command** to:
    ```bash
-   npm run build && npx wrangler deploy --assets=./dist
+   npm run build:cf
    ```
+   This builds the app and then runs `npx wrangler deploy --assets=./dist` so the deploy happens in the build step.
+
 2. Set **Deploy command** to:
    ```bash
    true
    ```
-   (so the second step does nothing and does not run `npx wrangler deploy` alone).
+   So the second step does nothing and doesn’t run `npx wrangler deploy` alone.
+
+3. Save and run a new deployment.
+
+---
+
+## Option C: Fix the Deploy command
+
+If you can edit the Deploy command:
+
+1. Set **Deploy command** to **exactly**:
+   ```bash
+   npx wrangler deploy --assets=./dist
+   ```
+   or:
+   ```bash
+   npm run deploy:cf
+   ```
+2. Keep **Build command**: `npm run build`
 3. Save and redeploy.
+
+---
+
+After changing the settings, run a new build from the Cloudflare dashboard.
