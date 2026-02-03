@@ -26,17 +26,18 @@
   font-size: 1rem;
   font-weight: 600;
   color: #fff;
-  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+  background: var(--sarms-primary, #5c7b5c);
   border: none;
   border-radius: 12px;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.35);
-  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 2px 8px rgba(92, 123, 92, 0.3);
+  transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
 }
 
 .addBtn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
+  box-shadow: 0 4px 12px rgba(92, 123, 92, 0.4);
+  background: var(--sarms-primary-hover, #4a6b4a);
 }
 
 .toolbar {
@@ -59,7 +60,7 @@
 
 .search:focus {
   outline: none;
-  border-color: #22c55e;
+  border-color: var(--sarms-primary, #5c7b5c);
 }
 
 .filter {
@@ -121,7 +122,7 @@
 
 .cellId {
   font-weight: 600;
-  color: #166534;
+  color: var(--sarms-primary, #5c7b5c);
 }
 
 .roleSelect {
@@ -135,7 +136,7 @@
 
 .roleSelect:focus {
   outline: none;
-  border-color: #22c55e;
+  border-color: var(--sarms-primary, #5c7b5c);
 }
 
 .badgeActive {
@@ -143,8 +144,8 @@
   padding: 0.25rem 0.6rem;
   font-size: 0.8rem;
   font-weight: 600;
-  color: #166534;
-  background: #dcfce7;
+  color: var(--sarms-primary, #5c7b5c);
+  background: #e8efe8;
   border-radius: 999px;
 }
 
@@ -178,16 +179,16 @@
   padding: 0.35rem 0.6rem;
   font-size: 0.8rem;
   font-weight: 500;
-  color: #166534;
-  background: #f0fdf4;
-  border: 1px solid #86efac;
+  color: var(--sarms-primary, #5c7b5c);
+  background: var(--sarms-card, #e8e8e8);
+  border: 1px solid var(--sarms-primary, #5c7b5c);
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.2s;
 }
 
 .actionBtn:hover {
-  background: #dcfce7;
+  background: #e8efe8;
 }
 
 .actionBtnDanger {
@@ -297,7 +298,7 @@
 
 .input:focus {
   outline: none;
-  border-color: #22c55e;
+  border-color: var(--sarms-primary, #5c7b5c);
 }
 
 .formActions {
@@ -311,29 +312,31 @@
   font-size: 1rem;
   font-weight: 600;
   color: #fff;
-  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+  background: var(--sarms-primary, #5c7b5c);
   border: none;
   border-radius: 10px;
   cursor: pointer;
+  transition: background 0.15s;
 }
 
 .primaryBtn:hover {
-  opacity: 0.95;
+  background: var(--sarms-primary-hover, #4a6b4a);
 }
 
 .secondaryBtn {
   padding: 0.75rem 1.25rem;
   font-size: 1rem;
   font-weight: 600;
-  color: #64748b;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  color: var(--sarms-text, #333);
+  background: var(--sarms-card, #e8e8e8);
+  border: 1px solid var(--sarms-border, #d4d4d4);
   border-radius: 10px;
   cursor: pointer;
+  transition: background 0.2s;
 }
 
 .secondaryBtn:hover {
-  background: #e2e8f0;
+  background: #d8d8d8;
 }
 
 /* Post-create credentials */
@@ -384,15 +387,16 @@
   padding: 0.5rem 1rem;
   font-size: 0.9rem;
   font-weight: 500;
-  color: #166534;
-  background: #dcfce7;
-  border: 1px solid #86efac;
+  color: var(--sarms-primary, #5c7b5c);
+  background: #e8efe8;
+  border: 1px solid var(--sarms-primary, #5c7b5c);
   border-radius: 8px;
   cursor: pointer;
+  transition: background 0.2s;
 }
 
 .downloadQrBtn:hover {
-  background: #bbf7d0;
+  background: #d8e5d8;
 }
 
 .viewBlock {
