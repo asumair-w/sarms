@@ -45,7 +45,7 @@ If you can edit the Deploy command:
 
 1. Set **Deploy command** to **exactly**:
    ```bash
-   npx wrangler deploy --assets=./dist
+   npx wrangler deploy --assets=./dist --compatibility-date 2026-02-02 --name sarms
    ```
    or:
    ```bash

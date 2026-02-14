@@ -1,15 +1,21 @@
 import { useState, useMemo, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   getSessionStatus,
   getElapsedMinutes,
   SESSION_STATUS,
   SESSION_STATUS_LABELS,
 } from '../../data/monitorActive'
+import { getTasksForDepartment, getTaskById, getInitialZones } from '../../data/workerFlow'
 import { DEPARTMENT_OPTIONS } from '../../data/engineerWorkers'
-import { ZONES } from '../../data/assignTask'
-import { TASK_TYPES } from '../../data/assignTask'
 import { useAppStore } from '../../context/AppStoreContext'
+import { useLanguage } from '../../context/LanguageContext'
 import styles from './MonitorActiveWork.module.css'
+
+function taskLabelByLang(task, lang) {
+  if (!task) return ''
+  return lang === 'ar' ? (task.labelAr ?? task.labelEn) : (task.labelEn ?? task.labelAr)
+}
 
 function formatDuration(minutes) {
   if (minutes < 60) return `${minutes}m`
@@ -19,9 +25,12 @@ function formatDuration(minutes) {
 }
 
 export default function MonitorActiveWork() {
-  const { sessions, updateSession } = useAppStore()
+  const navigate = useNavigate()
+  const { lang } = useLanguage()
+  const { sessions, updateSession, zones: storeZones } = useAppStore()
+  const zonesList = (storeZones && storeZones.length > 0) ? storeZones : getInitialZones()
   const [filterDept, setFilterDept] = useState('')
-  const [filterTaskType, setFilterTaskType] = useState('')
+  const [filterTaskId, setFilterTaskId] = useState('')
   const [filterZone, setFilterZone] = useState('')
   const [searchWorker, setSearchWorker] = useState('')
   const [clickedCard, setClickedCard] = useState(null)
@@ -46,14 +55,26 @@ export default function MonitorActiveWork() {
     [sessions, tick, now]
   )
 
+  const tasksForFilter = useMemo(() => getTasksForDepartment(filterDept), [filterDept])
+
   const filtered = useMemo(() => {
     let list = sessionsWithStatus
     if (clickedCard === 'active') list = list.filter((s) => s.status === SESSION_STATUS.ACTIVE)
     else if (clickedCard === 'delayed') list = list.filter((s) => s.status === SESSION_STATUS.DELAYED)
     else if (clickedCard === 'flagged') list = list.filter((s) => s.status === SESSION_STATUS.FLAGGED)
-    if (filterDept) list = list.filter((s) => (s.departmentId || s.department?.toLowerCase()) === filterDept)
-    if (filterTaskType) list = list.filter((s) => (s.taskTypeId || s.departmentId) === filterTaskType)
-    if (filterZone) list = list.filter((s) => (s.zoneId || s.zone?.toLowerCase()) === filterZone)
+    if (filterDept) list = list.filter((s) => (s.departmentId || (s.department && s.department.toLowerCase())) === filterDept)
+    if (filterTaskId) {
+      const task = getTaskById(filterTaskId)
+      const labelEn = task?.labelEn
+      const labelAr = task?.labelAr
+      list = list.filter(
+        (s) =>
+          s.taskId === filterTaskId ||
+          s.task === labelEn ||
+          s.task === labelAr
+      )
+    }
+    if (filterZone) list = list.filter((s) => (s.zoneId || (s.zone && s.zone.toLowerCase())) === filterZone)
     if (searchWorker.trim()) {
       const q = searchWorker.trim().toLowerCase()
       list = list.filter(
@@ -63,7 +84,7 @@ export default function MonitorActiveWork() {
       )
     }
     return list
-  }, [sessionsWithStatus, clickedCard, filterDept, filterTaskType, filterZone, searchWorker])
+  }, [sessionsWithStatus, clickedCard, filterDept, filterTaskId, filterZone, searchWorker])
 
   const summary = useMemo(() => {
     const active = sessionsWithStatus.filter((s) => s.status === SESSION_STATUS.ACTIVE).length
@@ -76,6 +97,31 @@ export default function MonitorActiveWork() {
       flaggedIssues: flagged,
     }
   }, [sessionsWithStatus])
+
+  const analyticsByZone = useMemo(() => {
+    const map = {}
+    sessionsWithStatus.forEach((s) => {
+      const z = s.zone || s.zoneId || 'Other'
+      map[z] = (map[z] || 0) + 1
+    })
+    return Object.entries(map).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count)
+  }, [sessionsWithStatus])
+  const analyticsByDept = useMemo(() => {
+    const map = {}
+    sessionsWithStatus.forEach((s) => {
+      const d = s.department || s.departmentId || 'Other'
+      map[d] = (map[d] || 0) + 1
+    })
+    return Object.entries(map).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count)
+  }, [sessionsWithStatus])
+  const analyticsByStatus = useMemo(() => [
+    { id: SESSION_STATUS.ACTIVE, label: SESSION_STATUS_LABELS[SESSION_STATUS.ACTIVE], count: sessionsWithStatus.filter((s) => s.status === SESSION_STATUS.ACTIVE).length },
+    { id: SESSION_STATUS.DELAYED, label: SESSION_STATUS_LABELS[SESSION_STATUS.DELAYED], count: sessionsWithStatus.filter((s) => s.status === SESSION_STATUS.DELAYED).length },
+    { id: SESSION_STATUS.FLAGGED, label: SESSION_STATUS_LABELS[SESSION_STATUS.FLAGGED], count: sessionsWithStatus.filter((s) => s.status === SESSION_STATUS.FLAGGED).length },
+  ], [sessionsWithStatus])
+  const maxZone = Math.max(1, ...analyticsByZone.map((x) => x.count))
+  const maxDept = Math.max(1, ...analyticsByDept.map((x) => x.count))
+  const maxStatus = Math.max(1, ...analyticsByStatus.map((x) => x.count))
 
   function refresh() {
     setTick((t) => t + 1)
@@ -98,7 +144,7 @@ export default function MonitorActiveWork() {
   return (
     <div className={styles.page}>
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>Summary</h2>
+        <h2 className={styles.sectionTitle}><i className="fas fa-chart-pie fa-fw" /> Summary</h2>
         <div className={styles.cards}>
           <button
             type="button"
@@ -137,7 +183,7 @@ export default function MonitorActiveWork() {
 
       <section className={styles.section}>
         <div className={styles.filtersRow}>
-          <h2 className={styles.sectionTitle}>Filters</h2>
+          <h2 className={styles.sectionTitle}><i className="fas fa-filter fa-fw" /> Filters</h2>
           <button type="button" className={styles.refreshBtn} onClick={refresh}>
             Refresh
           </button>
@@ -145,7 +191,13 @@ export default function MonitorActiveWork() {
         <div className={styles.filters}>
           <div className={styles.filterGroup}>
             <label>Department</label>
-            <select value={filterDept} onChange={(e) => setFilterDept(e.target.value)}>
+            <select
+              value={filterDept}
+              onChange={(e) => {
+                setFilterDept(e.target.value)
+                setFilterTaskId('')
+              }}
+            >
               <option value="">All</option>
               {DEPARTMENT_OPTIONS.map((d) => (
                 <option key={d.value} value={d.value}>{d.label}</option>
@@ -153,11 +205,16 @@ export default function MonitorActiveWork() {
             </select>
           </div>
           <div className={styles.filterGroup}>
-            <label>Task Type</label>
-            <select value={filterTaskType} onChange={(e) => setFilterTaskType(e.target.value)}>
+            <label>Task</label>
+            <select
+              value={filterTaskId}
+              onChange={(e) => setFilterTaskId(e.target.value)}
+              disabled={!filterDept}
+              title={!filterDept ? 'Select department first' : ''}
+            >
               <option value="">All</option>
-              {TASK_TYPES.map((t) => (
-                <option key={t.id} value={t.id}>{t.label}</option>
+              {tasksForFilter.map((task) => (
+                <option key={task.id} value={task.id}>{taskLabelByLang(task, lang)}</option>
               ))}
             </select>
           </div>
@@ -165,7 +222,7 @@ export default function MonitorActiveWork() {
             <label>Zone</label>
             <select value={filterZone} onChange={(e) => setFilterZone(e.target.value)}>
               <option value="">All</option>
-              {ZONES.map((z) => (
+              {zonesList.map((z) => (
                 <option key={z.id} value={z.id}>{z.label}</option>
               ))}
             </select>
@@ -195,6 +252,7 @@ export default function MonitorActiveWork() {
                 <th>Lines / Area</th>
                 <th>Start Time</th>
                 <th>Duration</th>
+                <th>Source</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -202,7 +260,7 @@ export default function MonitorActiveWork() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className={styles.emptyCell}>
+                  <td colSpan={10} className={styles.emptyCell}>
                     No active sessions match the filters.
                   </td>
                 </tr>
@@ -216,6 +274,7 @@ export default function MonitorActiveWork() {
                     <td>{s.linesArea}</td>
                     <td>{new Date(s.startTime).toLocaleString()}</td>
                     <td>{formatDuration(s.elapsedMinutes)}</td>
+                    <td>{s.assignedByEngineer ? 'Assigned' : 'Self-started'}</td>
                     <td>
                       <span className={styles.statusBadge} data-status={s.status}>
                         {SESSION_STATUS_LABELS[s.status]}
@@ -238,6 +297,59 @@ export default function MonitorActiveWork() {
         </div>
       </section>
 
+      <section className={styles.analyticsSection}>
+        <h2 className={styles.sectionTitle}><i className="fas fa-chart-column fa-fw" /> Analytics</h2>
+        <div className={styles.chartsRow}>
+          <div className={styles.chartWrap}>
+            <div className={styles.chartCaption}>Sessions by zone</div>
+            <div className={styles.barChart}>
+              {analyticsByZone.map((row, i) => (
+                <div key={i} className={styles.barRow}>
+                  <span className={styles.barLabel}>{row.label}</span>
+                  <div className={styles.barTrack}>
+                    <div className={styles.barFill} style={{ width: `${(row.count / maxZone) * 100}%` }} />
+                  </div>
+                  <span className={styles.barValue}>{row.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className={styles.chartWrap}>
+            <div className={styles.chartCaption}>Sessions by department</div>
+            <div className={styles.barChart}>
+              {analyticsByDept.map((row, i) => (
+                <div key={i} className={styles.barRow}>
+                  <span className={styles.barLabel}>{row.label}</span>
+                  <div className={styles.barTrack}>
+                    <div className={styles.barFill} style={{ width: `${(row.count / maxDept) * 100}%` }} />
+                  </div>
+                  <span className={styles.barValue}>{row.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className={styles.chartWrap}>
+            <div className={styles.chartCaption}>Sessions by status</div>
+            <div className={styles.barChart}>
+              {analyticsByStatus.map((row) => (
+                <div key={row.id} className={styles.barRow}>
+                  <span className={styles.barLabel}>{row.label}</span>
+                  <div className={styles.barTrack}>
+                    <div className={styles.barFill} style={{ width: `${(row.count / maxStatus) * 100}%` }} />
+                  </div>
+                  <span className={styles.barValue}>{row.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className={styles.moreWrap}>
+          <button type="button" className={styles.moreBtn} onClick={() => navigate('/engineer/reports')}>
+            More Details
+          </button>
+        </div>
+      </section>
+
       {/* View session modal – use latest from store so notes/flag updates show */}
       {viewSession && (() => {
         const currentSession = sessions.find((s) => s.id === viewSession.id) || viewSession
@@ -248,12 +360,13 @@ export default function MonitorActiveWork() {
             <dl className={styles.dl}>
               <dt>Worker</dt><dd>{currentSession.workerName}</dd>
               <dt>Department</dt><dd>{currentSession.department}</dd>
-              <dt>Task</dt><dd>{currentSession.task}</dd>
+              <dt>Task</dt><dd>{taskLabelByLang(getTaskById(currentSession.taskId), lang) || currentSession.task}</dd>
               <dt>Zone</dt><dd>{currentSession.zone}</dd>
               <dt>Lines / Area</dt><dd>{currentSession.linesArea}</dd>
               <dt>Start Time</dt><dd>{new Date(currentSession.startTime).toLocaleString()}</dd>
               <dt>Expected</dt><dd>{currentSession.expectedMinutes} min</dd>
               <dt>Status</dt><dd><span className={styles.statusBadge} data-status={currentSession.flagged ? SESSION_STATUS.FLAGGED : getSessionStatus(currentSession)}>{SESSION_STATUS_LABELS[currentSession.flagged ? SESSION_STATUS.FLAGGED : getSessionStatus(currentSession)]}</span></dd>
+              <dt>Source</dt><dd>{currentSession.assignedByEngineer ? 'Assigned by engineer' : 'Self-started by worker'}</dd>
               <dt>Notes</dt>
               <dd>
                 {currentSession.notes?.length ? (

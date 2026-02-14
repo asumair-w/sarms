@@ -4,6 +4,7 @@ import WorkerInterface from './pages/WorkerInterface'
 import EngineerLayout from './layouts/EngineerLayout'
 import EngineerHome from './pages/engineer/EngineerHome'
 import RegisterManageWorkers from './pages/engineer/RegisterManageWorkers'
+import WorkerProfile from './pages/engineer/WorkerProfile'
 import EngineerSectionPlaceholder from './pages/engineer/EngineerSectionPlaceholder'
 import AssignTask from './pages/engineer/AssignTask'
 import MonitorActiveWork from './pages/engineer/MonitorActiveWork'
@@ -33,6 +34,7 @@ function App() {
         <Route element={<EngineerLayout />}>
           <Route index element={<EngineerHome />} />
           <Route path="register" element={<RegisterManageWorkers />} />
+          <Route path="register/worker/:id" element={<WorkerProfile />} />
           <Route path="assign-task" element={<AssignTask />} />
           <Route path="monitor" element={<MonitorActiveWork />} />
           <Route path="production" element={<RecordProduction />} />
@@ -46,6 +48,7 @@ function App() {
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<AdminDashboard />} />
         <Route path="register" element={<RegisterManageWorkers />} />
+        <Route path="register/worker/:id" element={<WorkerProfile />} />
         <Route path="settings" element={<AdminSettings />} />
       </Route>
       <Route path="/" element={<Login />} />

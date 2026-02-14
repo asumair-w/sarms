@@ -81,12 +81,12 @@ export default function Login() {
           </button>
         </div>
 
-        <h1 className={LoginStyles.title}>{t('title')}</h1>
+        <h1 className={LoginStyles.title}><i className="fas fa-building-user fa-fw" /> {t('title')}</h1>
         <p className={LoginStyles.subtitle}>{t('subtitle')}</p>
 
         <form onSubmit={handleSubmit} className={LoginStyles.form}>
           <div className={LoginStyles.field}>
-            <label className={LoginStyles.label} htmlFor="userId">{t('id')}</label>
+            <label className={LoginStyles.label} htmlFor="userId"><i className="fas fa-id-card fa-fw" /> {t('id')}</label>
             <input
               id="userId"
               type="text"
@@ -99,7 +99,7 @@ export default function Login() {
             />
           </div>
           <div className={LoginStyles.field}>
-            <label className={LoginStyles.label} htmlFor="password">{t('password')}</label>
+            <label className={LoginStyles.label} htmlFor="password"><i className="fas fa-lock fa-fw" /> {t('password')}</label>
             <input
               id="password"
               type="password"
@@ -127,7 +127,7 @@ export default function Login() {
           className={LoginStyles.primaryButton}
           onClick={() => { setError(''); setShowQRModal(true); }}
         >
-          {t('scanQR')}
+          <i className="fas fa-qrcode fa-fw" /> {t('scanQR')}
         </button>
       </div>
 

@@ -3,7 +3,6 @@ import { Outlet, useLocation, NavLink, useNavigate } from 'react-router-dom'
 import { useLanguage } from '../context/LanguageContext'
 import { getTranslation } from '../i18n/translations'
 import { SIDEBAR_ITEMS } from '../data/engineerNav'
-import { Icon, MenuIcon, SidebarToggleIcon } from '../components/HeroIcons'
 import styles from './EngineerLayout.module.css'
 
 const STORAGE_KEY = 'sarms-sidebar-collapsed'
@@ -46,7 +45,7 @@ export default function EngineerLayout() {
           onClick={() => setSidebarOpen((o) => !o)}
           aria-label={t('toggleMenu')}
         >
-          <MenuIcon open={sidebarOpen} className={styles.menuIcon} />
+          <i className={`fas fa-fw ${sidebarOpen ? 'fa-times' : 'fa-bars'}`} />
         </button>
         <div className={styles.topBarLogoWrap}>
           <img src="/logo.png" alt="SARMS" className={styles.topBarLogo} />
@@ -71,7 +70,7 @@ export default function EngineerLayout() {
           aria-label={sidebarCollapsed ? t('expandSidebar') : t('collapseSidebar')}
           title={sidebarCollapsed ? t('expandSidebar') : t('collapseSidebar')}
         >
-          <SidebarToggleIcon collapsed={sidebarCollapsed} className={styles.sidebarToggleIcon} />
+          <i className={`fas fa-fw fa-chevron-${sidebarCollapsed ? 'right' : 'left'}`} />
         </button>
         <nav className={styles.sidebarNav}>
           {SIDEBAR_ITEMS.map((item) => (
@@ -83,7 +82,7 @@ export default function EngineerLayout() {
               }
               end={item.path === '/engineer' || item.end === true}
             >
-              <Icon name={item.icon} className={styles.sidebarIcon} />
+              <i className={`fas fa-${item.faIcon || item.icon} fa-fw ${styles.sidebarIcon}`} />
               <span className={styles.sidebarLabel}>{t(item.labelKey)}</span>
             </NavLink>
           ))}
@@ -97,7 +96,7 @@ export default function EngineerLayout() {
             navigate('/login', { replace: true })
           }}
         >
-          {t('logOut')}
+          <i className="fas fa-right-from-bracket fa-fw" /> {t('logOut')}
         </button>
       </aside>
 

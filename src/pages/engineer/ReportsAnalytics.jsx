@@ -1,17 +1,30 @@
 import { useState, useMemo } from 'react'
-import { DEPARTMENT_OPTIONS } from '../../data/engineerWorkers'
-import { ZONES } from '../../data/assignTask'
+import { DEPARTMENT_OPTIONS, SEED_WORKERS } from '../../data/engineerWorkers'
+import { TASK_STATUS, TASK_STATUS_LABELS } from '../../data/assignTask'
+import { getInitialZones, getTaskById, TASKS_BY_DEPARTMENT, INVENTORY_TASKS } from '../../data/workerFlow'
 import { getInventoryStatus } from '../../data/inventory'
 import { useAppStore } from '../../context/AppStoreContext'
 import styles from './ReportsAnalytics.module.css'
 
+/** All tasks (Farming + Maintenance + Inventory) for filter dropdown. */
+const ALL_TASK_OPTIONS = (() => {
+  const list = []
+  Object.values(TASKS_BY_DEPARTMENT).forEach((arr) => arr.forEach((t) => list.push({ id: t.id, label: t.labelEn })))
+  INVENTORY_TASKS.forEach((t) => list.push({ id: t.id, label: t.labelEn }))
+  return list
+})()
+
 const RECORD_TYPE_OPTIONS = [
   { id: '', label: 'All records' },
   { id: 'production', label: 'Production' },
-  { id: 'quality', label: 'Quality' },
-  { id: 'fault_maintenance', label: 'Faults' },
   { id: 'inventory', label: 'Inventory' },
 ]
+
+/** Workers who can have records/tasks (worker + engineer). */
+const WORKER_OPTIONS = SEED_WORKERS.filter((w) => w.role === 'worker' || w.role === 'engineer')
+
+const DEFAULT_DATE_FROM = () => new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
+const DEFAULT_DATE_TO = () => new Date().toISOString().slice(0, 10)
 
 const CHART_COLORS = ['#8b6b5c', '#b89a4a', '#6b7b8a', '#5c7b5c', '#8b95a0']
 
@@ -24,32 +37,58 @@ function inDateRange(iso, from, to) {
 }
 
 export default function ReportsAnalytics() {
-  const { tasks, records, faults, inventory } = useAppStore()
-  const [dateFrom, setDateFrom] = useState(new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10))
-  const [dateTo, setDateTo] = useState(new Date().toISOString().slice(0, 10))
+  const { tasks, records, faults, inventory, zones: storeZones } = useAppStore()
+  const zonesList = (storeZones && storeZones.length > 0) ? storeZones : getInitialZones()
+  const ZONE_LABEL = useMemo(() => Object.fromEntries(zonesList.map((z) => [z.id, z.label])), [zonesList])
+  const [dateFrom, setDateFrom] = useState(DEFAULT_DATE_FROM())
+  const [dateTo, setDateTo] = useState(DEFAULT_DATE_TO())
   const [filterDept, setFilterDept] = useState('')
   const [filterZone, setFilterZone] = useState('')
   const [filterRecordType, setFilterRecordType] = useState('')
+  const [filterWorker, setFilterWorker] = useState('')
+  const [filterTask, setFilterTask] = useState('')
+  const [filterTaskStatus, setFilterTaskStatus] = useState('')
+  const [filterBatch, setFilterBatch] = useState('')
   const [summaryModalOpen, setSummaryModalOpen] = useState(false)
   const [summaryText, setSummaryText] = useState('')
 
+  const batchOptions = useMemo(() => {
+    const ids = new Set()
+    tasks.forEach((t) => { if (t.batchId) ids.add(t.batchId) })
+    return Array.from(ids).sort().map((id) => ({ id, label: `Batch ${id}` }))
+  }, [tasks])
+
   const filteredRecords = useMemo(() => {
+    const taskLabel = filterTask ? getTaskById(filterTask)?.labelEn : null
     return records.filter((r) => {
       if (!inDateRange(r.dateTime || r.createdAt, dateFrom, dateTo)) return false
       if (filterRecordType && r.recordType !== filterRecordType) return false
+      if (filterDept) {
+        const rDept = (r.department || '').toLowerCase()
+        const matchDept = filterDept.toLowerCase()
+        if (rDept !== matchDept) return false
+      }
+      if (filterZone) {
+        const rZone = (r.zone || r.zoneId || '').toString().trim()
+        const zoneLabel = (ZONE_LABEL[filterZone] || '').toString().trim()
+        if (rZone !== filterZone && rZone !== zoneLabel) return false
+      }
+      if (filterWorker) {
+        const w = WORKER_OPTIONS.find((x) => x.id === filterWorker)
+        if (w && (r.worker || '').trim() !== (w.fullName || '').trim()) return false
+      }
+      if (taskLabel && (r.task || '').trim() !== taskLabel.trim()) return false
       return true
     })
-  }, [records, dateFrom, dateTo, filterRecordType])
+  }, [records, dateFrom, dateTo, filterRecordType, filterDept, filterZone, filterWorker, filterTask, ZONE_LABEL])
 
   const summary = useMemo(() => {
     const productionRecords = filteredRecords.filter((r) => r.recordType === 'production')
     const totalProduction = productionRecords.reduce((s, r) => s + (Number(r.quantity) || 0), 0)
-    const qualityIssues = filteredRecords.filter((r) => r.recordType === 'quality').length
     const inventoryWithStatus = inventory.map((i) => ({ ...i, status: getInventoryStatus(i) }))
     const inventoryAlerts = inventoryWithStatus.filter((i) => i.status !== 'normal').length
     return {
       totalProduction,
-      qualityIssues,
       openFaults: faults.length,
       inventoryAlerts,
     }
@@ -63,9 +102,8 @@ export default function ReportsAnalytics() {
         const dept = r.department || 'Other'
         byDept[dept] = (byDept[dept] || 0) + (Number(r.quantity) || 0)
       })
-    return DEPARTMENT_OPTIONS.map((d) => ({ label: d.label, value: byDept[d.label] || 0 })).filter((x) => x.value > 0).length
-      ? DEPARTMENT_OPTIONS.map((d) => ({ label: d.label, value: byDept[d.label] || 0 }))
-      : [{ label: 'No data', value: 0 }]
+    const series = DEPARTMENT_OPTIONS.map((d) => ({ label: d.label, value: byDept[d.label] || 0 }))
+    return series.some((x) => x.value > 0) ? series : [{ label: 'No data', value: 0 }]
   }, [filteredRecords])
 
   const faultsByEquipment = useMemo(() => {
@@ -80,22 +118,95 @@ export default function ReportsAnalytics() {
       : [{ label: 'No faults', value: 1, color: '#94a3b8' }]
   }, [faults])
 
-  const qualityByZone = useMemo(() => {
-    const byZone = {}
-    filteredRecords
-      .filter((r) => r.recordType === 'quality')
-      .forEach((r) => {
-        const z = r.zone || 'Other'
-        byZone[z] = (byZone[z] || 0) + 1
-      })
-    return ZONES.map((z) => ({ zone: z.label, issues: byZone[z.label] || 0 }))
-  }, [filteredRecords])
-
   const prodMax = Math.max(...productionByDept.map((d) => d.value), 1)
-  const qualityMax = Math.max(...qualityByZone.map((z) => z.issues), 1)
   const faultsTotal = faultsByEquipment.reduce((s, d) => s + d.value, 0)
 
+  /* Task analytics: filter by zone, department, status, batch, worker */
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((t) => {
+      if (filterZone && (t.zoneId || '') !== filterZone) return false
+      if (filterDept && (t.departmentId || t.taskType || '') !== filterDept) return false
+      if (filterTaskStatus && (t.status || '') !== filterTaskStatus) return false
+      if (filterBatch && (t.batchId || '') !== filterBatch) return false
+      if (filterWorker && !(t.workerIds || []).includes(filterWorker)) return false
+      return true
+    })
+  }, [tasks, filterZone, filterDept, filterTaskStatus, filterBatch, filterWorker])
+
+  const tasksByStatus = useMemo(() => {
+    const s = {
+      [TASK_STATUS.PENDING_APPROVAL]: 0,
+      [TASK_STATUS.APPROVED]: 0,
+      [TASK_STATUS.IN_PROGRESS]: 0,
+      [TASK_STATUS.COMPLETED]: 0,
+    }
+    filteredTasks.forEach((t) => { s[t.status] = (s[t.status] || 0) + 1 })
+    return [
+      { label: TASK_STATUS_LABELS[TASK_STATUS.PENDING_APPROVAL], value: s[TASK_STATUS.PENDING_APPROVAL] ?? 0 },
+      { label: TASK_STATUS_LABELS[TASK_STATUS.APPROVED], value: s[TASK_STATUS.APPROVED] ?? 0 },
+      { label: TASK_STATUS_LABELS[TASK_STATUS.IN_PROGRESS], value: s[TASK_STATUS.IN_PROGRESS] ?? 0 },
+      { label: TASK_STATUS_LABELS[TASK_STATUS.COMPLETED], value: s[TASK_STATUS.COMPLETED] ?? 0 },
+    ]
+  }, [filteredTasks])
+  const tasksByZone = useMemo(() => {
+    const byZone = {}
+    filteredTasks.forEach((t) => {
+      const z = t.zoneId || 'other'
+      byZone[z] = (byZone[z] || 0) + 1
+    })
+    return zonesList.map((z) => ({ label: ZONE_LABEL[z.id] ?? z.id, value: byZone[z.id] || 0 }))
+  }, [filteredTasks, zonesList, ZONE_LABEL])
+  const tasksByDepartment = useMemo(() => {
+    const byDept = {}
+    filteredTasks.forEach((t) => {
+      const dept = t.departmentId || t.taskType || 'other'
+      byDept[dept] = (byDept[dept] || 0) + 1
+    })
+    return DEPARTMENT_OPTIONS.map((d) => ({ label: d.label, value: byDept[d.value] || 0 }))
+  }, [filteredTasks])
+  const tasksStatusMax = Math.max(...tasksByStatus.map((d) => d.value), 1)
+  const tasksZoneMax = Math.max(...tasksByZone.map((d) => d.value), 1)
+  const tasksDeptMax = Math.max(...tasksByDepartment.map((d) => d.value), 1)
+
   function applyFilters() {}
+
+  function clearFilters() {
+    setDateFrom(DEFAULT_DATE_FROM())
+    setDateTo(DEFAULT_DATE_TO())
+    setFilterDept('')
+    setFilterZone('')
+    setFilterRecordType('')
+    setFilterWorker('')
+    setFilterTask('')
+    setFilterTaskStatus('')
+    setFilterBatch('')
+  }
+
+  function setDatePreset(preset) {
+    const now = new Date()
+    const today = now.toISOString().slice(0, 10)
+    switch (preset) {
+      case '7':
+        setDateFrom(new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10))
+        setDateTo(today)
+        break
+      case '30':
+        setDateFrom(new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10))
+        setDateTo(today)
+        break
+      case 'month':
+        const first = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
+        setDateFrom(first)
+        setDateTo(today)
+        break
+      case '90':
+        setDateFrom(new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10))
+        setDateTo(today)
+        break
+      default:
+        break
+    }
+  }
 
   function compileSummary() {
     const lines = [
@@ -103,11 +214,10 @@ export default function ReportsAnalytics() {
       '',
       `Period: ${dateFrom} to ${dateTo}`,
       `Total production: ${summary.totalProduction} units`,
-      `Quality issues: ${summary.qualityIssues}`,
       `Open faults: ${summary.openFaults}`,
       `Inventory alerts: ${summary.inventoryAlerts}`,
       '',
-      `Tasks (total): ${tasks.length}`,
+      `Tasks (filtered): ${filteredTasks.length}`,
       `Records (filtered): ${filteredRecords.length}`,
     ]
     setSummaryText(lines.join('\n'))
@@ -122,13 +232,12 @@ export default function ReportsAnalytics() {
       <!DOCTYPE html><html><head><title>SARMS Report ${new Date().toISOString().slice(0, 10)}</title>
       <style>body{font-family:sans-serif;padding:24px;max-width:800px;margin:0 auto} table{border-collapse:collapse;width:100%} th,td{border:1px solid #ddd;padding:8px} th{background:#f5f5f5}</style>
       </head><body>
-      <h1>SARMS Report</h1>
+      <h1><i className="fas fa-file-lines fa-fw" /> SARMS Report</h1>
       <p>Generated: ${new Date().toLocaleString()}</p>
       <p>Period: ${dateFrom} to ${dateTo}</p>
-      <h2>Summary</h2>
+      <h2><i className="fas fa-chart-pie fa-fw" /> Summary</h2>
       <ul>
         <li>Total production: ${summary.totalProduction} units</li>
-        <li>Quality issues: ${summary.qualityIssues}</li>
         <li>Open faults: ${summary.openFaults}</li>
         <li>Inventory alerts: ${summary.inventoryAlerts}</li>
       </ul>
@@ -164,7 +273,14 @@ export default function ReportsAnalytics() {
       <div id="report-print-area" style={{ display: 'none' }} aria-hidden="true" />
 
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>Filters</h2>
+        <h2 className={styles.sectionTitle}><i className="fas fa-filter fa-fw" /> Filters</h2>
+        <div className={styles.datePresets}>
+          <span className={styles.datePresetsLabel}>Quick range:</span>
+          <button type="button" className={styles.presetBtn} onClick={() => setDatePreset('7')}>Last 7 days</button>
+          <button type="button" className={styles.presetBtn} onClick={() => setDatePreset('30')}>Last 30 days</button>
+          <button type="button" className={styles.presetBtn} onClick={() => setDatePreset('month')}>This month</button>
+          <button type="button" className={styles.presetBtn} onClick={() => setDatePreset('90')}>Last 3 months</button>
+        </div>
         <div className={styles.filters}>
           <div className={styles.filterGroup}>
             <label>Date range</label>
@@ -187,7 +303,7 @@ export default function ReportsAnalytics() {
             <label>Zone</label>
             <select value={filterZone} onChange={(e) => setFilterZone(e.target.value)} className={styles.select}>
               <option value="">All zones</option>
-              {ZONES.map((z) => (
+              {zonesList.map((z) => (
                 <option key={z.id} value={z.id}>{z.label}</option>
               ))}
             </select>
@@ -200,10 +316,51 @@ export default function ReportsAnalytics() {
               ))}
             </select>
           </div>
+          <div className={styles.filterGroup}>
+            <label>Worker</label>
+            <select value={filterWorker} onChange={(e) => setFilterWorker(e.target.value)} className={styles.select}>
+              <option value="">All workers</option>
+              {WORKER_OPTIONS.map((w) => (
+                <option key={w.id} value={w.id}>{w.fullName}</option>
+              ))}
+            </select>
+          </div>
+          <div className={styles.filterGroup}>
+            <label>Task</label>
+            <select value={filterTask} onChange={(e) => setFilterTask(e.target.value)} className={styles.select}>
+              <option value="">All tasks</option>
+              {ALL_TASK_OPTIONS.map((t) => (
+                <option key={t.id} value={t.id}>{t.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className={styles.filterGroup}>
+            <label>Task status</label>
+            <select value={filterTaskStatus} onChange={(e) => setFilterTaskStatus(e.target.value)} className={styles.select}>
+              <option value="">All statuses</option>
+              {Object.entries(TASK_STATUS_LABELS).map(([k, label]) => (
+                <option key={k} value={k}>{label}</option>
+              ))}
+            </select>
+          </div>
+          <div className={styles.filterGroup}>
+            <label>Batch</label>
+            <select value={filterBatch} onChange={(e) => setFilterBatch(e.target.value)} className={styles.select}>
+              <option value="">All batches</option>
+              {batchOptions.map((b) => (
+                <option key={b.id} value={b.id}>{b.label}</option>
+              ))}
+            </select>
+          </div>
         </div>
-        <button type="button" className={styles.applyBtn} onClick={applyFilters}>
-          Apply filters
-        </button>
+        <div className={styles.filterActions}>
+          <button type="button" className={styles.applyBtn} onClick={applyFilters}>
+            Apply filters
+          </button>
+          <button type="button" className={styles.clearBtn} onClick={clearFilters}>
+            Clear filters
+          </button>
+        </div>
       </section>
 
       <section className={styles.section}>
@@ -212,10 +369,6 @@ export default function ReportsAnalytics() {
           <div className={styles.card}>
             <span className={styles.cardLabel}>Total production</span>
             <span className={styles.cardValue}>{summary.totalProduction} units</span>
-          </div>
-          <div className={styles.card}>
-            <span className={styles.cardLabel}>Quality issues</span>
-            <span className={styles.cardValue}>{summary.qualityIssues}</span>
           </div>
           <div className={styles.card}>
             <span className={styles.cardLabel}>Open faults</span>
@@ -229,7 +382,7 @@ export default function ReportsAnalytics() {
       </section>
 
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>Analytics charts</h2>
+        <h2 className={styles.sectionTitle}><i className="fas fa-chart-column fa-fw" /> Analytics charts</h2>
         <div className={styles.chartsGrid}>
           <div className={styles.chartWrap}>
             <h3 className={styles.chartTitle}>Production by department</h3>
@@ -269,16 +422,51 @@ export default function ReportsAnalytics() {
               ))}
             </ul>
           </div>
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>Task analytics</h2>
+        <p className={styles.sectionDesc}>Tasks across all zones and batches (Assign Task overview).</p>
+        <div className={styles.chartsGrid}>
           <div className={styles.chartWrap}>
-            <h3 className={styles.chartTitle}>Quality issues by zone</h3>
-            <div className={styles.lineChart}>
-              {qualityByZone.map((z) => (
-                <div key={z.zone} className={styles.lineRow}>
-                  <span className={styles.barLabel}>{z.zone}</span>
+            <h3 className={styles.chartTitle}>Tasks by status</h3>
+            <div className={styles.barChart}>
+              {tasksByStatus.map((d) => (
+                <div key={d.label} className={styles.barRow}>
+                  <span className={styles.barLabel}>{d.label}</span>
                   <div className={styles.barTrack}>
-                    <div className={styles.barFill} style={{ width: `${(z.issues / qualityMax) * 100}%` }} />
+                    <div className={styles.barFill} style={{ width: `${(d.value / tasksStatusMax) * 100}%` }} />
                   </div>
-                  <span className={styles.barValue}>{z.issues}</span>
+                  <span className={styles.barValue}>{d.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className={styles.chartWrap}>
+            <h3 className={styles.chartTitle}>Tasks by zone</h3>
+            <div className={styles.barChart}>
+              {tasksByZone.map((d) => (
+                <div key={d.label} className={styles.barRow}>
+                  <span className={styles.barLabel}>{d.label}</span>
+                  <div className={styles.barTrack}>
+                    <div className={styles.barFill} style={{ width: `${(d.value / tasksZoneMax) * 100}%` }} />
+                  </div>
+                  <span className={styles.barValue}>{d.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className={styles.chartWrap}>
+            <h3 className={styles.chartTitle}>Tasks by department</h3>
+            <div className={styles.barChart}>
+              {tasksByDepartment.map((d) => (
+                <div key={d.label} className={styles.barRow}>
+                  <span className={styles.barLabel}>{d.label}</span>
+                  <div className={styles.barTrack}>
+                    <div className={styles.barFill} style={{ width: `${(d.value / tasksDeptMax) * 100}%` }} />
+                  </div>
+                  <span className={styles.barValue}>{d.value}</span>
                 </div>
               ))}
             </div>
@@ -287,7 +475,7 @@ export default function ReportsAnalytics() {
       </section>
 
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>Report actions</h2>
+        <h2 className={styles.sectionTitle}><i className="fas fa-bolt fa-fw" /> Report actions</h2>
         <div className={styles.actions}>
           <button type="button" className={styles.btnPrimary} onClick={compileSummary}>
             Compile daily summary

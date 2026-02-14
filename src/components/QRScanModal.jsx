@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Html5Qrcode } from 'html5-qrcode'
+import { Html5Qrcode, Html5QrcodeScannerState } from 'html5-qrcode'
 import { useLanguage } from '../context/LanguageContext'
 import { getTranslation } from '../i18n/translations'
-import { Icon } from './HeroIcons'
 import QRScanStyles from './QRScanModal.module.css'
 
 export default function QRScanModal({ onClose, onSuccess }) {
@@ -15,6 +14,26 @@ export default function QRScanModal({ onClose, onSuccess }) {
   const [cameraError, setCameraError] = useState(null)
   const [cameraReady, setCameraReady] = useState(false)
   const scannerRef = useRef(null)
+
+  /** Stop scanner only if it's running/paused; swallow errors (state + DOM removeChild). */
+  const safeStopScanner = () => {
+    const scanner = scannerRef.current
+    if (!scanner) return
+    try {
+      const state = scanner.getState()
+      if (state === Html5QrcodeScannerState.SCANNING || state === Html5QrcodeScannerState.PAUSED) {
+        scanner.stop().catch(() => {})
+      }
+    } catch (_) {
+      // Ignore "Cannot stop" and any DOM errors
+    }
+    scannerRef.current = null
+  }
+
+  const handleClose = () => {
+    safeStopScanner()
+    onClose()
+  }
 
   useEffect(() => {
     let mounted = true
@@ -34,7 +53,7 @@ export default function QRScanModal({ onClose, onSuccess }) {
           { fps: 10, qrbox: { width: 260, height: 260 } },
           (decodedText) => {
             if (!mounted) return
-            scanner.stop().catch(() => {})
+            safeStopScanner()
             onSuccess(decodedText.trim())
           },
           () => {}
@@ -47,7 +66,7 @@ export default function QRScanModal({ onClose, onSuccess }) {
     startScan()
     return () => {
       mounted = false
-      scannerRef.current?.stop().catch(() => {})
+      safeStopScanner()
     }
   }, [onSuccess])
 
@@ -69,7 +88,7 @@ export default function QRScanModal({ onClose, onSuccess }) {
         <button
           type="button"
           className={QRScanStyles.closeButton}
-          onClick={onClose}
+          onClick={handleClose}
           aria-label={t('cancel')}
         >
           ×
@@ -101,7 +120,7 @@ export default function QRScanModal({ onClose, onSuccess }) {
             )}
             {cameraError && (
               <div className={QRScanStyles.readerFallback}>
-                <Icon name="camera" className={QRScanStyles.fallbackIcon} />
+                <i className={`fas fa-camera fa-fw ${QRScanStyles.fallbackIcon}`} />
                 <p>{cameraError}</p>
                 <p className={QRScanStyles.fallbackHint}>{t('enterUserId')}</p>
               </div>
@@ -134,7 +153,7 @@ export default function QRScanModal({ onClose, onSuccess }) {
           </form>
         </section>
 
-        <button type="button" className={QRScanStyles.cancelTextButton} onClick={onClose}>
+        <button type="button" className={QRScanStyles.cancelTextButton} onClick={handleClose}>
           {t('cancel')}
         </button>
       </div>

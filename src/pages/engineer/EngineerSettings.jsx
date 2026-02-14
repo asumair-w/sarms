@@ -21,7 +21,7 @@ export default function EngineerSettings() {
 
   return (
     <div className={styles.page}>
-      <h1 className={styles.pageTitle}>{t('settingsTitle')}</h1>
+      <h1 className={styles.pageTitle}><i className="fas fa-gear fa-fw" /> {t('settingsTitle')}</h1>
 
       {/* General – Language */}
       <section className={styles.section}>
@@ -54,7 +54,7 @@ export default function EngineerSettings() {
 
       {/* Account */}
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>{t('account')}</h2>
+        <h2 className={styles.sectionTitle}><i className="fas fa-user fa-fw" /> {t('account')}</h2>
         <p className={styles.sectionDesc}>
           {t('accountDesc')}
         </p>

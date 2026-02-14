@@ -8,13 +8,16 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "npm run build && npx wrangler pages deploy dist --project-name=sarms",
-    "deploy:cf": "npx wrangler deploy --assets=./dist",
-    "build:cf": "npm run build && npx wrangler deploy --assets=./dist"
+    "deploy:cf": "npx wrangler deploy --assets=./dist --compatibility-date 2026-02-02 --name sarms",
+    "build:cf": "npm run build && npx wrangler deploy --assets=./dist --compatibility-date 2026-02-02 --name sarms"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
+    "chart.js": "^4.5.1",
+    "d3": "^7.9.0",
     "html5-qrcode": "^2.3.8",
     "react": "^18.2.0",
+    "react-chartjs-2": "^5.3.1",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.22.0"
   },

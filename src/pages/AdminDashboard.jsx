@@ -3,13 +3,72 @@ import { useNavigate } from 'react-router-dom'
 import { useLanguage } from '../context/LanguageContext'
 import { getTranslation } from '../i18n/translations'
 import { useAppStore } from '../context/AppStoreContext'
-import { Icon } from '../components/HeroIcons'
 import { getInventoryStatus } from '../data/inventory'
 import { INVENTORY_STATUS } from '../data/inventory'
 import { TASK_STATUS } from '../data/assignTask'
 import { SEED_WORKERS } from '../data/engineerWorkers'
 import { getPowerBiEmbedUrl } from '../config/powerBi'
 import styles from './AdminDashboard.module.css'
+
+const PERIOD_PRESETS = [
+  { id: 'last7', labelKey: 'periodLast7Days' },
+  { id: 'last30', labelKey: 'periodLast30Days' },
+  { id: 'thisMonth', labelKey: 'periodThisMonth' },
+  { id: 'lastQuarter', labelKey: 'periodLastQuarter' },
+  { id: 'custom', labelKey: 'periodCustom' },
+]
+
+function getPeriodRange(preset, customFrom, customTo) {
+  const now = Date.now()
+  const endOfToday = new Date()
+  endOfToday.setHours(23, 59, 59, 999)
+  const end = endOfToday.getTime()
+  let start
+  if (preset === 'custom' && customFrom && customTo) {
+    start = new Date(customFrom).setHours(0, 0, 0, 0)
+    const endCustom = new Date(customTo)
+    endCustom.setHours(23, 59, 59, 999)
+    return [start, endCustom.getTime()]
+  }
+  if (preset === 'custom') {
+    start = now - 30 * 24 * 60 * 60 * 1000
+    return [start, end]
+  }
+  switch (preset) {
+    case 'last7':
+      start = now - 7 * 24 * 60 * 60 * 1000
+      break
+    case 'last30':
+      start = now - 30 * 24 * 60 * 60 * 1000
+      break
+    case 'thisMonth': {
+      const d = new Date()
+      d.setDate(1)
+      d.setHours(0, 0, 0, 0)
+      start = d.getTime()
+      break
+    }
+    case 'lastQuarter': {
+      const d = new Date()
+      const q = Math.floor(d.getMonth() / 3) + 1
+      const startMonth = (q - 1) * 3
+      d.setMonth(startMonth)
+      d.setDate(1)
+      d.setHours(0, 0, 0, 0)
+      start = d.getTime()
+      break
+    }
+    default:
+      start = now - 30 * 24 * 60 * 60 * 1000
+  }
+  return [start, end]
+}
+
+function isInRange(isoDate, startMs, endMs) {
+  if (!isoDate) return false
+  const t = new Date(isoDate).getTime()
+  return t >= startMs && t <= endMs
+}
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
@@ -19,18 +78,32 @@ export default function AdminDashboard() {
   const [analyticsTab, setAnalyticsTab] = useState('internal') // 'internal' | 'powerbi'
   const [powerBiVisible, setPowerBiVisible] = useState(true)
   const [powerBiFullscreen, setPowerBiFullscreen] = useState(false)
+  const [periodPreset, setPeriodPreset] = useState('last30')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
+
+  const [periodStart, periodEnd] = useMemo(
+    () => getPeriodRange(periodPreset, customFrom, customTo),
+    [periodPreset, customFrom, customTo]
+  )
 
   const kpis = useMemo(() => {
-    const activeWorkers = SEED_WORKERS.filter((w) => w.status === 'active').length
-    const activeTasks = tasks.filter((t) => t.status === TASK_STATUS.IN_PROGRESS).length
-    const delayedTasks = tasks.filter(
-      (t) =>
-        (t.status === TASK_STATUS.APPROVED || t.status === TASK_STATUS.IN_PROGRESS) &&
-        t.createdAt &&
-        Date.now() - new Date(t.createdAt).getTime() > 24 * 60 * 60 * 1000
+    const inRange = (iso) => isInRange(iso, periodStart, periodEnd)
+    const activeWorkers = SEED_WORKERS.filter(
+      (w) => w.status === 'active' && w.createdAt && inRange(w.createdAt)
     ).length
-    const openFaults = faults.length
-    const inventoryAlerts = inventory.filter(
+    const tasksInPeriod = tasks.filter((task) => task.createdAt && inRange(task.createdAt))
+    const activeTasks = tasksInPeriod.filter((task) => task.status === TASK_STATUS.IN_PROGRESS).length
+    const delayedTasks = tasksInPeriod.filter(
+      (task) =>
+        (task.status === TASK_STATUS.APPROVED || task.status === TASK_STATUS.IN_PROGRESS) &&
+        Date.now() - new Date(task.createdAt).getTime() > 24 * 60 * 60 * 1000
+    ).length
+    const openFaults = faults.filter((f) => f.createdAt && inRange(f.createdAt)).length
+    const inventoryInPeriod = inventory.filter(
+      (i) => i.lastUpdated && inRange(i.lastUpdated)
+    )
+    const inventoryAlerts = inventoryInPeriod.filter(
       (i) => getInventoryStatus(i) !== INVENTORY_STATUS.NORMAL
     ).length
     return {
@@ -40,7 +113,7 @@ export default function AdminDashboard() {
       openFaults,
       inventoryAlerts,
     }
-  }, [tasks, faults, inventory])
+  }, [tasks, faults, inventory, periodStart, periodEnd])
 
   const internalChartData = useMemo(() => {
     const byStatus = {
@@ -62,14 +135,53 @@ export default function AdminDashboard() {
   }, [tasks])
 
   const quickActions = [
-    { labelKey: 'registerManageWorkers', icon: 'users', path: '/admin/register' },
+    { labelKey: 'registerManageWorkers', icon: 'users', faIcon: 'users', path: '/admin/register' },
   ]
 
   return (
     <div className={styles.page}>
       {/* 1. Top KPI Summary */}
       <section className={styles.kpiSection}>
-        <h2 className={styles.sectionTitle}>{t('dashboardKpiSummary')}</h2>
+        <div className={styles.kpiHeader}>
+          <h2 className={styles.sectionTitle}><i className="fas fa-chart-pie fa-fw" /> {t('dashboardKpiSummary')}</h2>
+          <div className={styles.periodFilter}>
+            <label htmlFor="kpi-period" className={styles.periodLabel}>
+              {t('kpiPeriod')}
+            </label>
+            <select
+              id="kpi-period"
+              className={styles.periodSelect}
+              value={periodPreset}
+              onChange={(e) => setPeriodPreset(e.target.value)}
+              aria-label={t('kpiPeriod')}
+            >
+              {PERIOD_PRESETS.map(({ id, labelKey }) => (
+                <option key={id} value={id}>
+                  {t(labelKey)}
+                </option>
+              ))}
+            </select>
+            {periodPreset === 'custom' && (
+              <div className={styles.periodCustomRow}>
+                <input
+                  type="date"
+                  className={styles.periodDateInput}
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  aria-label={t('periodFrom')}
+                />
+                <span className={styles.periodDateSep}>–</span>
+                <input
+                  type="date"
+                  className={styles.periodDateInput}
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  aria-label={t('periodTo')}
+                />
+              </div>
+            )}
+          </div>
+        </div>
         <div className={styles.kpiGrid}>
           <div className={styles.kpiCard}>
             <span className={styles.kpiValue}>{kpis.totalActiveWorkers}</span>
@@ -196,16 +308,16 @@ export default function AdminDashboard() {
 
       {/* 3. System Quick Actions */}
       <section className={styles.quickActionsSection}>
-        <h2 className={styles.sectionTitle}>{t('systemQuickActions')}</h2>
+        <h2 className={styles.sectionTitle}><i className="fas fa-bolt fa-fw" /> {t('systemQuickActions')}</h2>
         <div className={styles.quickActionsGrid}>
-          {quickActions.map(({ labelKey, icon, path }) => (
+          {quickActions.map(({ labelKey, icon, faIcon, path }) => (
             <button
               key={path}
               type="button"
               className={styles.quickActionBtn}
               onClick={() => navigate(path)}
             >
-              <Icon name={icon} className={styles.quickActionIcon} />
+              <i className={`fas fa-${faIcon || icon} fa-fw ${styles.quickActionIcon}`} />
               <span className={styles.quickActionLabel}>{t(labelKey)}</span>
             </button>
           ))}

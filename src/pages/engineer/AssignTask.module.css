@@ -1,5 +1,10 @@
 /* Assign Task – zone list, workspace grid, review, analytics */
 
+/* Font Awesome icon spacing within this page */
+.page :global(.fa-fw) {
+  margin-right: 0.35em;
+}
+
 .page {
   max-width: 1400px;
   margin: 0 auto;
@@ -110,6 +115,13 @@
   margin: 0;
 }
 
+.zoneHeaderActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
 .addZoneBtn {
   min-height: 44px;
   padding: 0.5rem 1rem;
@@ -136,6 +148,64 @@
   padding: 1.25rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   border: 1px solid #e2e8f0;
+}
+
+.batchesSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.batchesSectionHeader .sectionTitle {
+  margin: 0;
+}
+
+.batchHeaderActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.addBatchBtn {
+  min-height: 44px;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--sarms-primary, #5c7b5c);
+  background: #e8efe8;
+  border: 1px solid var(--sarms-primary, #5c7b5c);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.addBatchBtn:hover {
+  background: #d8e5d8;
+  border-color: var(--sarms-primary, #5c7b5c);
+}
+
+.deleteBatchBtn {
+  min-height: 44px;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.deleteBatchBtn:hover {
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .batchTabs {
@@ -478,6 +548,25 @@
   color: var(--sarms-primary, #5c7b5c);
 }
 
+.deleteZoneBtn {
+  min-height: 44px;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.deleteZoneBtn:hover {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 /* Workspace */
 .workspaceSection {
   background: #fff;
@@ -641,6 +730,23 @@
   color: #0f172a;
 }
 
+.modalMessage {
+  margin: 0 0 1.25rem;
+  font-size: 0.95rem;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.deleteSelect {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  font-size: 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  min-height: 44px;
+}
+
 .assignForm {
   display: flex;
   flex-direction: column;
@@ -689,10 +795,31 @@
   background: #fff;
 }
 
+.searchInput {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.95rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  margin-bottom: 0.5rem;
+  box-sizing: border-box;
+}
+
+.searchInput::placeholder {
+  color: #94a3b8;
+}
+
 .workerChips {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.noMatch {
+  font-size: 0.9rem;
+  color: #64748b;
+  font-style: italic;
 }
 
 .chip {
@@ -765,6 +892,28 @@
 
 .btnSecondary:hover {
   background: #d8d8d8;
+}
+
+.btnDanger {
+  padding: 0.6rem 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #fff;
+  background: #b91c1c;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 0.15s, background 0.15s;
+}
+
+.btnDanger:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: #991b1b;
+}
+
+.btnDanger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* View task */
@@ -894,6 +1043,10 @@
   color: var(--sarms-primary-hover, #4a6b4a);
 }
 
+.flagActive {
+  color: #b91c1c;
+}
+
 /* Analytics */
 .analyticsSection {
   background: #fff;
@@ -905,12 +1058,18 @@
 
 .chartsRow {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 1.5rem;
   margin-bottom: 1rem;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
+  .chartsRow {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 600px) {
   .chartsRow {
     grid-template-columns: 1fr;
   }
@@ -1011,6 +1170,90 @@
   font-weight: 600;
   color: var(--sarms-primary, #5c7b5c);
   text-align: right;
+}
+
+/* Vertical bar chart (Tasks by status) */
+.verticalBarChart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 140px;
+  padding: 0.5rem 0;
+}
+
+.verticalBarCol {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.verticalBarFill {
+  width: 100%;
+  max-width: 44px;
+  min-height: 8px;
+  background: var(--sarms-chart-bar, #6b8a6b);
+  border-radius: 6px 6px 0 0;
+  transition: height 0.3s ease;
+  margin-bottom: 0.35rem;
+}
+
+.verticalBarValue {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--sarms-primary, #5c7b5c);
+  margin-bottom: 0.25rem;
+}
+
+.verticalBarLabel {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #64748b;
+  text-align: center;
+  line-height: 1.2;
+  max-width: 70px;
+}
+
+/* Pie chart (Tasks by zone) */
+.analyticsPie {
+  width: 160px;
+  height: 160px;
+  margin: 0 auto 1rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.analyticsPieLegend {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem 1rem;
+}
+
+.analyticsPieLegendItem {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: #334155;
+}
+
+.analyticsPieLegendDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.analyticsPieLegendValue {
+  font-weight: 600;
+  color: #166534;
+  margin-left: 0.15rem;
 }
 
 .moreWrap {

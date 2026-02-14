@@ -4,8 +4,6 @@
 
 export const RECORD_TYPES = [
   { id: 'production', label: 'Production Record' },
-  { id: 'quality', label: 'Quality Record' },
-  { id: 'fault_maintenance', label: 'Fault / Maintenance Record' },
   { id: 'inventory', label: 'Inventory Record' },
 ]
 

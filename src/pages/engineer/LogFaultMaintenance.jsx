@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { EQUIPMENT_STATUS, EQUIPMENT_STATUS_LABELS } from '../../data/inventory'
 import {
   FAULT_CATEGORIES,
@@ -9,7 +10,30 @@ import { useAppStore } from '../../context/AppStoreContext'
 import styles from './LogFaultMaintenance.module.css'
 
 export default function LogFaultMaintenance() {
+  const navigate = useNavigate()
   const { equipment, faults, maintenancePlans, addFault, addMaintenancePlan } = useAppStore()
+
+  const analyticsByCategory = useMemo(() => {
+    const map = Object.fromEntries(FAULT_CATEGORIES.map((c) => [c.id, 0]))
+    faults.forEach((f) => { if (map[f.category] !== undefined) map[f.category] += 1 })
+    return FAULT_CATEGORIES.map((c) => ({ id: c.id, label: c.label, count: map[c.id] || 0 }))
+  }, [faults])
+  const analyticsBySeverity = useMemo(() => {
+    const map = Object.fromEntries(SEVERITY_OPTIONS.map((s) => [s.id, 0]))
+    faults.forEach((f) => { if (map[f.severity] !== undefined) map[f.severity] += 1 })
+    return SEVERITY_OPTIONS.map((s) => ({ id: s.id, label: s.label, count: map[s.id] || 0 }))
+  }, [faults])
+  const analyticsByEquipment = useMemo(() => {
+    const map = {}
+    faults.forEach((f) => {
+      const name = f.equipmentName || f.equipmentId || 'Unknown'
+      map[name] = (map[name] || 0) + 1
+    })
+    return Object.entries(map).map(([name, count]) => ({ label: name, count })).sort((a, b) => b.count - a.count).slice(0, 6)
+  }, [faults])
+  const maxCategory = Math.max(1, ...analyticsByCategory.map((x) => x.count))
+  const maxSeverity = Math.max(1, ...analyticsBySeverity.map((x) => x.count))
+  const maxEquipment = Math.max(1, ...analyticsByEquipment.map((x) => x.count))
   const [logFaultOpen, setLogFaultOpen] = useState(false)
   const [planMaintenanceOpen, setPlanMaintenanceOpen] = useState(false)
   const [selectedEquipment, setSelectedEquipment] = useState(null)
@@ -79,7 +103,7 @@ export default function LogFaultMaintenance() {
   return (
     <div className={styles.page}>
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>Equipment list &amp; status</h2>
+        <h2 className={styles.sectionTitle}><i className="fas fa-list fa-fw" /> Equipment list &amp; status</h2>
         <div className={styles.equipmentList}>
           {equipment.map((eq) => (
             <div key={eq.id} className={styles.equipmentCard} data-status={eq.status}>
@@ -103,8 +127,61 @@ export default function LogFaultMaintenance() {
       </section>
 
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>Log fault panel</h2>
+        <h2 className={styles.sectionTitle}><i className="fas fa-triangle-exclamation fa-fw" /> Log fault panel</h2>
         <p className={styles.hint}>Select &quot;Log fault&quot; on an equipment item above to open the fault form.</p>
+      </section>
+
+      <section className={styles.analyticsSection}>
+        <h2 className={styles.sectionTitle}>Analytics</h2>
+        <div className={styles.chartsRow}>
+          <div className={styles.chartWrap}>
+            <div className={styles.chartCaption}>Faults by category</div>
+            <div className={styles.barChart}>
+              {analyticsByCategory.map((row) => (
+                <div key={row.id} className={styles.barRow}>
+                  <span className={styles.barLabel}>{row.label}</span>
+                  <div className={styles.barTrack}>
+                    <div className={styles.barFill} style={{ width: `${(row.count / maxCategory) * 100}%` }} />
+                  </div>
+                  <span className={styles.barValue}>{row.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className={styles.chartWrap}>
+            <div className={styles.chartCaption}>Faults by severity</div>
+            <div className={styles.barChart}>
+              {analyticsBySeverity.map((row) => (
+                <div key={row.id} className={styles.barRow}>
+                  <span className={styles.barLabel}>{row.label}</span>
+                  <div className={styles.barTrack}>
+                    <div className={styles.barFill} style={{ width: `${(row.count / maxSeverity) * 100}%` }} />
+                  </div>
+                  <span className={styles.barValue}>{row.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className={styles.chartWrap}>
+            <div className={styles.chartCaption}>Faults by equipment</div>
+            <div className={styles.barChart}>
+              {analyticsByEquipment.map((row, i) => (
+                <div key={i} className={styles.barRow}>
+                  <span className={styles.barLabel}>{row.label}</span>
+                  <div className={styles.barTrack}>
+                    <div className={styles.barFill} style={{ width: `${(row.count / maxEquipment) * 100}%` }} />
+                  </div>
+                  <span className={styles.barValue}>{row.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className={styles.moreWrap}>
+          <button type="button" className={styles.moreBtn} onClick={() => navigate('/engineer/reports')}>
+            More Details
+          </button>
+        </div>
       </section>
 
       {/* Log Fault modal */}
@@ -221,7 +298,7 @@ export default function LogFaultMaintenance() {
 
       {(faults.length > 0 || maintenancePlans.length > 0) && (
         <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>Recent faults &amp; plans</h2>
+          <h2 className={styles.sectionTitle}><i className="fas fa-clock-rotate-left fa-fw" /> Recent faults &amp; plans</h2>
           {faults.length > 0 && (
             <div className={styles.tableWrap}>
               <h3 className={styles.subTitle}>Faults</h3>

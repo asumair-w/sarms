@@ -1,167 +1,253 @@
 import { useState, useMemo } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import {
   ROLE_OPTIONS,
   DEPARTMENT_OPTIONS,
-  SEED_WORKERS,
-  generateEmployeeId,
-  generateTempPassword,
-  getQRCodeUrl,
+  SKILL_OPTIONS,
 } from '../../data/engineerWorkers'
 import { useAppStore } from '../../context/AppStoreContext'
+import { useLanguage } from '../../context/LanguageContext'
+import { getTranslation } from '../../i18n/translations'
+import { TASK_STATUS } from '../../data/assignTask'
 import styles from './RegisterManageWorkers.module.css'
 
 const ROLE_LABEL = Object.fromEntries(ROLE_OPTIONS.map((r) => [r.value, r.label]))
 const DEPT_LABEL = Object.fromEntries(DEPARTMENT_OPTIONS.map((d) => [d.value, d.label]))
 
-/** True if session startTime is on today (local date). */
-function isSessionToday(session) {
-  const start = new Date(session.startTime)
-  const now = new Date()
-  return start.getFullYear() === now.getFullYear() && start.getMonth() === now.getMonth() && start.getDate() === now.getDate()
+function getWeekStart() {
+  const d = new Date()
+  const day = d.getDay()
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+  const monday = new Date(d.getFullYear(), d.getMonth(), diff)
+  monday.setHours(0, 0, 0, 0)
+  return monday.getTime()
 }
 
-/** Display status: inactive (disabled), active (attended today), absent (enabled but not attended today). */
-function getDisplayStatus(worker, sessions) {
-  if (worker.status === 'inactive') return 'inactive'
-  const attendedToday = sessions.some((s) => s.workerId === worker.id && isSessionToday(s))
-  return attendedToday ? 'active' : 'absent'
+function getAccountStatus(worker) {
+  return worker.status === 'active' ? 'active' : 'not_active'
 }
 
-/** Engineers cannot add or assign admin; only admin can. */
-function getRoleOptionsForCurrentUser() {
-  try {
-    const role = sessionStorage.getItem('sarms-user-role')
-    if (role === 'engineer') return ROLE_OPTIONS.filter((r) => r.value !== 'admin')
-  } catch {}
-  return ROLE_OPTIONS
+function isInTask(worker, sessions) {
+  return !!(sessions && sessions.some((s) => String(s.workerId) === String(worker.id)))
+}
+
+const IS_WORKER_OR_TECH = (role) => role === 'worker' || role === 'technician'
+
+/** Tasks assigned to worker (workerIds includes id). */
+function getWorkerTasks(tasks, workerId) {
+  const wid = String(workerId)
+  return (tasks || []).filter((t) => (t.workerIds || []).some((id) => String(id) === wid))
+}
+
+/** Tasks this week (createdAt >= week start). */
+function getTasksThisWeek(tasks, workerId) {
+  const weekStart = getWeekStart()
+  return getWorkerTasks(tasks, workerId).filter((t) => new Date(t.createdAt).getTime() >= weekStart)
+}
+
+/** Overdue: not completed and past due (createdAt + estimatedMinutes). */
+function getOverdueTasks(tasks, workerId) {
+  const now = Date.now()
+  return getWorkerTasks(tasks, workerId).filter((t) => {
+    if (t.status === TASK_STATUS.COMPLETED) return false
+    const created = new Date(t.createdAt).getTime()
+    const mins = t.estimatedMinutes || 60
+    const due = created + mins * 60 * 1000
+    return due < now
+  })
+}
+
+/** Active tasks (in progress or approved). */
+function getActiveTasks(tasks, workerId) {
+  return getWorkerTasks(tasks, workerId).filter(
+    (t) => t.status === TASK_STATUS.IN_PROGRESS || t.status === TASK_STATUS.APPROVED
+  )
+}
+
+function getEfficiency(tasks, workerId) {
+  const assigned = getWorkerTasks(tasks, workerId)
+  if (assigned.length === 0) return null
+  const completed = assigned.filter((t) => t.status === TASK_STATUS.COMPLETED).length
+  return Math.round((completed / assigned.length) * 100)
+}
+
+function efficiencyClass(pct) {
+  if (pct == null) return ''
+  if (pct > 80) return 'effHigh'
+  if (pct >= 60) return 'effMid'
+  return 'effLow'
 }
 
 export default function RegisterManageWorkers() {
-  const { sessions } = useAppStore()
-  const roleOptions = useMemo(getRoleOptionsForCurrentUser, [])
-  const [workers, setWorkers] = useState(() => [...SEED_WORKERS])
+  const location = useLocation()
+  const isEngineerRoute = location.pathname.startsWith('/engineer')
+  const { lang } = useLanguage()
+  const t = (key) => getTranslation(lang, 'engineer', key)
+  const { sessions, tasks, workers, updateWorker } = useAppStore()
   const [search, setSearch] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
   const [filterRole, setFilterRole] = useState('')
   const [filterDept, setFilterDept] = useState('')
-  const [filterStatus, setFilterStatus] = useState('')
-  const [addOpen, setAddOpen] = useState(false)
+  const [filterSkill, setFilterSkill] = useState('')
   const [editOpen, setEditOpen] = useState(false)
-  const [viewOpen, setViewOpen] = useState(false)
-  const [createdWorker, setCreatedWorker] = useState(null)
-  const [selected, setSelected] = useState(null)
-  const [addForm, setAddForm] = useState({ fullName: '', phone: '', email: '', nationality: '', role: 'worker', department: 'farming' })
-  const [editForm, setEditForm] = useState({ fullName: '', role: 'worker', department: 'farming', status: 'active' })
+  const [editWorker, setEditWorker] = useState(null)
+  const [editForm, setEditForm] = useState({ fullName: '', role: '', department: '', status: '', skills: [] })
+
+  const weekStart = useMemo(() => getWeekStart(), [])
+
+  /** Engineer must not see or filter by Admin role. */
+  const roleOptions = useMemo(
+    () => (isEngineerRoute ? ROLE_OPTIONS.filter((r) => r.value !== 'admin') : ROLE_OPTIONS),
+    [isEngineerRoute]
+  )
 
   const filtered = useMemo(() => {
-    let list = workers
+    let list = workers || []
+    if (isEngineerRoute) list = list.filter((w) => w.role !== 'admin')
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter((w) => w.fullName.toLowerCase().includes(q) || (w.employeeId && w.employeeId.toLowerCase().includes(q)))
     }
     if (filterRole) list = list.filter((w) => w.role === filterRole)
     if (filterDept) list = list.filter((w) => w.department === filterDept)
-    if (filterStatus) list = list.filter((w) => getDisplayStatus(w, sessions) === filterStatus)
+    if (filterStatus) list = list.filter((w) => getAccountStatus(w) === filterStatus)
+    if (filterSkill) list = list.filter((w) => (w.skills || []).includes(filterSkill))
     return list
-  }, [workers, search, filterRole, filterDept, filterStatus, sessions])
+  }, [workers, search, filterRole, filterDept, filterStatus, filterSkill, isEngineerRoute])
 
-  function openAdd() {
-    setAddForm({ fullName: '', phone: '', email: '', nationality: '', role: 'worker', department: 'farming' })
-    setCreatedWorker(null)
-    setAddOpen(true)
-  }
-
-  function saveAdd(e) {
-    e.preventDefault()
-    if (!addForm.fullName.trim()) return
-    const role = addForm.role
-    const employeeId = generateEmployeeId(role, workers)
-    const tempPassword = generateTempPassword()
-    const newWorker = {
-      id: String(Date.now()),
-      employeeId,
-      fullName: addForm.fullName.trim(),
-      phone: addForm.phone.trim(),
-      email: addForm.email.trim(),
-      nationality: addForm.nationality.trim(),
-      role,
-      department: addForm.department,
-      status: 'active',
-      tempPassword,
-      createdAt: new Date().toISOString(),
-    }
-    setWorkers((prev) => [newWorker, ...prev])
-    setCreatedWorker(newWorker)
-    setAddForm({ fullName: '', phone: '', email: '', nationality: '', role: 'worker', department: 'farming' })
-  }
-
-  function closeAdd() {
-    setAddOpen(false)
-    setCreatedWorker(null)
-  }
+  const ranking = useMemo(() => {
+    const list = isEngineerRoute ? (workers || []).filter((w) => w.role !== 'admin') : (workers || [])
+    const now = Date.now()
+    let topPerformer = null
+    let mostOverloaded = null
+    let mostDelayed = null
+    let maxCompleted = 0
+    let maxActive = 0
+    let maxOverdue = 0
+    list.forEach((w) => {
+      const weekTasks = getWorkerTasks(tasks || [], w.id).filter((t) => new Date(t.createdAt).getTime() >= weekStart)
+      const completedThisWeek = weekTasks.filter((t) => t.status === TASK_STATUS.COMPLETED).length
+      const activeCount = getActiveTasks(tasks || [], w.id).length
+      const overdueCount = getOverdueTasks(tasks || [], w.id).length
+      if (completedThisWeek > maxCompleted) {
+        maxCompleted = completedThisWeek
+        topPerformer = { worker: w, value: completedThisWeek }
+      }
+      if (activeCount > maxActive) {
+        maxActive = activeCount
+        mostOverloaded = { worker: w, value: activeCount }
+      }
+      if (overdueCount > maxOverdue) {
+        maxOverdue = overdueCount
+        mostDelayed = { worker: w, value: overdueCount }
+      }
+    })
+    return { topPerformer, mostOverloaded, mostDelayed }
+  }, [workers, tasks, weekStart, isEngineerRoute])
 
   function openEdit(w) {
-    setSelected(w)
-    setEditForm({ fullName: w.fullName, role: w.role, department: w.department, status: w.status })
+    setEditWorker(w)
+    setEditForm({
+      fullName: w.fullName,
+      role: w.role,
+      department: w.department,
+      status: w.status,
+      skills: Array.isArray(w.skills) ? [...w.skills] : [],
+    })
     setEditOpen(true)
   }
 
   function saveEdit(e) {
     e.preventDefault()
-    if (!selected || !editForm.fullName.trim()) return
-    const canChangeRole = roleOptions.some((r) => r.value === selected.role)
-    const newRole = canChangeRole ? editForm.role : selected.role
-    setWorkers((prev) =>
-      prev.map((w) =>
-        w.id === selected.id
-          ? { ...w, fullName: editForm.fullName.trim(), role: newRole, department: editForm.department, status: editForm.status }
-          : w
-      )
-    )
+    if (!editWorker) return
+    updateWorker(editWorker.id, {
+      fullName: editForm.fullName,
+      role: editForm.role,
+      department: editForm.department,
+      status: editForm.status,
+      skills: editForm.skills,
+    })
     setEditOpen(false)
-    setSelected(null)
   }
 
-  function openView(w) {
-    setSelected(w)
-    setViewOpen(true)
+  function toggleSkill(skill) {
+    setEditForm((f) => ({
+      ...f,
+      skills: f.skills.includes(skill) ? f.skills.filter((s) => s !== skill) : [...f.skills, skill],
+    }))
   }
 
-  function setStatus(w, status) {
-    setWorkers((prev) => prev.map((x) => (x.id === w.id ? { ...x, status } : x)))
-  }
-
-  function updateRole(w, role) {
-    setWorkers((prev) => prev.map((x) => (x.id === w.id ? { ...x, role } : x)))
-  }
-
-  function downloadQR(employeeId) {
-    const url = getQRCodeUrl(employeeId, 300)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `QR-${employeeId}.png`
-    a.target = '_blank'
-    a.rel = 'noopener'
-    a.click()
-  }
+  const profileBase = isEngineerRoute ? '/engineer/register/worker' : '/admin/register/worker'
 
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <h1 className={styles.title}>Register & Manage Workers</h1>
-        <button type="button" className={styles.addBtn} onClick={openAdd}>
-          + Add Worker
-        </button>
-      </header>
+      <h1 className={styles.title}><i className="fas fa-users fa-fw" /> {t('navRegister')}</h1>
 
-      <div className={styles.toolbar}>
+      {/* Worker Ranking Widget */}
+      <section className={styles.rankingSection}>
+        <h2 className={styles.rankingTitle}><i className="fas fa-trophy fa-fw" /> Worker Ranking</h2>
+        <div className={styles.rankingGrid}>
+          <div className={styles.rankingCard}>
+            <span className={styles.rankingLabel}>Top Performer (this week)</span>
+            {ranking.topPerformer ? (
+              isEngineerRoute ? (
+                <Link to={`${profileBase}/${ranking.topPerformer.worker.id}`} className={styles.rankingLink}>
+                  {ranking.topPerformer.worker.fullName}
+                </Link>
+              ) : (
+                <span className={styles.rankingName}>{ranking.topPerformer.worker.fullName}</span>
+              )
+            ) : (
+              <span className={styles.cellMuted}>—</span>
+            )}
+            {ranking.topPerformer && <span className={styles.rankingMetric}>{ranking.topPerformer.value} completed</span>}
+          </div>
+          <div className={styles.rankingCard}>
+            <span className={styles.rankingLabel}>Most Overloaded (active tasks)</span>
+            {ranking.mostOverloaded && ranking.mostOverloaded.value > 0 ? (
+              isEngineerRoute ? (
+                <Link to={`${profileBase}/${ranking.mostOverloaded.worker.id}`} className={styles.rankingLink}>
+                  {ranking.mostOverloaded.worker.fullName}
+                </Link>
+              ) : (
+                <span className={styles.rankingName}>{ranking.mostOverloaded.worker.fullName}</span>
+              )
+            ) : (
+              <span className={styles.cellMuted}>—</span>
+            )}
+            {ranking.mostOverloaded && ranking.mostOverloaded.value > 0 && (
+              <span className={styles.rankingMetric}>{ranking.mostOverloaded.value} active</span>
+            )}
+          </div>
+          <div className={styles.rankingCard}>
+            <span className={styles.rankingLabel}>Most Delayed (overdue)</span>
+            {ranking.mostDelayed && ranking.mostDelayed.value > 0 ? (
+              isEngineerRoute ? (
+                <Link to={`${profileBase}/${ranking.mostDelayed.worker.id}`} className={styles.rankingLink}>
+                  {ranking.mostDelayed.worker.fullName}
+                </Link>
+              ) : (
+                <span className={styles.rankingName}>{ranking.mostDelayed.worker.fullName}</span>
+              )
+            ) : (
+              <span className={styles.cellMuted}>—</span>
+            )}
+            {ranking.mostDelayed && ranking.mostDelayed.value > 0 && (
+              <span className={styles.rankingMetric}>{ranking.mostDelayed.value} overdue</span>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <div className={styles.filters}>
         <input
-          type="text"
+          type="search"
           className={styles.search}
-          placeholder="Search by name or Employee ID"
+          placeholder="Search by name or ID..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <select className={styles.filter} value={filterRole} onChange={(e) => setFilterRole(e.target.value)}>
+        <select className={styles.filter} value={isEngineerRoute && filterRole === 'admin' ? '' : filterRole} onChange={(e) => setFilterRole(e.target.value)}>
           <option value="">All roles</option>
           {roleOptions.map((r) => (
             <option key={r.value} value={r.value}>{r.label}</option>
@@ -173,11 +259,16 @@ export default function RegisterManageWorkers() {
             <option key={d.value} value={d.value}>{d.label}</option>
           ))}
         </select>
+        <select className={styles.filter} value={filterSkill} onChange={(e) => setFilterSkill(e.target.value)}>
+          <option value="">All skills</option>
+          {SKILL_OPTIONS.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
         <select className={styles.filter} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-          <option value="">All statuses</option>
-          <option value="active">Active (attended today)</option>
-          <option value="absent">Absent</option>
-          <option value="inactive">Inactive</option>
+          <option value="">All (account)</option>
+          <option value="active">Active</option>
+          <option value="not_active">Not active</option>
         </select>
       </div>
 
@@ -187,61 +278,66 @@ export default function RegisterManageWorkers() {
             <tr>
               <th>Employee ID</th>
               <th>Full Name</th>
+              <th>Skills</th>
               <th>Role</th>
               <th>Department</th>
-              <th>Status</th>
+              <th>Account</th>
+              <th>In task</th>
+              <th>Tasks This Week</th>
+              <th>Overdue</th>
+              <th>Efficiency %</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((w) => (
-              <tr key={w.id}>
-                <td className={styles.cellId}>{w.employeeId}</td>
-                <td>{w.fullName}</td>
-                <td>
-                  {roleOptions.some((r) => r.value === w.role) ? (
-                    <select
-                      className={styles.roleSelect}
-                      value={w.role}
-                      onChange={(e) => updateRole(w, e.target.value)}
-                    >
-                      {roleOptions.map((r) => (
-                        <option key={r.value} value={r.value}>{r.label}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span title="Only admin can change this role">{ROLE_LABEL[w.role] ?? w.role}</span>
-                  )}
-                </td>
-                <td>{DEPT_LABEL[w.department] ?? w.department}</td>
-                <td>
-                  {(() => {
-                    const display = getDisplayStatus(w, sessions)
-                    const label = display === 'active' ? 'Active' : display === 'absent' ? 'Absent' : 'Inactive'
-                    const cls = display === 'active' ? styles.badgeActive : display === 'absent' ? styles.badgeAbsent : styles.badgeInactive
-                    return <span className={cls}>{label}</span>
-                  })()}
-                </td>
-                <td>
-                  <div className={styles.actions}>
-                    <button type="button" className={styles.actionBtn} onClick={() => openView(w)} title="View">
-                      View
-                    </button>
-                    <button type="button" className={styles.actionBtn} onClick={() => openEdit(w)} title="Edit">
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.actionBtnDanger}
-                      onClick={() => setStatus(w, w.status === 'active' ? 'inactive' : 'active')}
-                      title={w.status === 'active' ? 'Disable' : 'Activate'}
-                    >
-                      {w.status === 'active' ? 'Disable' : 'Activate'}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {filtered.map((w) => {
+              const accountStatus = getAccountStatus(w)
+              const accountLabel = accountStatus === 'active' ? 'Active' : 'Not active'
+              const accountCls = accountStatus === 'active' ? styles.badgeActive : styles.badgeNotActive
+              const showInTask = IS_WORKER_OR_TECH(w.role)
+              const inTask = showInTask && isInTask(w, sessions)
+              const tasksWeek = getTasksThisWeek(tasks || [], w.id).length
+              const overdue = getOverdueTasks(tasks || [], w.id).length
+              const eff = getEfficiency(tasks || [], w.id)
+              const effCls = styles[efficiencyClass(eff)]
+              const skills = Array.isArray(w.skills) ? w.skills : []
+              return (
+                <tr key={w.id}>
+                  <td className={styles.cellId}>{w.employeeId}</td>
+                  <td>
+                    {isEngineerRoute ? (
+                      <Link to={`${profileBase}/${w.id}`} className={styles.nameLink}>{w.fullName}</Link>
+                    ) : (
+                      w.fullName
+                    )}
+                  </td>
+                  <td>
+                    <div className={styles.skillTags}>
+                      {skills.length ? skills.map((s) => <span key={s} className={styles.skillTag}>{s}</span>) : <span className={styles.cellMuted}>—</span>}
+                    </div>
+                  </td>
+                  <td>{ROLE_LABEL[w.role] ?? w.role}</td>
+                  <td>{DEPT_LABEL[w.department] ?? w.department}</td>
+                  <td><span className={accountCls}>{accountLabel}</span></td>
+                  <td>
+                    {showInTask ? (
+                      inTask ? <span className={styles.badgeInTask}>Yes</span> : <span className={styles.badgeNotInTask}>No</span>
+                    ) : (
+                      <span className={styles.cellMuted}>—</span>
+                    )}
+                  </td>
+                  <td>{tasksWeek}</td>
+                  <td>{overdue}</td>
+                  <td><span className={effCls}>{eff != null ? `${eff}%` : '—'}</span></td>
+                  <td>
+                    <div className={styles.actionsCell}>
+                      <Link to={`${profileBase}/${w.id}`} className={styles.actionBtn}>View</Link>
+                      <button type="button" className={styles.actionBtn} onClick={() => openEdit(w)} title="Edit">Edit</button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
         {filtered.length === 0 && (
@@ -249,58 +345,7 @@ export default function RegisterManageWorkers() {
         )}
       </div>
 
-      {addOpen && (
-        <div className={styles.overlay} onClick={closeAdd}>
-          <div className={styles.panel} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.panelHeader}>
-              <h2>{createdWorker ? 'Worker created' : 'Add Worker'}</h2>
-              <button type="button" className={styles.closeBtn} onClick={closeAdd} aria-label="Close">×</button>
-            </div>
-            {!createdWorker ? (
-              <form onSubmit={saveAdd} className={styles.form}>
-                <label className={styles.label}>Full Name *</label>
-                <input className={styles.input} value={addForm.fullName} onChange={(e) => setAddForm((f) => ({ ...f, fullName: e.target.value }))} required />
-                <label className={styles.label}>Phone</label>
-                <input className={styles.input} type="tel" value={addForm.phone} onChange={(e) => setAddForm((f) => ({ ...f, phone: e.target.value }))} />
-                <label className={styles.label}>Email</label>
-                <input className={styles.input} type="email" value={addForm.email} onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))} />
-                <label className={styles.label}>Nationality</label>
-                <input className={styles.input} value={addForm.nationality} onChange={(e) => setAddForm((f) => ({ ...f, nationality: e.target.value }))} />
-                <label className={styles.label}>Role</label>
-                <select className={styles.input} value={addForm.role} onChange={(e) => setAddForm((f) => ({ ...f, role: e.target.value }))}>
-                  {roleOptions.map((r) => (
-                    <option key={r.value} value={r.value}>{r.label}</option>
-                  ))}
-                </select>
-                <label className={styles.label}>Department</label>
-                <select className={styles.input} value={addForm.department} onChange={(e) => setAddForm((f) => ({ ...f, department: e.target.value }))}>
-                  {DEPARTMENT_OPTIONS.map((d) => (
-                    <option key={d.value} value={d.value}>{d.label}</option>
-                  ))}
-                </select>
-                <div className={styles.formActions}>
-                  <button type="submit" className={styles.primaryBtn}>Save</button>
-                  <button type="button" className={styles.secondaryBtn} onClick={closeAdd}>Cancel</button>
-                </div>
-              </form>
-            ) : (
-              <div className={styles.createdBlock}>
-                <p className={styles.createdIntro}>User added. Credentials (share securely):</p>
-                <div className={styles.credRow}><span className={styles.credLabel}>Employee ID</span><strong>{createdWorker.employeeId}</strong></div>
-                <div className={styles.credRow}><span className={styles.credLabel}>Temporary password</span><strong>{createdWorker.tempPassword}</strong></div>
-                <div className={styles.qrBlock}>
-                  <p className={styles.credLabel}>QR Code (for login scan)</p>
-                  <img src={getQRCodeUrl(createdWorker.employeeId)} alt={`QR for ${createdWorker.employeeId}`} className={styles.qrImage} />
-                  <button type="button" className={styles.downloadQrBtn} onClick={() => downloadQR(createdWorker.employeeId)}>Download QR Code</button>
-                </div>
-                <button type="button" className={styles.primaryBtn} onClick={closeAdd}>Done</button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {editOpen && selected && (
+      {editOpen && editWorker && (
         <div className={styles.overlay} onClick={() => setEditOpen(false)}>
           <div className={styles.panel} onClick={(e) => e.stopPropagation()}>
             <div className={styles.panelHeader}>
@@ -311,62 +356,36 @@ export default function RegisterManageWorkers() {
               <label className={styles.label}>Full Name *</label>
               <input className={styles.input} value={editForm.fullName} onChange={(e) => setEditForm((f) => ({ ...f, fullName: e.target.value }))} required />
               <label className={styles.label}>Role</label>
-              {roleOptions.some((r) => r.value === selected.role) ? (
-                <select className={styles.input} value={editForm.role} onChange={(e) => setEditForm((f) => ({ ...f, role: e.target.value }))}>
-                  {roleOptions.map((r) => (
-                    <option key={r.value} value={r.value}>{r.label}</option>
-                  ))}
-                </select>
-              ) : (
-                <div className={styles.input} style={{ opacity: 0.9 }}>{ROLE_LABEL[selected.role]} (only admin can change)</div>
-              )}
+              <select className={styles.input} value={editForm.role} onChange={(e) => setEditForm((f) => ({ ...f, role: e.target.value }))}>
+                {roleOptions.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
               <label className={styles.label}>Department</label>
               <select className={styles.input} value={editForm.department} onChange={(e) => setEditForm((f) => ({ ...f, department: e.target.value }))}>
                 {DEPARTMENT_OPTIONS.map((d) => (
                   <option key={d.value} value={d.value}>{d.label}</option>
                 ))}
               </select>
-              <label className={styles.label}>Status</label>
+              <label className={styles.label}>Account Status</label>
               <select className={styles.input} value={editForm.status} onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))}>
                 <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
+                <option value="inactive">Not active</option>
               </select>
+              <label className={styles.label}>Skills</label>
+              <div className={styles.skillCheckboxGrid}>
+                {SKILL_OPTIONS.map((skill) => (
+                  <label key={skill} className={styles.skillCheckbox}>
+                    <input type="checkbox" checked={editForm.skills.includes(skill)} onChange={() => toggleSkill(skill)} />
+                    <span>{skill}</span>
+                  </label>
+                ))}
+              </div>
               <div className={styles.formActions}>
                 <button type="submit" className={styles.primaryBtn}>Save</button>
                 <button type="button" className={styles.secondaryBtn} onClick={() => setEditOpen(false)}>Cancel</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {viewOpen && selected && (
-        <div className={styles.overlay} onClick={() => setViewOpen(false)}>
-          <div className={styles.panel} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.panelHeader}>
-              <h2>View Worker</h2>
-              <button type="button" className={styles.closeBtn} onClick={() => setViewOpen(false)} aria-label="Close">×</button>
-            </div>
-            <div className={styles.viewBlock}>
-              <div className={styles.viewRow}><span className={styles.credLabel}>Employee ID</span><span>{selected.employeeId}</span></div>
-              <div className={styles.viewRow}><span className={styles.credLabel}>Full Name</span><span>{selected.fullName}</span></div>
-              <div className={styles.viewRow}><span className={styles.credLabel}>Role</span><span>{ROLE_LABEL[selected.role]}</span></div>
-              <div className={styles.viewRow}><span className={styles.credLabel}>Department</span><span>{DEPT_LABEL[selected.department]}</span></div>
-              <div className={styles.viewRow}>
-                <span className={styles.credLabel}>Status</span>
-                {(() => {
-                  const display = getDisplayStatus(selected, sessions)
-                  const label = display === 'active' ? 'Active' : display === 'absent' ? 'Absent' : 'Inactive'
-                  const cls = display === 'active' ? styles.badgeActive : display === 'absent' ? styles.badgeAbsent : styles.badgeInactive
-                  return <span className={cls}>{label}</span>
-                })()}
-              </div>
-              <div className={styles.qrBlock}>
-                <p className={styles.credLabel}>QR Code (login scan)</p>
-                <img src={getQRCodeUrl(selected.employeeId)} alt={`QR for ${selected.employeeId}`} className={styles.qrImage} />
-                <button type="button" className={styles.downloadQrBtn} onClick={() => downloadQR(selected.employeeId)}>Download QR Code</button>
-              </div>
-            </div>
           </div>
         </div>
       )}

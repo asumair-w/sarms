@@ -6,37 +6,36 @@
 export const DEPARTMENTS = [
   { id: 'farming', labelEn: 'Farming', labelAr: 'زراعة', icon: 'sun' },
   { id: 'maintenance', labelEn: 'Maintenance', labelAr: 'صيانة', icon: 'wrench-simple' },
-  { id: 'quality', labelEn: 'Quality', labelAr: 'الجودة', icon: 'check-circle' },
-  { id: 'storage', labelEn: 'Storage', labelAr: 'التخزين', icon: 'cube' },
+]
+
+/** Inventory zone: post-harvest execution only. Not in DEPARTMENTS so department step is skipped when zone is Inventory. */
+export const INVENTORY_DEPARTMENT = { id: 'inventory', labelEn: 'Inventory', labelAr: 'المخزون', icon: 'cube' }
+
+/** Tasks shown when worker selects zone Inventory (no department step). */
+export const INVENTORY_TASKS = [
+  { id: 'receive_move_storage', labelEn: 'Receive & Move to Storage', labelAr: 'استلام ونقل إلى المستودع', icon: 'list-bullet' },
+  { id: 'packing_preparing', labelEn: 'Packing / Preparing', labelAr: 'تجهيز وتغليف', icon: 'list-bullet' },
 ]
 
 export const TASKS_BY_DEPARTMENT = {
   farming: [
-    { id: 'harvest', labelEn: 'Harvest', labelAr: 'حصاد', icon: 'list-bullet' },
     { id: 'irrigation', labelEn: 'Irrigation', labelAr: 'ري', icon: 'list-bullet' },
-    { id: 'cleaning', labelEn: 'Cleaning', labelAr: 'تنظيف', icon: 'list-bullet' },
-    { id: 'planting_seeds', labelEn: 'Planting Seeds', labelAr: 'متابعة النبات', icon: 'list-bullet' },
+    { id: 'harvesting', labelEn: 'Harvesting', labelAr: 'حصاد', icon: 'list-bullet' },
+    { id: 'plant_care', labelEn: 'Plant Care', labelAr: 'العناية بالنبات', icon: 'list-bullet' },
+    { id: 'planting_transplanting', labelEn: 'Planting / Transplanting', labelAr: 'زراعة / نقل الشتلات', icon: 'list-bullet' },
+    { id: 'spraying_treatment', labelEn: 'Spraying / Treatment', labelAr: 'الرش / المعالجة', icon: 'list-bullet' },
+    { id: 'monitoring', labelEn: 'Monitoring', labelAr: 'المراقبة', icon: 'list-bullet' },
   ],
   maintenance: [
-    { id: 'watering', labelEn: 'Watering', labelAr: 'ري', icon: 'list-bullet' },
-    { id: 'fixing_installations', labelEn: 'Fixing Installations', labelAr: 'إصلاح المنشآت', icon: 'list-bullet' },
-    { id: 'internal_transport', labelEn: 'Internal Transport', labelAr: 'نقل داخلي', icon: 'list-bullet' },
-    { id: 'harvest_maintenance', labelEn: 'Harvest (maintenance)', labelAr: 'حصاد (صيانة)', icon: 'list-bullet' },
-  ],
-  quality: [
-    { id: 'actions', labelEn: 'Actions', labelAr: 'أعطال', icon: 'list-bullet' },
-    { id: 'equipment_maintenance', labelEn: 'Equipment Maintenance', labelAr: 'صيانة معدات', icon: 'list-bullet' },
-    { id: 'cleaning_cooling', labelEn: 'Cleaning & Cooling', labelAr: 'أنظمة ري، تبريد', icon: 'list-bullet' },
-    { id: 'notes', labelEn: 'Notes', labelAr: 'ملاحظات', icon: 'list-bullet' },
-  ],
-  storage: [
-    { id: 'quality_check', labelEn: 'Quality Check', labelAr: 'فحص جودة', icon: 'list-bullet' },
-    { id: 'quality_notes', labelEn: 'Quality Notes', labelAr: 'ملاحظات جودة', icon: 'list-bullet' },
-    { id: 'record_issues', labelEn: 'Record Issues for Production', labelAr: 'تسجيل مشاكل إنتاج', icon: 'list-bullet' },
+    { id: 'inspection', labelEn: 'Inspection', labelAr: 'التفتيش', icon: 'list-bullet' },
+    { id: 'testing', labelEn: 'Testing', labelAr: 'الاختبار', icon: 'list-bullet' },
+    { id: 'repair', labelEn: 'Repair', labelAr: 'الإصلاح', icon: 'list-bullet' },
+    { id: 'preventive_maintenance', labelEn: 'Preventive Maintenance', labelAr: 'الصيانة الوقائية', icon: 'list-bullet' },
   ],
 }
 
 export function getDepartment(id) {
+  if (id === 'inventory') return INVENTORY_DEPARTMENT
   return DEPARTMENTS.find((d) => d.id === id)
 }
 
@@ -48,10 +47,32 @@ export const ZONES = [
   { id: 'inventory', labelEn: 'Inventory', labelAr: 'المخزون', icon: 'cube' },
 ]
 
+/** Zones for store: same as ZONES with .label for engineer UI (Zone A, Zone B, …). */
+export function getInitialZones() {
+  return ZONES.map((z) => ({
+    ...z,
+    label: z.id === 'inventory' ? 'Inventory' : `Zone ${z.labelEn}`,
+  }))
+}
+
 export function getTasksForDepartment(departmentId) {
+  if (departmentId === 'inventory') return INVENTORY_TASKS
   return TASKS_BY_DEPARTMENT[departmentId] ?? []
 }
 
-export function getZone(id) {
-  return ZONES.find((z) => z.id === id)
+/** Find a task by id across all departments and inventory (for display in Assign Task / reports). */
+export function getTaskById(taskId) {
+  if (!taskId) return null
+  const inInventory = INVENTORY_TASKS.find((t) => t.id === taskId)
+  if (inInventory) return inInventory
+  for (const tasks of Object.values(TASKS_BY_DEPARTMENT)) {
+    const found = tasks.find((t) => t.id === taskId)
+    if (found) return found
+  }
+  return null
+}
+
+export function getZone(id, zonesList) {
+  if (zonesList && Array.isArray(zonesList)) return zonesList.find((z) => z.id === id) ?? null
+  return ZONES.find((z) => z.id === id) ?? null
 }

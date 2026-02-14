@@ -17,11 +17,17 @@
 }
 
 .sectionTitle {
-  margin: 0 0 1rem;
+  margin: 0 0 0.5rem;
   font-size: 1.25rem;
   font-weight: 700;
   color: #0f172a;
   letter-spacing: -0.02em;
+}
+
+.sectionDesc {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  color: #64748b;
 }
 
 .filters {
@@ -64,6 +70,44 @@
   background: #fff;
 }
 
+.datePresets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.datePresetsLabel {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #475569;
+  margin-right: 0.25rem;
+}
+
+.presetBtn {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--sarms-primary, #5c7b5c);
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.presetBtn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.filterActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
 .applyBtn {
   padding: 0.6rem 1.25rem;
   font-size: 0.95rem;
@@ -79,6 +123,23 @@
 .applyBtn:hover {
   transform: translateY(-1px);
   background: var(--sarms-primary-hover, #4a6b4a);
+}
+
+.clearBtn {
+  padding: 0.6rem 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.clearBtn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
 }
 
 .cards {

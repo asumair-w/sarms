@@ -35,6 +35,74 @@
   border: 1px solid var(--sarms-border, #d4d4d4);
 }
 
+.kpiHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.kpiHeader .sectionTitle {
+  margin: 0;
+}
+
+.periodFilter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.periodLabel {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--sarms-text-muted, #555);
+}
+
+.periodSelect {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.95rem;
+  color: var(--sarms-text, #333);
+  background: var(--sarms-bg, #f0f0f0);
+  border: 1px solid var(--sarms-border, #d4d4d4);
+  border-radius: 8px;
+  cursor: pointer;
+  min-width: 160px;
+}
+
+.periodSelect:focus {
+  outline: none;
+  border-color: var(--sarms-primary, #5c7b5c);
+  box-shadow: 0 0 0 2px rgba(92, 123, 92, 0.2);
+}
+
+.periodCustomRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.periodDateInput {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  color: var(--sarms-text, #333);
+  background: var(--sarms-bg, #f0f0f0);
+  border: 1px solid var(--sarms-border, #d4d4d4);
+  border-radius: 8px;
+}
+
+.periodDateInput:focus {
+  outline: none;
+  border-color: var(--sarms-primary, #5c7b5c);
+}
+
+.periodDateSep {
+  font-weight: 600;
+  color: var(--sarms-text-muted, #555);
+}
+
 .kpiGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));

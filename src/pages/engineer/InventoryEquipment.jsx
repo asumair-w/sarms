@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   INVENTORY_CATEGORIES,
   INVENTORY_STATUS,
@@ -13,6 +14,7 @@ const CAT_LABELS = Object.fromEntries(INVENTORY_CATEGORIES.map((c) => [c.id, c.l
 const STATUS_LABELS = { [INVENTORY_STATUS.NORMAL]: 'Normal', [INVENTORY_STATUS.LOW]: 'Low', [INVENTORY_STATUS.CRITICAL]: 'Critical' }
 
 export default function InventoryEquipment() {
+  const navigate = useNavigate()
   const { inventory, equipment, updateInventoryItem, addInventoryItem } = useAppStore()
   const [inventoryOpen, setInventoryOpen] = useState(true)
   const [equipmentOpen, setEquipmentOpen] = useState(false)
@@ -69,11 +71,28 @@ export default function InventoryEquipment() {
     [inventoryWithStatus]
   )
 
+  const analyticsByCategory = useMemo(() => {
+    const map = Object.fromEntries(INVENTORY_CATEGORIES.map((c) => [c.id, 0]))
+    inventoryWithStatus.forEach((i) => { if (map[i.category] !== undefined) map[i.category] += 1 })
+    return INVENTORY_CATEGORIES.map((c) => ({ id: c.id, label: c.label, count: map[c.id] || 0 }))
+  }, [inventoryWithStatus])
+  const analyticsByStatus = useMemo(() => {
+    const map = { [INVENTORY_STATUS.NORMAL]: 0, [INVENTORY_STATUS.LOW]: 0, [INVENTORY_STATUS.CRITICAL]: 0 }
+    inventoryWithStatus.forEach((i) => { if (map[i.status] !== undefined) map[i.status] += 1 })
+    return [
+      { id: INVENTORY_STATUS.NORMAL, label: 'Normal', count: map[INVENTORY_STATUS.NORMAL] },
+      { id: INVENTORY_STATUS.LOW, label: 'Low', count: map[INVENTORY_STATUS.LOW] },
+      { id: INVENTORY_STATUS.CRITICAL, label: 'Critical', count: map[INVENTORY_STATUS.CRITICAL] },
+    ]
+  }, [inventoryWithStatus])
+  const maxCat = Math.max(1, ...analyticsByCategory.map((x) => x.count))
+  const maxStatus = Math.max(1, ...analyticsByStatus.map((x) => x.count))
+
   return (
     <div className={styles.page}>
       <section className={styles.section}>
         <button type="button" className={styles.sectionHeader} onClick={() => setInventoryOpen((o) => !o)}>
-          <h2 className={styles.sectionTitle}>Manage Inventory</h2>
+          <h2 className={styles.sectionTitle}><i className="fas fa-boxes-stacked fa-fw" /> Manage Inventory</h2>
           <span className={styles.expandLabel}>{inventoryOpen ? 'Collapse' : 'Expand'}</span>
           <span className={styles.chevron}>{inventoryOpen ? '▼' : '▶'}</span>
         </button>
@@ -129,7 +148,7 @@ export default function InventoryEquipment() {
 
       <section className={styles.section}>
         <button type="button" className={styles.sectionHeader} onClick={() => setEquipmentOpen((o) => !o)}>
-          <h2 className={styles.sectionTitle}>Manage Equipment</h2>
+          <h2 className={styles.sectionTitle}><i className="fas fa-wrench fa-fw" /> Manage Equipment</h2>
           <span className={styles.expandLabel}>{equipmentOpen ? 'Collapse' : 'Expand'}</span>
           <span className={styles.chevron}>{equipmentOpen ? '▼' : '▶'}</span>
         </button>
@@ -192,6 +211,45 @@ export default function InventoryEquipment() {
             </ul>
           </div>
         )}
+      </section>
+
+      <section className={styles.analyticsSection}>
+        <h2 className={styles.sectionTitle}><i className="fas fa-chart-column fa-fw" /> Analytics</h2>
+        <div className={styles.chartsRow}>
+          <div className={styles.chartWrap}>
+            <div className={styles.chartCaption}>Items by category</div>
+            <div className={styles.barChart}>
+              {analyticsByCategory.map((row) => (
+                <div key={row.id} className={styles.barRow}>
+                  <span className={styles.barLabel}>{row.label}</span>
+                  <div className={styles.barTrack}>
+                    <div className={styles.barFill} style={{ width: `${(row.count / maxCat) * 100}%` }} />
+                  </div>
+                  <span className={styles.barValue}>{row.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className={styles.chartWrap}>
+            <div className={styles.chartCaption}>Items by status</div>
+            <div className={styles.barChart}>
+              {analyticsByStatus.map((row) => (
+                <div key={row.id} className={styles.barRow}>
+                  <span className={styles.barLabel}>{row.label}</span>
+                  <div className={styles.barTrack}>
+                    <div className={styles.barFill} style={{ width: `${(row.count / maxStatus) * 100}%` }} />
+                  </div>
+                  <span className={styles.barValue}>{row.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className={styles.moreWrap}>
+          <button type="button" className={styles.moreBtn} onClick={() => navigate('/engineer/reports')}>
+            More Details
+          </button>
+        </div>
       </section>
 
       {/* Update quantity modal */}
