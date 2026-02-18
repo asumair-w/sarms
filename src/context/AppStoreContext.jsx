@@ -12,6 +12,7 @@ const SESSIONS_STORAGE_KEY = 'sarms-sessions'
 const ZONES_STORAGE_KEY = 'sarms-zones'
 const TASKS_STORAGE_KEY = 'sarms-tasks'
 const BATCHES_BY_ZONE_STORAGE_KEY = 'sarms-batches-by-zone'
+const DEFAULT_BATCH_BY_ZONE_STORAGE_KEY = 'sarms-default-batch-by-zone'
 const WORKERS_STORAGE_KEY = 'sarms-workers'
 
 function loadRecords() {
@@ -58,9 +59,35 @@ function loadTasks() {
   return getInitialTasks()
 }
 
+/** Normalize batch list to array of { id, name }. Supports legacy string[] format. */
+function normalizeBatchList(arr) {
+  if (!arr || !Array.isArray(arr)) return [{ id: '1', name: 'Batch 1' }]
+  if (arr.length === 0) return [{ id: '1', name: 'Batch 1' }]
+  const first = arr[0]
+  if (typeof first === 'string') return arr.map((s) => ({ id: s, name: `Batch ${s}` }))
+  return arr.map((b) => ({ id: b.id ?? b, name: b.name ?? `Batch ${b.id ?? b}` }))
+}
+
 function loadBatchesByZone() {
   try {
     const raw = localStorage.getItem(BATCHES_BY_ZONE_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const result = {}
+        for (const [zoneId, list] of Object.entries(parsed)) {
+          result[zoneId] = normalizeBatchList(list)
+        }
+        return result
+      }
+    }
+  } catch (_) {}
+  return {}
+}
+
+function loadDefaultBatchByZone() {
+  try {
+    const raw = localStorage.getItem(DEFAULT_BATCH_BY_ZONE_STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
@@ -80,17 +107,21 @@ function loadWorkers() {
   return SEED_WORKERS.map((w) => ({ ...w, skills: Array.isArray(w.skills) ? w.skills : [] }))
 }
 
-const initialState = {
-  tasks: loadTasks(),
-  records: loadRecords(),
-  sessions: loadSessions(),
-  zones: loadZones(),
-  batchesByZone: loadBatchesByZone(),
-  workers: loadWorkers(),
-  inventory: getInitialInventory(),
-  equipment: getInitialEquipment(),
-  faults: getInitialFaults(),
-  maintenancePlans: getInitialMaintenancePlans(),
+/** Build full initial state (used on every provider mount so persisted data is never lost on remount/HMR). */
+function getInitialState() {
+  return {
+    tasks: loadTasks(),
+    records: loadRecords(),
+    sessions: loadSessions(),
+    zones: loadZones(),
+    batchesByZone: loadBatchesByZone(),
+    defaultBatchByZone: loadDefaultBatchByZone(),
+    workers: loadWorkers(),
+    inventory: getInitialInventory(),
+    equipment: getInitialEquipment(),
+    faults: getInitialFaults(),
+    maintenancePlans: getInitialMaintenancePlans(),
+  }
 }
 
 function storeReducer(state, action) {
@@ -170,6 +201,11 @@ function storeReducer(state, action) {
     }
     case 'SET_BATCHES_BY_ZONE':
       return { ...state, batchesByZone: action.payload }
+    case 'SET_DEFAULT_BATCH': {
+      const { zoneId, batchId } = action.payload
+      const next = { ...state.defaultBatchByZone, [zoneId]: batchId }
+      return { ...state, defaultBatchByZone: next }
+    }
     case 'SET_WORKERS':
       return { ...state, workers: action.payload }
     case 'UPDATE_WORKER': {
@@ -189,7 +225,7 @@ function storeReducer(state, action) {
 const AppStoreContext = createContext(null)
 
 export function AppStoreProvider({ children }) {
-  const [state, dispatch] = useReducer(storeReducer, initialState)
+  const [state, dispatch] = useReducer(storeReducer, undefined, getInitialState)
 
   useEffect(() => {
     try {
@@ -223,6 +259,12 @@ export function AppStoreProvider({ children }) {
 
   useEffect(() => {
     try {
+      localStorage.setItem(DEFAULT_BATCH_BY_ZONE_STORAGE_KEY, JSON.stringify(state.defaultBatchByZone))
+    } catch (_) {}
+  }, [state.defaultBatchByZone])
+
+  useEffect(() => {
+    try {
       localStorage.setItem(WORKERS_STORAGE_KEY, JSON.stringify(state.workers))
     } catch (_) {}
   }, [state.workers])
@@ -249,6 +291,8 @@ export function AppStoreProvider({ children }) {
   const addZone = useCallback((zone) => dispatch({ type: 'ADD_ZONE', payload: zone }), [])
   const removeZone = useCallback((zoneId) => dispatch({ type: 'REMOVE_ZONE', payload: zoneId }), [])
   const setBatchesByZone = useCallback((payload) => dispatch({ type: 'SET_BATCHES_BY_ZONE', payload }), [])
+  const setDefaultBatch = useCallback((zoneId, batchId) =>
+    dispatch({ type: 'SET_DEFAULT_BATCH', payload: { zoneId, batchId } }), [])
   const setWorkers = useCallback((payload) => dispatch({ type: 'SET_WORKERS', payload }), [])
   const updateWorker = useCallback((workerId, updates) =>
     dispatch({ type: 'UPDATE_WORKER', payload: { workerId, updates } }), [])
@@ -270,6 +314,7 @@ export function AppStoreProvider({ children }) {
     addZone,
     removeZone,
     setBatchesByZone,
+    setDefaultBatch,
     setWorkers,
     updateWorker,
   }
@@ -287,8 +332,20 @@ export function useAppStore() {
   return ctx
 }
 
-/** Resolve login userId (e.g. w1) to worker id (e.g. 1) for task assignment. */
+/** Resolve login userId (e.g. w1) to worker id for task assignment. Checks stored workers then SEED_WORKERS. */
 export function getWorkerIdFromUserId(userId) {
-  const w = SEED_WORKERS.find((x) => x.employeeId === userId?.trim()?.toLowerCase())
+  const key = userId?.trim()?.toLowerCase()
+  if (!key) return null
+  try {
+    const raw = localStorage.getItem(WORKERS_STORAGE_KEY)
+    if (raw) {
+      const list = JSON.parse(raw)
+      if (Array.isArray(list)) {
+        const w = list.find((x) => (x.employeeId || '').toLowerCase() === key)
+        if (w) return w.id
+      }
+    }
+  } catch (_) {}
+  const w = SEED_WORKERS.find((x) => x.employeeId === key)
   return w?.id ?? null
 }

@@ -4,6 +4,8 @@ import {
   ROLE_OPTIONS,
   DEPARTMENT_OPTIONS,
   SKILL_OPTIONS,
+  generateEmployeeId,
+  getQRCodeUrl,
 } from '../../data/engineerWorkers'
 import { useAppStore } from '../../context/AppStoreContext'
 import { useLanguage } from '../../context/LanguageContext'
@@ -57,10 +59,10 @@ function getOverdueTasks(tasks, workerId) {
   })
 }
 
-/** Active tasks (in progress or approved). */
+/** Active tasks (pending or in progress). */
 function getActiveTasks(tasks, workerId) {
   return getWorkerTasks(tasks, workerId).filter(
-    (t) => t.status === TASK_STATUS.IN_PROGRESS || t.status === TASK_STATUS.APPROVED
+    (t) => t.status === TASK_STATUS.IN_PROGRESS || t.status === TASK_STATUS.PENDING_APPROVAL
   )
 }
 
@@ -83,7 +85,7 @@ export default function RegisterManageWorkers() {
   const isEngineerRoute = location.pathname.startsWith('/engineer')
   const { lang } = useLanguage()
   const t = (key) => getTranslation(lang, 'engineer', key)
-  const { sessions, tasks, workers, updateWorker } = useAppStore()
+  const { sessions, tasks, workers, updateWorker, setWorkers } = useAppStore()
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterRole, setFilterRole] = useState('')
@@ -92,6 +94,17 @@ export default function RegisterManageWorkers() {
   const [editOpen, setEditOpen] = useState(false)
   const [editWorker, setEditWorker] = useState(null)
   const [editForm, setEditForm] = useState({ fullName: '', role: '', department: '', status: '', skills: [] })
+  const [addOpen, setAddOpen] = useState(false)
+  const [addForm, setAddForm] = useState({
+    fullName: '',
+    role: 'worker',
+    department: 'farming',
+    status: 'active',
+    skills: [],
+    phone: '',
+    email: '',
+  })
+  const [createdWorker, setCreatedWorker] = useState(null)
 
   const weekStart = useMemo(() => getWeekStart(), [])
 
@@ -170,11 +183,71 @@ export default function RegisterManageWorkers() {
     setEditOpen(false)
   }
 
+  function deleteWorker() {
+    if (!editWorker || !setWorkers) return
+    if (!window.confirm(`Delete "${editWorker.fullName}" (${editWorker.employeeId}) permanently? This cannot be undone.`)) return
+    const list = (workers || []).filter((w) => w.id !== editWorker.id)
+    setWorkers(list)
+    setEditOpen(false)
+    setEditWorker(null)
+  }
+
   function toggleSkill(skill) {
     setEditForm((f) => ({
       ...f,
       skills: f.skills.includes(skill) ? f.skills.filter((s) => s !== skill) : [...f.skills, skill],
     }))
+  }
+
+  function openAdd() {
+    setAddForm({
+      fullName: '',
+      role: 'worker',
+      department: 'farming',
+      status: 'active',
+      skills: [],
+      phone: '',
+      email: '',
+    })
+    setCreatedWorker(null)
+    setAddOpen(true)
+  }
+
+  function toggleAddSkill(skill) {
+    setAddForm((f) => ({
+      ...f,
+      skills: f.skills.includes(skill) ? f.skills.filter((s) => s !== skill) : [...f.skills, skill],
+    }))
+  }
+
+  function saveAddWorker(e) {
+    e.preventDefault()
+    if (!addForm.fullName.trim() || !setWorkers) return
+    const list = workers || []
+    const employeeId = generateEmployeeId(addForm.role, list)
+    const tempPassword = employeeId
+    const newId = list.length > 0 ? String(Math.max(...list.map((w) => parseInt(w.id, 10) || 0)) + 1) : '1'
+    const newWorker = {
+      id: newId,
+      employeeId,
+      fullName: addForm.fullName.trim(),
+      phone: addForm.phone.trim() || '',
+      email: addForm.email.trim() || '',
+      nationality: '',
+      role: addForm.role,
+      department: addForm.department,
+      status: addForm.status,
+      tempPassword,
+      createdAt: new Date().toISOString(),
+      skills: Array.isArray(addForm.skills) ? [...addForm.skills] : [],
+    }
+    setWorkers([...list, newWorker])
+    setCreatedWorker({ employeeId, tempPassword, fullName: newWorker.fullName })
+  }
+
+  function closeAddAndCreated() {
+    setAddOpen(false)
+    setCreatedWorker(null)
   }
 
   const profileBase = isEngineerRoute ? '/engineer/register/worker' : '/admin/register/worker'
@@ -187,7 +260,7 @@ export default function RegisterManageWorkers() {
       <section className={styles.rankingSection}>
         <h2 className={styles.rankingTitle}><i className="fas fa-trophy fa-fw" /> Worker Ranking</h2>
         <div className={styles.rankingGrid}>
-          <div className={styles.rankingCard}>
+          <div className={`${styles.rankingCard} ${styles.rankingCardGood}`}>
             <span className={styles.rankingLabel}>Top Performer (this week)</span>
             {ranking.topPerformer ? (
               isEngineerRoute ? (
@@ -202,7 +275,7 @@ export default function RegisterManageWorkers() {
             )}
             {ranking.topPerformer && <span className={styles.rankingMetric}>{ranking.topPerformer.value} completed</span>}
           </div>
-          <div className={styles.rankingCard}>
+          <div className={`${styles.rankingCard} ${styles.rankingCardGood}`}>
             <span className={styles.rankingLabel}>Most Overloaded (active tasks)</span>
             {ranking.mostOverloaded && ranking.mostOverloaded.value > 0 ? (
               isEngineerRoute ? (
@@ -219,7 +292,7 @@ export default function RegisterManageWorkers() {
               <span className={styles.rankingMetric}>{ranking.mostOverloaded.value} active</span>
             )}
           </div>
-          <div className={styles.rankingCard}>
+          <div className={`${styles.rankingCard} ${styles.rankingCardBad}`}>
             <span className={styles.rankingLabel}>Most Delayed (overdue)</span>
             {ranking.mostDelayed && ranking.mostDelayed.value > 0 ? (
               isEngineerRoute ? (
@@ -247,6 +320,9 @@ export default function RegisterManageWorkers() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+        <button type="button" className={styles.addWorkerBtn} onClick={openAdd}>
+          <i className="fas fa-user-plus fa-fw" /> Add New Worker
+        </button>
         <select className={styles.filter} value={isEngineerRoute && filterRole === 'admin' ? '' : filterRole} onChange={(e) => setFilterRole(e.target.value)}>
           <option value="">All roles</option>
           {roleOptions.map((r) => (
@@ -345,6 +421,87 @@ export default function RegisterManageWorkers() {
         )}
       </div>
 
+      {/* Add New Worker modal: form step */}
+      {addOpen && !createdWorker && (
+        <div className={styles.overlay} onClick={closeAddAndCreated}>
+          <div className={styles.panel} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.panelHeader}>
+              <h2><i className="fas fa-user-plus fa-fw" /> Add New Worker</h2>
+              <button type="button" className={styles.closeBtn} onClick={closeAddAndCreated} aria-label="Close">×</button>
+            </div>
+            <form onSubmit={saveAddWorker} className={styles.form}>
+              <label className={styles.label}>Full Name *</label>
+              <input className={styles.input} value={addForm.fullName} onChange={(e) => setAddForm((f) => ({ ...f, fullName: e.target.value }))} placeholder="Full name" required />
+              <label className={styles.label}>Role</label>
+              <select className={styles.input} value={addForm.role} onChange={(e) => setAddForm((f) => ({ ...f, role: e.target.value }))}>
+                {roleOptions.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
+              <label className={styles.label}>Department</label>
+              <select className={styles.input} value={addForm.department} onChange={(e) => setAddForm((f) => ({ ...f, department: e.target.value }))}>
+                {DEPARTMENT_OPTIONS.map((d) => (
+                  <option key={d.value} value={d.value}>{d.label}</option>
+                ))}
+              </select>
+              <label className={styles.label}>Account Status</label>
+              <select className={styles.input} value={addForm.status} onChange={(e) => setAddForm((f) => ({ ...f, status: e.target.value }))}>
+                <option value="active">Active</option>
+                <option value="inactive">Not active</option>
+              </select>
+              <label className={styles.label}>Phone</label>
+              <input type="tel" className={styles.input} value={addForm.phone} onChange={(e) => setAddForm((f) => ({ ...f, phone: e.target.value }))} placeholder="+966 ..." />
+              <label className={styles.label}>Email</label>
+              <input type="email" className={styles.input} value={addForm.email} onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))} placeholder="email@example.com" />
+              <label className={styles.label}>Skills</label>
+              <div className={styles.skillCheckboxGrid}>
+                {SKILL_OPTIONS.map((skill) => (
+                  <label key={skill} className={styles.skillCheckbox}>
+                    <input type="checkbox" checked={addForm.skills.includes(skill)} onChange={() => toggleAddSkill(skill)} />
+                    <span>{skill}</span>
+                  </label>
+                ))}
+              </div>
+              <div className={styles.formActions}>
+                <button type="submit" className={styles.primaryBtn}>Create Worker</button>
+                <button type="button" className={styles.secondaryBtn} onClick={closeAddAndCreated}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add New Worker modal: success step (ID, password, QR) */}
+      {addOpen && createdWorker && (
+        <div className={styles.overlay} onClick={closeAddAndCreated}>
+          <div className={styles.panel} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.panelHeader}>
+              <h2><i className="fas fa-check-circle fa-fw" /> Worker Created</h2>
+              <button type="button" className={styles.closeBtn} onClick={closeAddAndCreated} aria-label="Close">×</button>
+            </div>
+            <div className={styles.createdPanel}>
+              <p className={styles.createdName}>{createdWorker.fullName}</p>
+              <div className={styles.createdRow}>
+                <span className={styles.createdLabel}>Employee ID (login):</span>
+                <code className={styles.createdCode}>{createdWorker.employeeId}</code>
+              </div>
+              <div className={styles.createdRow}>
+                <span className={styles.createdLabel}>Temporary password:</span>
+                <code className={styles.createdCode}>{createdWorker.tempPassword}</code>
+              </div>
+              <div className={styles.qrWrap}>
+                <span className={styles.createdLabel}>QR code (for login)</span>
+                <img src={getQRCodeUrl(createdWorker.employeeId, 180)} alt={`QR for ${createdWorker.employeeId}`} className={styles.qrImg} />
+              </div>
+              <p className={styles.createdHint}>Save the ID and password; the worker can use the QR code to sign in.</p>
+              <div className={styles.formActions}>
+                <button type="button" className={styles.primaryBtn} onClick={closeAddAndCreated}>Done</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editOpen && editWorker && (
         <div className={styles.overlay} onClick={() => setEditOpen(false)}>
           <div className={styles.panel} onClick={(e) => e.stopPropagation()}>
@@ -384,6 +541,11 @@ export default function RegisterManageWorkers() {
               <div className={styles.formActions}>
                 <button type="submit" className={styles.primaryBtn}>Save</button>
                 <button type="button" className={styles.secondaryBtn} onClick={() => setEditOpen(false)}>Cancel</button>
+              </div>
+              <div className={styles.deleteSection}>
+                <button type="button" className={styles.dangerBtn} onClick={deleteWorker} title="Permanently delete this worker">
+                  <i className="fas fa-user-minus fa-fw" /> Delete worker permanently
+                </button>
               </div>
             </form>
           </div>

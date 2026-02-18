@@ -363,6 +363,77 @@
   letter-spacing: -0.02em;
 }
 
+/* Analytics block inside Sections */
+.sectionAnalyticsBlock {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--sarms-border, #e2e8f0);
+}
+
+.analyticsSubTitle {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.analyticsSubTitle .fa-fw {
+  margin-right: 0.35em;
+}
+
+/* Collapsible section header (Active Ops, Recent Faults) */
+.collapseHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.collapseHeader:hover {
+  opacity: 0.9;
+}
+
+.collapseHeader .fa-chevron-right,
+.collapseHeader .fa-chevron-down {
+  color: var(--sarms-primary, #5c7b5c);
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.sectionTitleCollapse {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  flex: 1;
+}
+
+.sectionTitleCollapse .fa-fw {
+  margin-right: 0.35em;
+}
+
+.collapseBadge {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: var(--sarms-primary, #5c7b5c);
+  color: #fff;
+}
+
+.collapseContent {
+  margin-top: 0.75rem;
+}
+
 /* Green action boxes – round circles, symmetric grid */
 .actionGrid {
   display: grid;

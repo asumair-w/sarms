@@ -311,3 +311,106 @@
 .moreWrap { display: flex; justify-content: center; margin-top: 0.5rem; }
 .moreBtn { padding: 0.75rem 1.5rem; font-size: 1rem; font-weight: 600; color: #fff; background: var(--sarms-primary, #5c7b5c); border: none; border-radius: 12px; cursor: pointer; transition: transform 0.15s, background 0.15s; }
 .moreBtn:hover { transform: translateY(-1px); background: var(--sarms-primary-hover, #4a6b4a); }
+
+/* Harvest records */
+.harvestFilters {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0 1.25rem 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.filterSelect {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  border: 1px solid var(--sarms-border, #d4d4d4);
+  border-radius: 8px;
+  background: #fff;
+}
+.filterInput {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  border: 1px solid var(--sarms-border, #d4d4d4);
+  border-radius: 8px;
+  background: #fff;
+}
+.filterDate {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  border: 1px solid var(--sarms-border, #d4d4d4);
+  border-radius: 8px;
+  background: #fff;
+}
+.harvestEmpty {
+  padding: 1.25rem;
+  color: var(--sarms-text-muted, #555);
+  font-size: 0.95rem;
+  margin: 0;
+}
+.harvestTableWrap {
+  overflow-x: auto;
+  padding: 0 1.25rem 1.25rem;
+}
+.cellNotes {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.photoThumb {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 2px solid var(--sarms-border, #d4d4d4);
+  display: inline-block;
+}
+.photoThumb img {
+  display: block;
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+}
+.photoThumb:hover {
+  border-color: var(--sarms-primary, #5c7b5c);
+}
+
+/* Image overlay for harvest photo */
+.imageOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+.imageOverlayImg {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+}
+.imageOverlayClose {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 1.5rem;
+  cursor: pointer;
+  line-height: 1;
+}
+.imageOverlayClose:hover {
+  background: rgba(255, 255, 255, 0.3);
+}

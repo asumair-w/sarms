@@ -4,16 +4,17 @@
 
 export const TASK_STATUS = {
   PENDING_APPROVAL: 'pending_approval',
-  APPROVED: 'approved',
   IN_PROGRESS: 'in_progress',
   COMPLETED: 'completed',
+  REJECTED: 'rejected',
 }
 
 export const TASK_STATUS_LABELS = {
-  [TASK_STATUS.PENDING_APPROVAL]: 'Pending Approval',
-  [TASK_STATUS.APPROVED]: 'Approved',
+  [TASK_STATUS.PENDING_APPROVAL]: 'Pending',
   [TASK_STATUS.IN_PROGRESS]: 'In Progress',
   [TASK_STATUS.COMPLETED]: 'Completed',
+  [TASK_STATUS.REJECTED]: 'Rejected',
+  approved: 'Pending',
 }
 
 export const TASK_TYPES = [
@@ -39,6 +40,11 @@ export const ZONES = [
 export const GRID_ROWS = 6
 export const GRID_COLS = 8
 
+/** Greenhouse overview: left side rows 1–20, right side rows 21–40 (one merged cell per row). */
+export const OVERVIEW_LEFT_ROWS = 20
+export const OVERVIEW_RIGHT_ROWS = 20
+export const OVERVIEW_TOTAL_ROWS = 40
+
 /** Generate a short task ID for display. */
 export function generateTaskId() {
   return `T${Date.now().toString(36).toUpperCase().slice(-6)}`
@@ -57,7 +63,7 @@ export function getInitialTasks() {
     { id: 'T003A3', zoneId: 'a', batchId: '1', taskType: 'maintenance', departmentId: 'maintenance', taskId: 'inspection', workerIds: ['1'], priority: 'medium', estimatedMinutes: 45, notes: 'In progress', status: TASK_STATUS.IN_PROGRESS, gridRow: 3, gridCol: 1, gridSide: 'left', createdAt: hourAgo },
     { id: 'T004A4', zoneId: 'a', batchId: '1', taskType: 'farming', departmentId: 'farming', taskId: 'harvesting', workerIds: ['5'], priority: 'low', estimatedMinutes: 30, notes: '', status: TASK_STATUS.IN_PROGRESS, gridRow: 4, gridCol: 2, gridSide: 'left', createdAt: hourAgo },
     { id: 'T005A5', zoneId: 'a', batchId: '1', taskType: 'farming', departmentId: 'farming', taskId: 'plant_care', workerIds: ['4'], priority: 'high', estimatedMinutes: 90, notes: 'Pending', status: TASK_STATUS.PENDING_APPROVAL, gridRow: 5, gridCol: 1, gridSide: 'left', createdAt: now, flagged: true },
-    { id: 'T005B', zoneId: 'a', batchId: '1', taskType: 'farming', departmentId: 'farming', taskId: 'harvesting', workerIds: ['6'], priority: 'medium', estimatedMinutes: 75, notes: 'Rows 6–10', status: TASK_STATUS.APPROVED, gridRow: 6, gridCol: 2, gridSide: 'left', createdAt: twoDaysAgo },
+    { id: 'T005B', zoneId: 'a', batchId: '1', taskType: 'farming', departmentId: 'farming', taskId: 'harvesting', workerIds: ['6'], priority: 'medium', estimatedMinutes: 75, notes: 'Rows 6–10', status: TASK_STATUS.PENDING_APPROVAL, gridRow: 6, gridCol: 2, gridSide: 'left', createdAt: twoDaysAgo },
     /* Zone A – Right */
     { id: 'T006A6', zoneId: 'a', batchId: '1', taskType: 'farming', departmentId: 'farming', taskId: 'harvesting', workerIds: ['1'], priority: 'medium', estimatedMinutes: 60, notes: '', status: TASK_STATUS.COMPLETED, gridRow: 1, gridCol: 1, gridSide: 'right', createdAt: yesterday },
     { id: 'T007A7', zoneId: 'a', batchId: '1', taskType: 'farming', departmentId: 'farming', taskId: 'monitoring', workerIds: ['4'], priority: 'medium', estimatedMinutes: 60, notes: '', status: TASK_STATUS.COMPLETED, gridRow: 2, gridCol: 1, gridSide: 'right', createdAt: yesterday },
@@ -72,13 +78,13 @@ export function getInitialTasks() {
     /* Zone C */
     { id: 'T012C1', zoneId: 'c', batchId: '1', taskType: 'farming', departmentId: 'farming', taskId: 'harvesting', workerIds: ['4'], priority: 'high', estimatedMinutes: 120, notes: '', status: TASK_STATUS.IN_PROGRESS, gridRow: 7, gridCol: 3, gridSide: 'right', createdAt: hourAgo },
     { id: 'T012C2', zoneId: 'c', batchId: '1', taskType: 'farming', departmentId: 'farming', taskId: 'irrigation', workerIds: ['5'], priority: 'medium', estimatedMinutes: 50, notes: 'Cooling unit area', status: TASK_STATUS.COMPLETED, gridRow: 1, gridCol: 1, gridSide: 'left', createdAt: yesterday },
-    { id: 'T012C3', zoneId: 'c', batchId: '1', taskType: 'maintenance', departmentId: 'maintenance', taskId: 'testing', workerIds: ['6'], priority: 'low', estimatedMinutes: 30, notes: '', status: TASK_STATUS.APPROVED, gridRow: 5, gridCol: 2, gridSide: 'left', createdAt: now },
+    { id: 'T012C3', zoneId: 'c', batchId: '1', taskType: 'maintenance', departmentId: 'maintenance', taskId: 'testing', workerIds: ['6'], priority: 'low', estimatedMinutes: 30, notes: '', status: TASK_STATUS.PENDING_APPROVAL, gridRow: 5, gridCol: 2, gridSide: 'left', createdAt: now },
     /* Zone D */
     { id: 'T013D1', zoneId: 'd', batchId: '1', taskType: 'farming', departmentId: 'farming', taskId: 'harvesting', workerIds: ['1', '4', '6'], priority: 'high', estimatedMinutes: 150, notes: 'Full zone harvest', status: TASK_STATUS.IN_PROGRESS, gridRow: 8, gridCol: 2, gridSide: 'left', createdAt: hourAgo },
     { id: 'T013D2', zoneId: 'd', batchId: '1', taskType: 'maintenance', departmentId: 'maintenance', taskId: 'preventive_maintenance', workerIds: ['7'], priority: 'medium', estimatedMinutes: 60, notes: '', status: TASK_STATUS.PENDING_APPROVAL, gridRow: 2, gridCol: 1, gridSide: 'right', createdAt: now },
     /* Inventory zone */
     { id: 'T014I1', zoneId: 'inventory', batchId: '1', taskType: 'farming', departmentId: 'inventory', taskId: 'receive_move_storage', workerIds: ['6'], priority: 'medium', estimatedMinutes: 45, notes: 'Stock count', status: TASK_STATUS.COMPLETED, gridRow: 1, gridCol: 1, gridSide: 'left', createdAt: yesterday },
-    { id: 'T014I2', zoneId: 'inventory', batchId: '1', taskType: 'farming', departmentId: 'inventory', taskId: 'packing_preparing', workerIds: ['5'], priority: 'low', estimatedMinutes: 30, notes: 'Packaging audit', status: TASK_STATUS.APPROVED, gridRow: 3, gridCol: 2, gridSide: 'left', createdAt: now },
+    { id: 'T014I2', zoneId: 'inventory', batchId: '1', taskType: 'farming', departmentId: 'inventory', taskId: 'packing_preparing', workerIds: ['5'], priority: 'low', estimatedMinutes: 30, notes: 'Packaging audit', status: TASK_STATUS.PENDING_APPROVAL, gridRow: 3, gridCol: 2, gridSide: 'left', createdAt: now },
     { id: 'T015X1', zoneId: 'a', batchId: '1', taskType: 'farming', departmentId: 'farming', taskId: 'harvesting', workerIds: ['10'], priority: 'medium', estimatedMinutes: 60, notes: '', status: TASK_STATUS.COMPLETED, gridRow: 5, gridCol: 1, gridSide: 'left', createdAt: yesterday },
     { id: 'T015X2', zoneId: 'b', batchId: '1', taskType: 'maintenance', departmentId: 'maintenance', taskId: 'repair', workerIds: ['11'], priority: 'high', estimatedMinutes: 90, notes: '', status: TASK_STATUS.COMPLETED, gridRow: 2, gridCol: 1, gridSide: 'left', createdAt: twoDaysAgo },
     { id: 'T015X3', zoneId: 'inventory', batchId: '1', taskType: 'farming', departmentId: 'inventory', taskId: 'receive_move_storage', workerIds: ['10', '14'], priority: 'low', estimatedMinutes: 40, notes: '', status: TASK_STATUS.COMPLETED, gridRow: 2, gridCol: 1, gridSide: 'left', createdAt: yesterday },

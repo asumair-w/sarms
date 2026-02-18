@@ -44,7 +44,7 @@ export default function WorkerProfile() {
       return due < now
     }).length
     const activeTasks = workerTasks.filter(
-      (t) => t.status === TASK_STATUS.IN_PROGRESS || t.status === TASK_STATUS.APPROVED
+      (t) => t.status === TASK_STATUS.IN_PROGRESS || t.status === TASK_STATUS.PENDING_APPROVAL
     )
     const efficiency = totalAssigned > 0 ? Math.round((completed / totalAssigned) * 100) : null
 

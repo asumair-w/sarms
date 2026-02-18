@@ -498,7 +498,7 @@
   direction: rtl;
 }
 
-/* Lines – same structure as execution card (1–20, From / To + Start) */
+/* Lines – same structure as execution card (1–40, From / To + Start) */
 .linesCard {
   margin-bottom: 1.25rem;
   padding: 1.25rem;

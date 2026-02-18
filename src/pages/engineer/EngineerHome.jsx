@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMemo } from 'react'
 import { useLanguage } from '../../context/LanguageContext'
@@ -54,7 +55,6 @@ export default function EngineerHome() {
     () => (tasks || []).filter((t) => t.status === TASK_STATUS.PENDING_APPROVAL).length,
     [tasks]
   )
-
   /* Weekly Progress: Monday to now */
   const weeklyProgress = useMemo(() => {
     const weekStart = getWeekStart()
@@ -109,16 +109,18 @@ export default function EngineerHome() {
   }, [tasks, zonesList, ZONE_LABEL])
 
   const doughnutData = useMemo(() => {
-    const s = { [TASK_STATUS.COMPLETED]: 0, [TASK_STATUS.IN_PROGRESS]: 0, [TASK_STATUS.APPROVED]: 0, [TASK_STATUS.PENDING_APPROVAL]: 0 }
+    const s = { [TASK_STATUS.PENDING_APPROVAL]: 0, [TASK_STATUS.IN_PROGRESS]: 0, [TASK_STATUS.COMPLETED]: 0 }
     tasks.forEach((task) => { s[task.status] = (s[task.status] || 0) + 1 })
     return [
-      { labelKey: 'chartCompleted', value: s[TASK_STATUS.COMPLETED], color: 'var(--sarms-chart-success)' },
-      { labelKey: 'chartInProgress', value: s[TASK_STATUS.IN_PROGRESS], color: 'var(--sarms-chart-warning)' },
-      { labelKey: 'chartApproved', value: s[TASK_STATUS.APPROVED], color: 'var(--sarms-chart-info)' },
       { labelKey: 'chartPending', value: s[TASK_STATUS.PENDING_APPROVAL], color: 'var(--sarms-chart-muted)' },
+      { labelKey: 'chartInProgress', value: s[TASK_STATUS.IN_PROGRESS], color: 'var(--sarms-chart-warning)' },
+      { labelKey: 'chartCompleted', value: s[TASK_STATUS.COMPLETED], color: 'var(--sarms-chart-success)' },
     ].filter((d) => d.value > 0)
   }, [tasks])
   const doughnutTotal = useMemo(() => doughnutData.reduce((sum, d) => sum + d.value, 0) || 1, [doughnutData])
+
+  const [activeOpsExpanded, setActiveOpsExpanded] = useState(false)
+  const [recentFaultsExpanded, setRecentFaultsExpanded] = useState(false)
 
   return (
     <div className={styles.page}>
@@ -168,75 +170,9 @@ export default function EngineerHome() {
             </button>
           ))}
         </div>
-      </section>
-
-      <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>{t('homeActiveOperations')}</h2>
-        <div className={styles.opsCard}>
-          {sessions.length === 0 ? (
-            <p className={styles.opsEmpty}>{t('homeNoActiveSessions')}</p>
-          ) : (
-            <ul className={styles.opsList}>
-              {sessions.map((op) => (
-                <li key={op.id} className={styles.opsItem}>
-                  <button
-                    type="button"
-                    className={styles.opsItemBtn}
-                    onClick={() => navigate('/engineer/monitor')}
-                  >
-                    <span className={styles.opsWorker}>{op.workerName}</span>
-                    <span className={styles.opsDetail}>
-                      {op.department} · {op.task} · {op.zone === 'Inventory' ? op.zone : `Zone ${op.zone}`} · {op.linesArea || '—'}
-                    </span>
-                    {op.assignedByEngineer != null && (
-                      <span className={styles.opsSource} title={op.assignedByEngineer ? 'Assigned by engineer' : 'Self-started by worker'}>
-                        {op.assignedByEngineer ? 'Assigned' : 'Self'}
-                      </span>
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </section>
-
-      {/* Recent Fault Logs */}
-      <section className={styles.section}>
-        <h2 className={styles.sectionTitle}><i className="fas fa-wrench fa-fw" /> {t('homeRecentFaultLogs')}</h2>
-        <div className={styles.faultTableWrap}>
-          <table className={styles.faultTable}>
-            <thead>
-              <tr>
-                <th>{t('homeFaultTitle')}</th>
-                <th>{t('homeFaultZone')}</th>
-                <th>{t('homeFaultSeverity')}</th>
-                <th>{t('homeFaultStatus')}</th>
-                <th>{t('homeFaultCreated')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentFaults.length === 0 ? (
-                <tr><td colSpan={5} className={styles.faultEmpty}>{t('homeNoFaults')}</td></tr>
-              ) : (
-                recentFaults.map((f) => (
-                  <tr key={f.id} className={styles.faultRow} onClick={() => navigate('/engineer/faults')}>
-                    <td>{f.equipmentName || f.description || f.id}</td>
-                    <td>{f.zone}</td>
-                    <td>{f.severityLabel}</td>
-                    <td>{t('homeFaultStatusOpen')}</td>
-                    <td>{f.createdAt ? new Date(f.createdAt).toLocaleString() : '—'}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className={styles.section}>
-        <h2 className={styles.sectionTitle}><i className="fas fa-chart-column fa-fw" /> {t('homeAnalyticsCharts')}</h2>
-        <div className={styles.chartsRow}>
+        <div className={styles.sectionAnalyticsBlock}>
+          <h3 className={styles.analyticsSubTitle}><i className="fas fa-chart-column fa-fw" /> {t('homeAnalyticsCharts')}</h3>
+          <div className={styles.chartsRow}>
           <div className={styles.chartWrap}>
             <h3 className={styles.widgetTitle}>{t('homeWeeklyProgress')}</h3>
             <div className={styles.weeklyProgressWrap}>
@@ -311,15 +247,105 @@ export default function EngineerHome() {
             <p className={styles.chartCaption}>{t('homeTasksByZone')}</p>
           </div>
         </div>
-        <div className={styles.moreAnalyticsWrap}>
-          <button
-            type="button"
-            className={styles.moreAnalyticsBtn}
-            onClick={() => navigate('/engineer/reports')}
-          >
-            {t('homeMoreAnalytics')}
-          </button>
+          <div className={styles.moreAnalyticsWrap}>
+            <button
+              type="button"
+              className={styles.moreAnalyticsBtn}
+              onClick={() => navigate('/engineer/reports')}
+            >
+              {t('homeMoreAnalytics')}
+            </button>
+          </div>
         </div>
+      </section>
+
+      <section className={styles.section}>
+        <button
+          type="button"
+          className={styles.collapseHeader}
+          onClick={() => setActiveOpsExpanded((e) => !e)}
+          aria-expanded={activeOpsExpanded}
+        >
+          <i className={`fas fa-fw ${activeOpsExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}`} />
+          <h2 className={styles.sectionTitleCollapse}>{t('homeActiveOperations')}</h2>
+          {sessions.length > 0 && <span className={styles.collapseBadge}>{sessions.length}</span>}
+        </button>
+        {activeOpsExpanded && (
+          <div className={styles.collapseContent}>
+          <div className={styles.opsCard}>
+            {sessions.length === 0 ? (
+              <p className={styles.opsEmpty}>{t('homeNoActiveSessions')}</p>
+            ) : (
+              <ul className={styles.opsList}>
+                {sessions.map((op) => (
+                  <li key={op.id} className={styles.opsItem}>
+                    <button
+                      type="button"
+                      className={styles.opsItemBtn}
+                      onClick={() => navigate('/engineer/monitor')}
+                    >
+                      <span className={styles.opsWorker}>{op.workerName}</span>
+                      <span className={styles.opsDetail}>
+                        {op.department} · {op.task} · {op.zone === 'Inventory' ? op.zone : `Zone ${op.zone}`} · {op.linesArea || '—'}
+                      </span>
+                      {op.assignedByEngineer != null && (
+                        <span className={styles.opsSource} title={op.assignedByEngineer ? 'Assigned by engineer' : 'Self-started by worker'}>
+                          {op.assignedByEngineer ? 'Assigned' : 'Self'}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          </div>
+        )}
+      </section>
+
+      <section className={styles.section}>
+        <button
+          type="button"
+          className={styles.collapseHeader}
+          onClick={() => setRecentFaultsExpanded((e) => !e)}
+          aria-expanded={recentFaultsExpanded}
+        >
+          <i className={`fas fa-fw ${recentFaultsExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}`} />
+          <h2 className={styles.sectionTitleCollapse}><i className="fas fa-wrench fa-fw" /> {t('homeRecentFaultLogs')}</h2>
+          {recentFaults.length > 0 && <span className={styles.collapseBadge}>{recentFaults.length}</span>}
+        </button>
+        {recentFaultsExpanded && (
+          <div className={styles.collapseContent}>
+          <div className={styles.faultTableWrap}>
+            <table className={styles.faultTable}>
+              <thead>
+                <tr>
+                  <th>{t('homeFaultTitle')}</th>
+                  <th>{t('homeFaultZone')}</th>
+                  <th>{t('homeFaultSeverity')}</th>
+                  <th>{t('homeFaultStatus')}</th>
+                  <th>{t('homeFaultCreated')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentFaults.length === 0 ? (
+                  <tr><td colSpan={5} className={styles.faultEmpty}>{t('homeNoFaults')}</td></tr>
+                ) : (
+                  recentFaults.map((f) => (
+                    <tr key={f.id} className={styles.faultRow} onClick={() => navigate('/engineer/faults')}>
+                      <td>{f.equipmentName || f.description || f.id}</td>
+                      <td>{f.zone}</td>
+                      <td>{f.severityLabel}</td>
+                      <td>{t('homeFaultStatusOpen')}</td>
+                      <td>{f.createdAt ? new Date(f.createdAt).toLocaleString() : '—'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          </div>
+        )}
       </section>
     </div>
   )

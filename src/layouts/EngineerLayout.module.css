@@ -452,3 +452,16 @@
     padding: 1.75rem 2.5rem;
   }
 }
+
+@media print {
+  .wrapper {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .topBar, .sidebar, .overlay { display: none !important; }
+  .main {
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+}

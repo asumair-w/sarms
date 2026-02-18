@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
   TASK_TYPES,
@@ -7,6 +7,8 @@ import {
   PRIORITY_OPTIONS,
   GRID_ROWS,
   GRID_COLS,
+  OVERVIEW_LEFT_ROWS,
+  OVERVIEW_RIGHT_ROWS,
   generateTaskId,
 } from '../../data/assignTask'
 import { getTasksForDepartment, getTaskById, getDepartment } from '../../data/workerFlow'
@@ -16,6 +18,7 @@ import { useLanguage } from '../../context/LanguageContext'
 import { getTranslation } from '../../i18n/translations'
 import styles from './AssignTask.module.css'
 
+const ASSIGN_TASK_SELECTION_KEY = 'sarms-assign-task-selection'
 const WORKERS = SEED_WORKERS.filter((w) => w.role === 'worker')
 /** Workers and technicians (and engineers) who can be assigned to a task. */
 const ASSIGNABLE = SEED_WORKERS.filter(
@@ -29,11 +32,18 @@ function taskLabelByLang(task, lang) {
 }
 const PRIORITY_LABEL = Object.fromEntries(PRIORITY_OPTIONS.map((p) => [p.id, p.label]))
 
-const OVERVIEW_ROWS = 20
-const COLS_PER_ROW = 5
+/** Normalize batch list to array of { id, name }. Supports legacy string[] from store. */
+function normalizeBatchList(arr) {
+  if (!arr || !Array.isArray(arr)) return [{ id: '1', name: 'Batch 1' }]
+  if (arr.length === 0) return [{ id: '1', name: 'Batch 1' }]
+  const first = arr[0]
+  if (typeof first === 'string') return arr.map((s) => ({ id: s, name: `Batch ${s}` }))
+  return arr.map((b) => ({ id: b.id ?? b, name: b.name ?? `Batch ${b.id ?? b}` }))
+}
+
+/* مسار العمليات: Pending → In Progress → Completed (بدون Approved) */
 const OPERATION_PATH_STEPS = [
-  { id: TASK_STATUS.PENDING_APPROVAL, label: 'Pending Approval', color: '#8b95a0' },
-  { id: TASK_STATUS.APPROVED, label: 'Approved', color: '#6b7b8a' },
+  { id: TASK_STATUS.PENDING_APPROVAL, label: 'Pending', color: '#8b95a0' },
   { id: TASK_STATUS.IN_PROGRESS, label: 'In Progress', color: '#b89a4a' },
   { id: TASK_STATUS.COMPLETED, label: 'Completed', color: '#5c7b5c' },
 ]
@@ -44,25 +54,49 @@ function workerNames(workerIds) {
     .join(', ')
 }
 
+/** Parse linesArea (e.g. "1–20", "5-10", "21–25") to [from, to] or null. */
+function parseLinesRange(linesArea) {
+  if (!linesArea || typeof linesArea !== 'string') return null
+  const s = linesArea.trim().replace(/\s+/g, ' ')
+  const parts = s.split(/[–\-]/).map((p) => parseInt(p.trim(), 10))
+  if (parts.length < 2 || parts.some(Number.isNaN)) return null
+  const from = Math.max(1, Math.min(40, parts[0]))
+  const to = Math.max(1, Math.min(40, parts[1]))
+  if (from > to) return null
+  return [from, to]
+}
+
+/** Status priority for overview (higher = show this when multiple tasks cover same row). */
+function overviewStatusPriority(status) {
+  if (status === TASK_STATUS.IN_PROGRESS) return 2
+  if (status === TASK_STATUS.PENDING_APPROVAL || status === 'approved') return 1
+  if (status === TASK_STATUS.COMPLETED) return 0
+  return -1
+}
+
 export default function AssignTask() {
   const navigate = useNavigate()
   const location = useLocation()
   const { lang } = useLanguage()
   const t = (key) => getTranslation(lang, 'engineer', key)
-  const { tasks, zones = [], addTask, updateTaskStatus, updateTask, addSession, addZone, removeZone, batchesByZone: storeBatchesByZone = {}, setBatchesByZone } = useAppStore()
+  const { tasks, zones = [], addTask, updateTaskStatus, updateTask, addSession, addZone, removeZone, batchesByZone: storeBatchesByZone = {}, setBatchesByZone, defaultBatchByZone = {}, setDefaultBatch } = useAppStore()
 
-  function toggleTaskFlag(taskId) {
-    const task = tasks.find((x) => x.id === taskId)
-    if (!task) return
-    const nextFlagged = !(task.flagged === true)
-    updateTask(taskId, { flagged: nextFlagged })
-    if (viewTask?.id === taskId) setViewTask((prev) => (prev ? { ...prev, flagged: nextFlagged } : null))
-  }
   const ZONE_LABEL = useMemo(() => Object.fromEntries((zones || []).map((z) => [z.id, z.label])), [zones])
+  /** Zone display label: use store label, or fallback to "Zone A" / "Inventory" for known ids */
+  const getZoneDisplayLabel = useCallback(
+    (zoneId) => {
+      if (ZONE_LABEL[zoneId]) return ZONE_LABEL[zoneId]
+      if (!zoneId) return '—'
+      if (zoneId === 'inventory') return 'Inventory'
+      if (String(zoneId).length <= 2) return `Zone ${String(zoneId).toUpperCase()}`
+      return zoneId
+    },
+    [ZONE_LABEL]
+  )
   const [selectedZone, setSelectedZone] = useState('a')
   const [selectedBatch, setSelectedBatch] = useState('1')
   const batchesByZone = storeBatchesByZone
-  const [greenhouseExpanded, setGreenhouseExpanded] = useState(true)
+  const [greenhouseExpanded, setGreenhouseExpanded] = useState(false)
   const [kpiFilter, setKpiFilter] = useState(null) // status or 'zones'
   const [assignOpen, setAssignOpen] = useState(false)
   const [addZoneOpen, setAddZoneOpen] = useState(false)
@@ -75,22 +109,58 @@ export default function AssignTask() {
     workerIds: [],
   })
   const [assignSearch, setAssignSearch] = useState('')
-  const [viewTask, setViewTask] = useState(null)
-  const [noteTask, setNoteTask] = useState(null)
-  const [noteText, setNoteText] = useState('')
   const [deleteZoneOpen, setDeleteZoneOpen] = useState(false)
   const [zoneToDelete, setZoneToDelete] = useState('')
   const [deleteBatchOpen, setDeleteBatchOpen] = useState(false)
   const [batchToDelete, setBatchToDelete] = useState('')
+  const [addBatchOpen, setAddBatchOpen] = useState(false)
+  const [newBatchName, setNewBatchName] = useState('')
+  const [acceptDurationTaskId, setAcceptDurationTaskId] = useState(null)
+  const [acceptDurationMinutes, setAcceptDurationMinutes] = useState(60)
+  const restoredSelectionRef = useRef(false)
 
-  // Sync batches when zones change (e.g. new zone added): ensure every zone has at least ['1']
+  const DURATION_PRESETS = useMemo(
+    () => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((h) => ({ hours: h, minutes: h * 60 })),
+    []
+  )
+
+  // Restore last selected zone & batch when returning to the page
+  useEffect(() => {
+    if (restoredSelectionRef.current || !zones?.length) return
+    restoredSelectionRef.current = true
+    try {
+      const raw = sessionStorage.getItem(ASSIGN_TASK_SELECTION_KEY)
+      if (!raw) return
+      const { zone, batch } = JSON.parse(raw)
+      if (!zone || !zones.some((z) => z.id === zone)) return
+      const list = normalizeBatchList(batchesByZone[zone])
+      const ids = list.map((b) => b.id)
+      const batchToSet = ids.includes(batch)
+        ? batch
+        : (defaultBatchByZone[zone] && ids.includes(defaultBatchByZone[zone])
+          ? defaultBatchByZone[zone]
+          : list[0]?.id ?? '1')
+      setSelectedZone(zone)
+      setSelectedBatch(batchToSet)
+    } catch (_) {}
+  }, [zones, batchesByZone, defaultBatchByZone])
+
+  // Persist zone & batch so they are restored when coming back to the page
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(ASSIGN_TASK_SELECTION_KEY, JSON.stringify({ zone: selectedZone, batch: selectedBatch }))
+    } catch (_) {}
+  }, [selectedZone, selectedBatch])
+
+  // Sync batches when zones change (e.g. new zone added): ensure every zone has at least one batch
   useEffect(() => {
     if (!zones || zones.length === 0 || !setBatchesByZone) return
     const next = { ...batchesByZone }
     let changed = false
     zones.forEach((z) => {
-      if (!(z.id in next) || !Array.isArray(next[z.id]) || next[z.id].length === 0) {
-        next[z.id] = ['1']
+      const list = next[z.id]
+      if (!Array.isArray(list) || list.length === 0) {
+        next[z.id] = [{ id: '1', name: 'Batch 1' }]
         changed = true
       }
     })
@@ -107,10 +177,22 @@ export default function AssignTask() {
     }
   }, [zones, selectedZone])
 
+  // When zone changes, select default batch for that zone (or first batch)
+  useEffect(() => {
+    const defaultBatch = defaultBatchByZone[selectedZone]
+    const list = normalizeBatchList(batchesByZone[selectedZone])
+    const ids = list.map((b) => b.id)
+    if (defaultBatch && ids.includes(defaultBatch)) {
+      setSelectedBatch(defaultBatch)
+    } else if (list.length > 0 && !ids.includes(selectedBatch)) {
+      setSelectedBatch(list[0].id)
+    }
+  }, [selectedZone, defaultBatchByZone, batchesByZone])
+
   // Apply filter from "Review Now" (Engineer Home → Pending Approvals)
   useEffect(() => {
     const filterStatus = location.state?.filterStatus
-    if (filterStatus && [TASK_STATUS.PENDING_APPROVAL, TASK_STATUS.APPROVED, TASK_STATUS.IN_PROGRESS, TASK_STATUS.COMPLETED].includes(filterStatus)) {
+    if (filterStatus && [TASK_STATUS.PENDING_APPROVAL, TASK_STATUS.IN_PROGRESS, TASK_STATUS.COMPLETED].includes(filterStatus)) {
       setKpiFilter(filterStatus)
       navigate(location.pathname, { replace: true, state: {} })
     }
@@ -125,19 +207,42 @@ export default function AssignTask() {
       ),
     [tasks, selectedZone, selectedBatch]
   )
+  /* For the table "All Operations for the Selected Batch": always show all tasks in this zone+batch (no widget filter). */
+  const tasksForBatchTable = tasksInZone
   const tasksFiltered = useMemo(() => {
     if (!kpiFilter) return tasksInZone
     if (kpiFilter === 'zones') return tasksInZone
     return tasksInZone.filter((t) => t.status === kpiFilter)
   }, [tasksInZone, kpiFilter])
-  const tasksByCell = useMemo(() => {
+  /** Overview: map each row to a task from linesArea (اللاينز المعينة). Key = left-1..20 or right-1..20. */
+  const tasksByRow = useMemo(() => {
     const m = new Map()
     tasksInZone.forEach((t) => {
-      const side = t.gridSide ?? 'left'
-      const row = t.gridRow ?? 0
-      const col = t.gridCol ?? 0
-      if (row >= 1 && row <= OVERVIEW_ROWS && col >= 1 && col <= COLS_PER_ROW) {
-        m.set(`${side}-${row}-${col}`, t)
+      const range = parseLinesRange(t.linesArea)
+      if (range) {
+        const [from, to] = range
+        const priority = overviewStatusPriority(t.status)
+        for (let lineNum = from; lineNum <= to; lineNum++) {
+          if (lineNum >= 1 && lineNum <= 40) {
+            const key = lineNum <= 20 ? `left-${lineNum}` : `right-${lineNum - 20}`
+            const existing = m.get(key)
+            if (!existing || priority > overviewStatusPriority(existing.status)) {
+              m.set(key, t)
+            }
+          }
+        }
+      } else {
+        const side = t.gridSide ?? 'left'
+        const row = t.gridRow ?? 0
+        const maxRow = side === 'left' ? OVERVIEW_LEFT_ROWS : OVERVIEW_RIGHT_ROWS
+        if (row >= 1 && row <= maxRow) {
+          const key = `${side}-${row}`
+          const existing = m.get(key)
+          const priority = overviewStatusPriority(t.status)
+          if (!existing || priority > overviewStatusPriority(existing.status)) {
+            m.set(key, t)
+          }
+        }
       }
     })
     return m
@@ -146,7 +251,6 @@ export default function AssignTask() {
   const statsByStatus = useMemo(() => {
     const s = {
       [TASK_STATUS.PENDING_APPROVAL]: 0,
-      [TASK_STATUS.APPROVED]: 0,
       [TASK_STATUS.IN_PROGRESS]: 0,
       [TASK_STATUS.COMPLETED]: 0,
     }
@@ -154,47 +258,45 @@ export default function AssignTask() {
     return s
   }, [tasksInZone])
 
-  /* Analytics: all tasks for section-specific charts */
-  const analyticsByStatus = useMemo(() => {
-    const s = {
-      [TASK_STATUS.PENDING_APPROVAL]: 0,
-      [TASK_STATUS.APPROVED]: 0,
-      [TASK_STATUS.IN_PROGRESS]: 0,
-      [TASK_STATUS.COMPLETED]: 0,
-    }
-    tasks.forEach((t) => { s[t.status] = (s[t.status] || 0) + 1 })
-    return OPERATION_PATH_STEPS.map((step) => ({ label: step.label, value: s[step.id] ?? 0 }))
-  }, [tasks])
-  const analyticsByZone = useMemo(() => {
-    const byZone = {}
-    tasks.forEach((t) => {
-      const z = t.zoneId || 'other'
-      byZone[z] = (byZone[z] || 0) + 1
-    })
-    return (zones || []).map((z) => ({ label: ZONE_LABEL[z.id] ?? z.id, value: byZone[z.id] || 0 }))
-  }, [tasks])
-  const analyticsByType = useMemo(() => {
-    const byType = {}
-    tasks.forEach((t) => {
-      const type = t.taskType || 'other'
-      byType[type] = (byType[type] || 0) + 1
-    })
-    return TASK_TYPES.map((t) => ({ label: t.label, value: byType[t.id] || 0 }))
-  }, [tasks])
-  const analyticsStatusMax = Math.max(...analyticsByStatus.map((d) => d.value), 1)
-  const analyticsZoneMax = Math.max(...analyticsByZone.map((d) => d.value), 1)
-  const analyticsTypeMax = Math.max(...analyticsByType.map((d) => d.value), 1)
-  const ANALYTICS_COLORS = ['#166534', '#15803d', '#22c55e', '#4ade80', '#6b8a6b', '#86efac', '#94a3b8']
-  const analyticsByZoneWithColors = useMemo(
-    () => analyticsByZone.map((d, i) => ({ ...d, color: ANALYTICS_COLORS[i % ANALYTICS_COLORS.length] })),
-    [analyticsByZone]
-  )
-  const analyticsZoneTotal = analyticsByZone.reduce((s, d) => s + d.value, 0)
-
   const totalZones = (zones || []).length
-  const approvedCount = statsByStatus[TASK_STATUS.APPROVED] ?? 0
+  /* Operations Management widget: counts and lists across ALL zones */
+  const allPendingCount = useMemo(
+    () => (tasks || []).filter((t) => t.status === TASK_STATUS.PENDING_APPROVAL || t.status === 'approved').length,
+    [tasks]
+  )
+  const allInProgressCount = useMemo(
+    () => (tasks || []).filter((t) => t.status === TASK_STATUS.IN_PROGRESS).length,
+    [tasks]
+  )
+  const allCompletedCount = useMemo(
+    () => (tasks || []).filter((t) => t.status === TASK_STATUS.COMPLETED).length,
+    [tasks]
+  )
+  /* Per zone+batch (for Operation path under selected batch) */
   const pendingCount = statsByStatus[TASK_STATUS.PENDING_APPROVAL] ?? 0
+  const inProgressCount = statsByStatus[TASK_STATUS.IN_PROGRESS] ?? 0
   const completedCount = statsByStatus[TASK_STATUS.COMPLETED] ?? 0
+
+  /** Quick list for Operations Management: all-zones pending / in progress / completed, or zones list (tasks sorted by zone) */
+  const kpiQuickList = useMemo(() => {
+    if (!kpiFilter) return []
+    if (kpiFilter === TASK_STATUS.PENDING_APPROVAL) {
+      const list = (tasks || []).filter((t) => t.status === TASK_STATUS.PENDING_APPROVAL || t.status === 'approved')
+      return [...list].sort((a, b) => (ZONE_LABEL[a.zoneId] ?? a.zoneId).localeCompare(ZONE_LABEL[b.zoneId] ?? b.zoneId))
+    }
+    if (kpiFilter === TASK_STATUS.IN_PROGRESS) {
+      const list = (tasks || []).filter((t) => t.status === TASK_STATUS.IN_PROGRESS)
+      return [...list].sort((a, b) => (ZONE_LABEL[a.zoneId] ?? a.zoneId).localeCompare(ZONE_LABEL[b.zoneId] ?? b.zoneId))
+    }
+    if (kpiFilter === TASK_STATUS.COMPLETED) {
+      const list = (tasks || []).filter((t) => t.status === TASK_STATUS.COMPLETED)
+      return [...list].sort((a, b) => (ZONE_LABEL[a.zoneId] ?? a.zoneId).localeCompare(ZONE_LABEL[b.zoneId] ?? b.zoneId))
+    }
+    if (kpiFilter === 'zones') {
+      return (zones || []).map((z) => ({ type: 'zone', id: z.id, label: z.label }))
+    }
+    return []
+  }, [kpiFilter, tasks, zones, ZONE_LABEL])
 
   const zoneWorkers = useMemo(() => {
     const ids = new Set()
@@ -202,38 +304,44 @@ export default function AssignTask() {
     return Array.from(ids).map((id) => ASSIGNABLE.find((w) => w.id === id)).filter(Boolean)
   }, [tasksInZone])
 
-  const completionLeft = useMemo(() => {
-    const inZone = tasksInZone.length
-    if (!inZone) return 0
-    const completed = tasksInZone.filter((t) => t.status === TASK_STATUS.COMPLETED).length
-    return Math.round((completed / inZone) * 100)
-  }, [tasksInZone])
-  const completionRight = useMemo(() => {
-    const inZone = tasksInZone.length
-    if (!inZone) return 0
-    const inProgress = tasksInZone.filter((t) => t.status === TASK_STATUS.IN_PROGRESS).length
-    return Math.min(100, completionLeft + Math.round((inProgress / inZone) * 50))
-  }, [tasksInZone, completionLeft])
-
   const batchesForZone = useMemo(
-    () => batchesByZone[selectedZone] ?? ['1'],
+    () => normalizeBatchList(batchesByZone[selectedZone]),
     [batchesByZone, selectedZone]
   )
 
+  // When current batch is not in the zone's list, pick default batch for zone (or first)
   useEffect(() => {
-    if (!batchesForZone.includes(selectedBatch)) {
-      setSelectedBatch(batchesForZone[0] ?? '1')
-    }
-  }, [selectedZone, batchesForZone, selectedBatch])
+    if (batchesForZone.some((b) => b.id === selectedBatch)) return
+    const defaultId = defaultBatchByZone[selectedZone]
+    const next =
+      defaultId && batchesForZone.some((b) => b.id === defaultId)
+        ? defaultId
+        : (batchesForZone[0]?.id ?? '1')
+    setSelectedBatch(next)
+  }, [selectedZone, batchesForZone, selectedBatch, defaultBatchByZone])
 
-  function addBatch() {
-    const list = batchesByZone[selectedZone] ?? ['1']
-    const nextNum = String(list.length + 1)
+  function openAddBatch() {
+    setNewBatchName('')
+    setAddBatchOpen(true)
+  }
+
+  function confirmAddBatch(e) {
+    e?.preventDefault()
+    const name = (newBatchName || '').trim() || 'Batch'
+    const list = normalizeBatchList(batchesByZone[selectedZone])
+    const newId = `b-${Date.now()}`
+    const newBatch = { id: newId, name }
     setBatchesByZone({
       ...batchesByZone,
-      [selectedZone]: [...list, nextNum],
+      [selectedZone]: [...list, newBatch],
     })
-    setSelectedBatch(nextNum)
+    setSelectedBatch(newId)
+    setAddBatchOpen(false)
+    setNewBatchName('')
+  }
+
+  function addBatch() {
+    openAddBatch()
   }
 
   function confirmDeleteZone() {
@@ -249,14 +357,18 @@ export default function AssignTask() {
 
   function confirmDeleteBatch() {
     if (!batchToDelete) return
-    const list = batchesByZone[selectedZone] ?? ['1']
-    const nextList = list.filter((b) => b !== batchToDelete)
+    const list = batchesForZone
+    const nextList = list.filter((b) => b.id !== batchToDelete)
+    const nextBatch = nextList.length > 0 ? nextList[0].id : '1'
     setBatchesByZone({
       ...batchesByZone,
-      [selectedZone]: nextList.length > 0 ? nextList : ['1'],
+      [selectedZone]: nextList.length > 0 ? nextList : [{ id: '1', name: 'Batch 1' }],
     })
     if (selectedBatch === batchToDelete) {
-      setSelectedBatch(nextList.length > 0 ? nextList[0] : '1')
+      setSelectedBatch(nextBatch)
+    }
+    if (defaultBatchByZone[selectedZone] === batchToDelete && setDefaultBatch) {
+      setDefaultBatch(selectedZone, nextBatch)
     }
     setBatchToDelete(null)
   }
@@ -316,59 +428,68 @@ export default function AssignTask() {
       priority: 'medium',
       estimatedMinutes: 60,
       notes: assignForm.lines.trim() ? `Lines: ${assignForm.lines.trim()}` : '',
-      status: TASK_STATUS.IN_PROGRESS,
+      status: TASK_STATUS.PENDING_APPROVAL,
       gridRow: 1,
       gridCol: 1,
       gridSide: 'left',
       createdAt: new Date().toISOString(),
     }
     addTask(task)
+    setAssignOpen(false)
+  }
+
+  function openAcceptDurationModal(taskId) {
+    setAcceptDurationTaskId(taskId)
+    setAcceptDurationMinutes(60)
+  }
+
+  function acceptTaskWithDuration(expectedMinutes) {
+    const taskId = acceptDurationTaskId
+    if (!taskId) return
+    const task = (tasks || []).find((t) => t.id === taskId)
+    const isPending = task?.status === TASK_STATUS.PENDING_APPROVAL || task?.status === 'approved'
+    if (!task || !isPending) {
+      setAcceptDurationTaskId(null)
+      return
+    }
+    const mins = Math.max(1, Math.min(600, Number(expectedMinutes) || 60))
+    updateTaskStatus(taskId, TASK_STATUS.IN_PROGRESS)
     const now = new Date().toISOString()
-    const dept = getDepartment(assignForm.departmentId)
-    const taskLabel = getTasksForDepartment(assignForm.departmentId).find((t) => t.id === assignForm.taskId)
-    const zoneLabel = ZONE_LABEL[assignForm.zoneId] ?? assignForm.zoneId
-    const linesArea = assignForm.lines.trim() || '—'
-    assignForm.workerIds.forEach((wId) => {
+    const dept = getDepartment(task.departmentId)
+    const taskLabel = getTasksForDepartment(task.departmentId)?.find((t) => t.id === task.taskId)
+    const zoneLabel = ZONE_LABEL[task.zoneId] ?? task.zoneId
+    const linesArea = task.linesArea || '—'
+    ;(task.workerIds || []).forEach((wId) => {
       const workerName = ASSIGNABLE.find((w) => w.id === wId)?.fullName ?? String(wId)
       addSession({
         id: `s-assign-${taskId}-${wId}`,
         workerId: String(wId),
         workerName,
-        departmentId: assignForm.departmentId,
-        department: dept?.labelEn ?? assignForm.departmentId,
-        taskTypeId: assignForm.departmentId,
-        task: taskLabel?.labelEn ?? assignForm.taskId,
-        zoneId: assignForm.zoneId,
+        departmentId: task.departmentId,
+        department: dept?.labelEn ?? task.departmentId,
+        taskTypeId: task.departmentId,
+        task: taskLabel?.labelEn ?? task.taskId,
+        zoneId: task.zoneId,
         zone: zoneLabel,
         linesArea,
         startTime: now,
-        expectedMinutes: 60,
+        expectedMinutes: mins,
         flagged: false,
         notes: [],
         taskId,
         assignedByEngineer: true,
       })
     })
-    setAssignOpen(false)
+    setAcceptDurationTaskId(null)
   }
 
-  function approveTask(taskId) {
-    updateTaskStatus(taskId, TASK_STATUS.APPROVED)
+  function rejectTask(taskId) {
+    updateTaskStatus(taskId, TASK_STATUS.REJECTED)
   }
 
   function openAddZone() {
     setNewZoneName('')
     setAddZoneOpen(true)
-  }
-
-  function saveTaskNote(e) {
-    e.preventDefault()
-    if (!noteTask || !noteText.trim()) return
-    const newNotes = (noteTask.notes || '').trim() ? `${noteTask.notes}\n${noteText.trim()}` : noteText.trim()
-    updateTask(noteTask.id, { notes: newNotes })
-    setNoteTask(null)
-    setNoteText('')
-    if (viewTask?.id === noteTask.id) setViewTask((prev) => (prev ? { ...prev, notes: newNotes } : null))
   }
 
   function confirmAddZone(e) {
@@ -400,25 +521,25 @@ export default function AssignTask() {
           <button
             type="button"
             className={styles.kpiCard}
-            onClick={() => setKpiFilter(kpiFilter === TASK_STATUS.APPROVED ? null : TASK_STATUS.APPROVED)}
+            onClick={() => setKpiFilter(kpiFilter === TASK_STATUS.PENDING_APPROVAL ? null : TASK_STATUS.PENDING_APPROVAL)}
           >
-            <span className={styles.kpiValue}>{approvedCount}</span>
-            <span className={styles.kpiLabel}><i className="fas fa-check-circle fa-fw" /> Approved</span>
+            <span className={styles.kpiValue}>{allPendingCount}</span>
+            <span className={styles.kpiLabel}><i className="fas fa-clock fa-fw" /> Pending</span>
           </button>
           <button
             type="button"
             className={styles.kpiCard}
-            onClick={() => setKpiFilter(kpiFilter === TASK_STATUS.PENDING_APPROVAL ? null : TASK_STATUS.PENDING_APPROVAL)}
+            onClick={() => setKpiFilter(kpiFilter === TASK_STATUS.IN_PROGRESS ? null : TASK_STATUS.IN_PROGRESS)}
           >
-            <span className={styles.kpiValue}>{pendingCount}</span>
-            <span className={styles.kpiLabel}><i className="fas fa-clock fa-fw" /> Pending Approval</span>
+            <span className={styles.kpiValue}>{allInProgressCount}</span>
+            <span className={styles.kpiLabel}><i className="fas fa-spinner fa-fw" /> In Progress</span>
           </button>
           <button
             type="button"
             className={styles.kpiCard}
             onClick={() => setKpiFilter(kpiFilter === TASK_STATUS.COMPLETED ? null : TASK_STATUS.COMPLETED)}
           >
-            <span className={styles.kpiValue}>{completedCount}</span>
+            <span className={styles.kpiValue}>{allCompletedCount}</span>
             <span className={styles.kpiLabel}><i className="fas fa-circle-check fa-fw" /> Completed</span>
           </button>
           <button
@@ -430,6 +551,81 @@ export default function AssignTask() {
             <span className={styles.kpiLabel}><i className="fas fa-map-location-dot fa-fw" /> Total Zones</span>
           </button>
         </div>
+        {kpiFilter && (
+          <div className={styles.kpiQuickList}>
+            <div className={styles.kpiQuickListHeader}>
+              <span>
+                {kpiFilter === TASK_STATUS.PENDING_APPROVAL && (allPendingCount ? `${allPendingCount} Pending (all zones)` : 'Pending (all zones)')}
+                {kpiFilter === TASK_STATUS.IN_PROGRESS && (allInProgressCount ? `${allInProgressCount} In Progress (all zones)` : 'In Progress (all zones)')}
+                {kpiFilter === TASK_STATUS.COMPLETED && (allCompletedCount ? `${allCompletedCount} Completed (all zones)` : 'Completed (all zones)')}
+                {kpiFilter === 'zones' && `${totalZones} Zones`}
+              </span>
+              <button type="button" className={styles.kpiQuickListClose} onClick={() => setKpiFilter(null)} aria-label="Close">
+                <i className="fas fa-times" />
+              </button>
+            </div>
+            {kpiFilter === 'zones' ? (
+              <ul className={styles.kpiQuickListUl}>
+                {kpiQuickList.map((z) => (
+                  <li key={z.id} className={styles.kpiQuickListItem}>
+                    <div className={styles.kpiQuickListItemContent}>
+                      <i className="fas fa-map-pin fa-fw" /> {z.label}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className={styles.kpiQuickListTableWrap}>
+                <table className={styles.taskTable}>
+                  <thead>
+                    <tr>
+                      <th><i className="fas fa-map-pin fa-fw" /> Zone</th>
+                      <th><i className="fas fa-briefcase fa-fw" /> Operation</th>
+                      <th><i className="fas fa-building fa-fw" /> Department</th>
+                      <th><i className="fas fa-user-group fa-fw" /> Assigned Worker(s)</th>
+                      <th><i className="fas fa-align-left fa-fw" /> Lines</th>
+                      <th><i className="fas fa-info-circle fa-fw" /> Status</th>
+                      <th><i className="fas fa-clock fa-fw" /> Timestamp</th>
+                      <th><i className="fas fa-hand fa-fw" /> Accept / Reject</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {kpiQuickList.map((t) => (
+                      <tr key={t.id}>
+                        <td>{getZoneDisplayLabel(t.zoneId)}</td>
+                        <td>{(taskLabelByLang(getTaskById(t.taskId), lang) || TASK_TYPE_LABEL[t.taskType] || getDepartment(t.departmentId)?.labelEn) ?? 'Task'}</td>
+                        <td>{departmentLabel[t.departmentId] ?? TASK_TYPE_LABEL[t.taskType] ?? t.taskType}</td>
+                        <td>{workerNames(t.workerIds)}</td>
+                        <td>{t.linesArea || '—'}</td>
+                        <td>
+                          <span className={styles.statusBadge} data-status={t.status}>
+                            {TASK_STATUS_LABELS[t.status] ?? t.status ?? '—'}
+                          </span>
+                        </td>
+                        <td>{t.createdAt ? new Date(t.createdAt).toLocaleString() : '—'}</td>
+                        <td className={styles.acceptRejectCell}>
+                          {(t.status === TASK_STATUS.PENDING_APPROVAL || t.status === 'approved') && (
+                            <>
+                              <button type="button" className={styles.actionLinkAccept} onClick={() => openAcceptDurationModal(t.id)}>
+                                <i className="fas fa-check fa-fw" /> Accept
+                              </button>
+                              <button type="button" className={styles.actionLinkReject} onClick={() => rejectTask(t.id)}>
+                                <i className="fas fa-times fa-fw" /> Reject
+                              </button>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {kpiFilter !== 'zones' && kpiQuickList.length === 0 && (
+              <p className={styles.kpiQuickListEmpty}>No tasks in this category across all zones.</p>
+            )}
+          </div>
+        )}
       </section>
 
       {/* 2. Zones Section + Add Zone */}
@@ -509,7 +705,7 @@ export default function AssignTask() {
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
             <h3 className={styles.modalTitle}><i className="fas fa-trash-can fa-fw" /> Delete Batch</h3>
             <p className={styles.modalMessage}>
-              Delete Batch {batchToDelete} for {ZONE_LABEL[selectedZone] ?? selectedZone}? Tasks in this batch will keep their batch reference.
+              Delete batch &quot;{batchesForZone.find((b) => b.id === batchToDelete)?.name ?? batchToDelete}&quot; for {ZONE_LABEL[selectedZone] ?? selectedZone}? Tasks in this batch will keep their batch reference.
             </p>
             <div className={styles.modalActions}>
               <button type="button" className={styles.btnSecondary} onClick={() => setBatchToDelete(null)}>Cancel</button>
@@ -519,292 +715,261 @@ export default function AssignTask() {
         </div>
       )}
 
-      {/* 3. Batches for Selected Zone + Operation Path */}
-      <section className={styles.batchesSection}>
-        <div className={styles.batchesSectionHeader}>
-          <h2 className={styles.sectionTitle}>
-            <i className="fas fa-layer-group fa-fw" /> Batch {selectedBatch} – {ZONE_LABEL[selectedZone] ?? selectedZone}
-          </h2>
-          <div className={styles.batchHeaderActions}>
-            <button type="button" className={styles.addBatchBtn} onClick={addBatch}>
-              <i className="fas fa-plus fa-fw" /> New batch
-            </button>
-            {batchesForZone.length > 1 && (
-              <button
-                type="button"
-                className={styles.deleteBatchBtn}
-                onClick={() => { setDeleteBatchOpen(true); setBatchToDelete(batchesForZone[0] ?? ''); }}
-              >
-                <i className="fas fa-trash-can fa-fw" /> Delete batch
-              </button>
-            )}
+      {/* New batch name modal */}
+      {addBatchOpen && (
+        <div className={styles.modalOverlay} onClick={() => setAddBatchOpen(false)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <h3 className={styles.modalTitle}>New batch</h3>
+            <p className={styles.modalText}>Name this batch. It will be selected after creation.</p>
+            <form onSubmit={confirmAddBatch}>
+              <input
+                type="text"
+                className={styles.modalInput}
+                value={newBatchName}
+                onChange={(e) => setNewBatchName(e.target.value)}
+                placeholder="e.g. Current work, Harvest week 1"
+                autoFocus
+              />
+              <div className={styles.modalActions}>
+                <button type="button" className={styles.btnSecondary} onClick={() => { setAddBatchOpen(false); setNewBatchName(''); }}>Cancel</button>
+                <button type="submit" className={styles.btnPrimary}>Create batch</button>
+              </div>
+            </form>
           </div>
         </div>
-        <div className={styles.batchTabs}>
-          {batchesForZone.map((b) => (
-            <button
-              key={b}
-              type="button"
-              className={selectedBatch === b ? `${styles.batchTab} ${styles.batchTabActive}` : styles.batchTab}
-              onClick={() => setSelectedBatch(b)}
-            >
-              Batch {b}
-            </button>
-          ))}
-        </div>
-        <div className={styles.operationPath}>
-          <span className={styles.operationPathLabel}><i className="fas fa-route fa-fw" /> Operation path</span>
-          <div className={styles.operationPathSteps}>
-            {OPERATION_PATH_STEPS.map((step) => (
-              <span
-                key={step.id}
-                className={styles.operationPathChip}
-                style={{ background: step.color, color: '#fff' }}
+      )}
+
+      {/* 3–6. Merged: Batch + Greenhouse + Workers + All Operations */}
+      <section className={styles.mergedAssignSection}>
+        <div className={styles.mergedBlock}>
+          <div className={styles.batchesSectionHeader}>
+            <h2 className={styles.sectionTitle}>
+              <i className="fas fa-layer-group fa-fw" /> {batchesForZone.find((b) => b.id === selectedBatch)?.name ?? selectedBatch} – {ZONE_LABEL[selectedZone] ?? selectedZone}
+            </h2>
+            <div className={styles.batchHeaderActions}>
+              <button type="button" className={styles.addBatchBtn} onClick={addBatch}>
+                <i className="fas fa-plus fa-fw" /> New batch
+              </button>
+              {batchesForZone.length > 1 && (
+                <button
+                  type="button"
+                  className={styles.deleteBatchBtn}
+                  onClick={() => { setDeleteBatchOpen(true); setBatchToDelete(selectedBatch); }}
+                >
+                  <i className="fas fa-trash-can fa-fw" /> Delete batch
+                </button>
+              )}
+            </div>
+          </div>
+          <div className={styles.batchTabs}>
+            {batchesForZone.map((b) => (
+              <button
+                key={b.id}
+                type="button"
+                className={selectedBatch === b.id ? `${styles.batchTab} ${styles.batchTabActive}` : styles.batchTab}
+                onClick={() => setSelectedBatch(b.id)}
+                title={defaultBatchByZone[selectedZone] === b.id ? 'Default batch (new tasks go here)' : undefined}
               >
-                {step.label} ({statsByStatus[step.id] ?? 0})
-              </span>
+                {b.name}
+                {defaultBatchByZone[selectedZone] === b.id && <span className={styles.batchDefaultBadge} title="Default"> ★</span>}
+              </button>
             ))}
           </div>
-        </div>
-        <div className={styles.workspaceToolbar}>
-          <button type="button" className={styles.assignBtn} onClick={openAssign}>
-            <i className="fas fa-tasks fa-fw" /> Assign Task
-          </button>
-        </div>
-      </section>
-
-      {/* 4. Expandable Greenhouse Overview */}
-      <section className={styles.greenhouseSection}>
-        <div className={styles.greenhouseHeader}>
-          <button
-            type="button"
-            className={styles.greenhouseToggle}
-            onClick={() => setGreenhouseExpanded((e) => !e)}
-          >
-            <i className={`fas fa-fw ${greenhouseExpanded ? 'fa-chevron-up' : 'fa-chevron-down'}`} /> {greenhouseExpanded ? 'Collapse' : 'Expand'}
-          </button>
-          <h2 className={styles.greenhouseTitle}>
-            <i className="fas fa-seedling fa-fw" /> Greenhouse Overview – {ZONE_LABEL[selectedZone]} · Batch {selectedBatch}
-          </h2>
-        </div>
-        {greenhouseExpanded && (
-          <>
-            <div className={styles.greenhouseLegend}>
+          <div className={styles.defaultBatchRow}>
+            <button
+              type="button"
+              className={styles.setDefaultBatchBtn}
+              onClick={() => setDefaultBatch(selectedZone, selectedBatch)}
+              title="New assignments will go to this batch"
+            >
+              <i className="fas fa-star fa-fw" /> Set as default batch
+            </button>
+          </div>
+          <div className={styles.operationPath}>
+            <span className={styles.operationPathLabel}><i className="fas fa-route fa-fw" /> Operation path</span>
+            <div className={styles.operationPathSteps}>
               {OPERATION_PATH_STEPS.map((step) => (
-                <span key={step.id} className={styles.legendItem}>
-                  <span className={styles.legendDot} style={{ background: step.color }} />
-                  {step.label}
+                <span
+                  key={step.id}
+                  className={styles.operationPathChip}
+                  style={{ background: step.color, color: '#fff' }}
+                >
+                  {step.label} ({statsByStatus[step.id] ?? 0})
                 </span>
               ))}
             </div>
-            <div className={styles.greenhouseContent}>
-              <div className={styles.greenhouseSide}>
-                <span className={styles.sideLabel}>Left side</span>
-                <div className={styles.completionBar}>
-                  <div className={styles.completionFill} style={{ width: `${completionLeft}%` }} />
-                </div>
-                <div className={styles.linesGrid}>
-                  {Array.from({ length: OVERVIEW_ROWS }, (_, rowIndex) =>
-                    Array.from({ length: COLS_PER_ROW }, (_, colIndex) => {
-                      const rowNum = rowIndex + 1
-                      const colNum = colIndex + 1
-                      const task = tasksByCell.get(`left-${rowNum}-${colNum}`)
-                      const statusClass =
-                        task?.status === TASK_STATUS.COMPLETED
-                          ? styles.lineCellCompleted
-                          : task?.status === TASK_STATUS.IN_PROGRESS
-                            ? styles.lineCellInProgress
-                            : ''
-                      return (
-                        <div
-                          key={`L-${rowIndex}-${colIndex}`}
-                          className={`${styles.lineCell} ${statusClass}`}
-                          title={task ? `Row ${rowNum} – ${TASK_STATUS_LABELS[task.status]}` : `Row ${rowNum}`}
-                        >
-                          {rowNum}
-                        </div>
-                      )
-                    })
-                  )}
-                </div>
-              </div>
-              <div className={styles.greenhouseAisle}>
-                <span className={styles.aisleLabel}>Aisle</span>
-              </div>
-              <div className={styles.greenhouseSide}>
-                <span className={styles.sideLabel}>Right side</span>
-                <div className={styles.completionBar}>
-                  <div className={styles.completionFill} style={{ width: `${completionRight}%` }} />
-                </div>
-                <div className={styles.linesGrid}>
-                  {Array.from({ length: OVERVIEW_ROWS }, (_, rowIndex) =>
-                    Array.from({ length: COLS_PER_ROW }, (_, colIndex) => {
-                      const rowNum = rowIndex + 1
-                      const colNum = colIndex + 1
-                      const task = tasksByCell.get(`right-${rowNum}-${colNum}`)
-                      const statusClass =
-                        task?.status === TASK_STATUS.COMPLETED
-                          ? styles.lineCellCompleted
-                          : task?.status === TASK_STATUS.IN_PROGRESS
-                            ? styles.lineCellInProgress
-                            : ''
-                      return (
-                        <div
-                          key={`R-${rowIndex}-${colIndex}`}
-                          className={`${styles.lineCell} ${statusClass}`}
-                          title={task ? `Row ${rowNum} – ${TASK_STATUS_LABELS[task.status]}` : `Row ${rowNum}`}
-                        >
-                          {rowNum}
-                        </div>
-                      )
-                    })
-                  )}
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-      </section>
+          </div>
+          <div className={styles.workspaceToolbar}>
+            <button type="button" className={styles.assignBtn} onClick={openAssign}>
+              <i className="fas fa-tasks fa-fw" /> Assign Task
+            </button>
+          </div>
+        </div>
 
-      {/* 5. Zone Workers List */}
-      <section className={styles.workersSection}>
-        <h2 className={styles.sectionTitle}><i className="fas fa-users fa-fw" /> Workers Who Worked in This Zone</h2>
-        <div className={styles.workersList}>
-          {zoneWorkers.length === 0 ? (
-            <p className={styles.workersEmpty}>No workers assigned to this zone yet.</p>
-          ) : (
-            zoneWorkers.map((w) => (
-              <div key={w.id} className={styles.workerCard}>
-                <span className={styles.workerAvatar}>{w.fullName?.charAt(0) ?? w.id}</span>
-                <span className={styles.workerName}>{w.fullName}</span>
+        <div className={styles.mergedDivider} />
+
+        <div className={`${styles.greenhouseInMerged} ${styles.mergedBlock}`}>
+          <div className={styles.greenhouseHeader}>
+            <button
+              type="button"
+              className={styles.greenhouseToggle}
+              onClick={() => setGreenhouseExpanded((e) => !e)}
+            >
+              <i className={`fas fa-fw ${greenhouseExpanded ? 'fa-chevron-up' : 'fa-chevron-down'}`} /> {greenhouseExpanded ? 'Collapse' : 'Expand'}
+            </button>
+            <h2 className={styles.greenhouseTitle}>
+              <i className="fas fa-seedling fa-fw" /> Greenhouse Overview – {ZONE_LABEL[selectedZone]} · {batchesForZone.find((b) => b.id === selectedBatch)?.name ?? selectedBatch}
+            </h2>
+          </div>
+          {greenhouseExpanded && (
+            <>
+              <div className={styles.greenhouseLegend}>
+                {OPERATION_PATH_STEPS.map((step) => (
+                  <span key={step.id} className={styles.legendItem}>
+                    <span className={styles.legendDot} style={{ background: step.color }} />
+                    {step.label}
+                  </span>
+                ))}
               </div>
-            ))
+              <div className={styles.greenhouseContent}>
+                <div className={styles.greenhouseSide}>
+                  <span className={styles.sideLabel}>Left side</span>
+                  <div className={styles.linesGrid}>
+                    {Array.from({ length: OVERVIEW_LEFT_ROWS }, (_, rowIndex) => {
+                      const rowNum = rowIndex + 1
+                      const task = tasksByRow.get(`left-${rowNum}`)
+                      const statusClass =
+                        task?.status === TASK_STATUS.COMPLETED
+                          ? styles.lineCellCompleted
+                          : task?.status === TASK_STATUS.IN_PROGRESS
+                            ? styles.lineCellInProgress
+                            : (task?.status === TASK_STATUS.PENDING_APPROVAL || task?.status === 'approved')
+                              ? styles.lineCellPending
+                              : ''
+                      return (
+                        <div
+                          key={`L-${rowIndex}`}
+                          className={`${styles.lineCell} ${styles.lineCellMerged} ${statusClass}`}
+                          title={task ? `Row ${rowNum} – ${TASK_STATUS_LABELS[task.status]}` : `Row ${rowNum}`}
+                        >
+                          {rowNum}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+                <div className={styles.greenhouseAisle}>
+                  <span className={styles.aisleLabel}>Aisle</span>
+                </div>
+                <div className={styles.greenhouseSide}>
+                  <span className={styles.sideLabel}>Right side</span>
+                  <div className={styles.linesGrid}>
+                    {Array.from({ length: OVERVIEW_RIGHT_ROWS }, (_, rowIndex) => {
+                      const rowNum = rowIndex + 1
+                      const displayNum = rowNum + OVERVIEW_LEFT_ROWS
+                      const task = tasksByRow.get(`right-${rowNum}`)
+                      const statusClass =
+                        task?.status === TASK_STATUS.COMPLETED
+                          ? styles.lineCellCompleted
+                          : task?.status === TASK_STATUS.IN_PROGRESS
+                            ? styles.lineCellInProgress
+                            : (task?.status === TASK_STATUS.PENDING_APPROVAL || task?.status === 'approved')
+                              ? styles.lineCellPending
+                              : ''
+                      return (
+                        <div
+                          key={`R-${rowIndex}`}
+                          className={`${styles.lineCell} ${styles.lineCellMerged} ${statusClass}`}
+                          title={task ? `Row ${displayNum} – ${TASK_STATUS_LABELS[task.status]}` : `Row ${displayNum}`}
+                        >
+                          {displayNum}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            </>
           )}
         </div>
-      </section>
 
-      {/* 6. All Operations for the Selected Batch */}
-      <section className={styles.reviewSection}>
-        <h2 className={styles.sectionTitle}><i className="fas fa-list-check fa-fw" /> All Operations for the Selected Batch</h2>
-        <div className={styles.taskTableWrap}>
-          <table className={styles.taskTable}>
-            <thead>
-              <tr>
-                <th><i className="fas fa-briefcase fa-fw" /> Operation</th>
-                <th><i className="fas fa-building fa-fw" /> Department</th>
-                <th><i className="fas fa-user-group fa-fw" /> Assigned Worker(s)</th>
-                <th><i className="fas fa-info-circle fa-fw" /> Status</th>
-                <th><i className="fas fa-clock fa-fw" /> Timestamp</th>
-                <th><i className="fas fa-ellipsis fa-fw" /> Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tasksFiltered.map((t) => (
-                <tr key={t.id}>
-                  <td>{(taskLabelByLang(getTaskById(t.taskId), lang) || TASK_TYPE_LABEL[t.taskType]) ?? t.taskType}</td>
-                  <td>{departmentLabel[t.departmentId] ?? TASK_TYPE_LABEL[t.taskType] ?? t.taskType}</td>
-                  <td>{workerNames(t.workerIds)}</td>
-                  <td>
-                    <span className={styles.statusBadge} data-status={t.status}>
-                      {TASK_STATUS_LABELS[t.status]}
-                    </span>
-                  </td>
-                  <td>{t.createdAt ? new Date(t.createdAt).toLocaleString() : '—'}</td>
-                  <td>
-                    <button type="button" className={styles.actionLink} onClick={() => setViewTask(t)}>
-                      <i className="fas fa-eye fa-fw" /> View
-                    </button>
-                    {t.status === TASK_STATUS.PENDING_APPROVAL && (
-                      <>
-                        {' · '}
-                        <button type="button" className={styles.actionLink} onClick={() => approveTask(t.id)}>
-                          <i className="fas fa-check fa-fw" /> Approve
-                        </button>
-                      </>
-                    )}
-                    {' · '}
-                    <button type="button" className={styles.actionLink} onClick={() => { setNoteTask(t); setNoteText(''); }}>
-                      <i className="fas fa-note-sticky fa-fw" /> Add Note
-                    </button>
-                    {' · '}
-                    <button
-                      type="button"
-                      className={styles.actionLink}
-                      onClick={() => toggleTaskFlag(t.id)}
-                      title={t.flagged ? 'Remove flag (Unflag)' : 'Mark task as needing attention (Flag)'}
-                    >
-                      <i className={`fas fa-flag fa-fw ${t.flagged ? styles.flagActive : ''}`} /> {t.flagged ? 'Unflag' : 'Flag'}
-                    </button>
-                  </td>
+        <div className={styles.mergedDivider} />
+
+        <div className={styles.mergedBlock}>
+          <h2 className={styles.sectionTitle}><i className="fas fa-users fa-fw" /> Workers Who Worked in This Zone</h2>
+          <div className={styles.workersList}>
+            {zoneWorkers.length === 0 ? (
+              <p className={styles.workersEmpty}>No workers assigned to this zone yet.</p>
+            ) : (
+              zoneWorkers.map((w) => (
+                <div key={w.id} className={styles.workerCard}>
+                  <span className={styles.workerAvatar}>{w.fullName?.charAt(0) ?? w.id}</span>
+                  <span className={styles.workerName}>{w.fullName}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className={styles.mergedDivider} />
+
+        <div className={styles.mergedBlock}>
+          <h2 className={styles.sectionTitle}><i className="fas fa-list-check fa-fw" /> All Operations for the Selected Batch</h2>
+          <p className={styles.batchTableSubtitle}>{getZoneDisplayLabel(selectedZone)} · {batchesForZone.find((b) => b.id === selectedBatch)?.name ?? selectedBatch}</p>
+          <div className={styles.taskTableWrap}>
+            <table className={styles.taskTable}>
+              <thead>
+                <tr>
+                  <th><i className="fas fa-briefcase fa-fw" /> Operation</th>
+                  <th><i className="fas fa-building fa-fw" /> Department</th>
+                  <th><i className="fas fa-user-group fa-fw" /> Assigned Worker(s)</th>
+                  <th><i className="fas fa-align-left fa-fw" /> Lines</th>
+                  <th><i className="fas fa-info-circle fa-fw" /> Status</th>
+                  <th><i className="fas fa-clock fa-fw" /> Timestamp</th>
+                  <th><i className="fas fa-hand fa-fw" /> Accept / Reject</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {tasksForBatchTable.map((t) => (
+                  <tr key={t.id}>
+                    <td>{(taskLabelByLang(getTaskById(t.taskId), lang) || TASK_TYPE_LABEL[t.taskType] || getDepartment(t.departmentId)?.labelEn) ?? 'Task'}</td>
+                    <td>{departmentLabel[t.departmentId] ?? TASK_TYPE_LABEL[t.taskType] ?? t.taskType}</td>
+                    <td>{workerNames(t.workerIds)}</td>
+                    <td>{t.linesArea || '—'}</td>
+                    <td>
+                      <span className={styles.statusBadge} data-status={t.status}>
+                        {TASK_STATUS_LABELS[t.status] ?? t.status ?? '—'}
+                      </span>
+                    </td>
+                    <td>{t.createdAt ? new Date(t.createdAt).toLocaleString() : '—'}</td>
+                    <td className={styles.acceptRejectCell}>
+                      {(t.status === TASK_STATUS.PENDING_APPROVAL || t.status === 'approved') && (
+                        <>
+                          <button type="button" className={styles.actionLinkAccept} onClick={() => openAcceptDurationModal(t.id)}>
+                            <i className="fas fa-check fa-fw" /> Accept
+                          </button>
+                          <button type="button" className={styles.actionLinkReject} onClick={() => rejectTask(t.id)}>
+                            <i className="fas fa-times fa-fw" /> Reject
+                          </button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
-      {/* Analytics – task-specific charts (vertical bar, pie, horizontal bar) + More Details → General Reports */}
-      <section className={styles.analyticsSection}>
-        <h2 className={styles.sectionTitle}><i className="fas fa-chart-bar fa-fw" /> Analytics</h2>
-        <div className={styles.chartsRow}>
-          <div className={styles.chartWrap}>
-            <h3 className={styles.chartCaption}>Tasks by status</h3>
-            <div className={styles.verticalBarChart}>
-              {analyticsByStatus.map((d) => (
-                <div key={d.label} className={styles.verticalBarCol}>
-                  <div
-                    className={styles.verticalBarFill}
-                    style={{ height: `${(d.value / analyticsStatusMax) * 100}%` }}
-                    title={`${d.label}: ${d.value}`}
-                  />
-                  <span className={styles.verticalBarValue}>{d.value}</span>
-                  <span className={styles.verticalBarLabel}>{d.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className={styles.chartWrap}>
-            <h3 className={styles.chartCaption}>Tasks by zone</h3>
-            <div
-              className={styles.analyticsPie}
-              style={{
-                background: analyticsZoneTotal
-                  ? `conic-gradient(${analyticsByZoneWithColors.map((d, i) => {
-                      const start = (analyticsByZoneWithColors.slice(0, i).reduce((s, x) => s + x.value, 0) / analyticsZoneTotal) * 100
-                      const end = (analyticsByZoneWithColors.slice(0, i + 1).reduce((s, x) => s + x.value, 0) / analyticsZoneTotal) * 100
-                      return `${d.color} ${start}% ${end}%`
-                    }).join(', ')})`
-                  : '#e2e8f0',
-              }}
-            />
-            <ul className={styles.analyticsPieLegend}>
-              {analyticsByZoneWithColors.map((d) => (
-                <li key={d.label} className={styles.analyticsPieLegendItem}>
-                  <span className={styles.analyticsPieLegendDot} style={{ background: d.color }} />
-                  <span>{d.label}</span>
-                  <span className={styles.analyticsPieLegendValue}>{d.value}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className={styles.chartWrap}>
-            <h3 className={styles.chartCaption}>Tasks by type</h3>
-            <div className={styles.barChart}>
-              {analyticsByType.map((d) => (
-                <div key={d.label} className={styles.barRow}>
-                  <span className={styles.barLabel}>{d.label}</span>
-                  <div className={styles.barTrack}>
-                    <div className={styles.barFill} style={{ width: `${(d.value / analyticsTypeMax) * 100}%` }} />
-                  </div>
-                  <span className={styles.barValue}>{d.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className={styles.moreWrap}>
-          <button type="button" className={styles.moreBtn} onClick={() => navigate('/engineer/reports')}>
-            More Details
+      {/* Link to full analytics (charts live on General Reports) */}
+      <section className={styles.reviewSection}>
+        <div className={styles.analyticsLinkCard}>
+          <p className={styles.analyticsLinkText}>
+            <i className="fas fa-chart-pie fa-fw" /> Task analytics (by status, zone, type) and reports are in <strong>General Reports</strong>.
+          </p>
+          <button type="button" className={styles.analyticsLinkBtn} onClick={() => navigate('/engineer/reports')}>
+            <i className="fas fa-external-link-alt fa-fw" /> Open General Reports
           </button>
         </div>
       </section>
@@ -901,57 +1066,47 @@ export default function AssignTask() {
         </div>
       )}
 
-      {/* View Task Modal */}
-      {noteTask && (
-        <div className={styles.modalOverlay} onClick={() => { setNoteTask(null); setNoteText(''); }}>
+      {/* Accept task – set expected duration (1h–10h or custom minutes) */}
+      {acceptDurationTaskId && (
+        <div className={styles.modalOverlay} onClick={() => setAcceptDurationTaskId(null)}>
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.modalTitle}><i className="fas fa-note-sticky fa-fw" /> Add note – {noteTask.id}</h3>
-            <form onSubmit={saveTaskNote}>
-              <div className={styles.formRow}>
-                <label>Note</label>
-                <textarea
-                  value={noteText}
-                  onChange={(e) => setNoteText(e.target.value)}
-                  placeholder="Add a note for this task…"
-                  rows={4}
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '0.5rem 0.75rem', fontSize: '0.95rem', border: '1px solid #e2e8f0', borderRadius: 8 }}
-                />
-              </div>
-              <div className={styles.modalActions}>
-                <button type="button" className={styles.btnSecondary} onClick={() => { setNoteTask(null); setNoteText(''); }}>Cancel</button>
-                <button type="submit" className={styles.btnPrimary} disabled={!noteText.trim()}>Save note</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {viewTask && (
-        <div className={styles.modalOverlay} onClick={() => setViewTask(null)}>
-          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.modalTitle}><i className="fas fa-eye fa-fw" /> {t('viewTaskTitle')}</h3>
-            <dl className={styles.viewTaskDl}>
-              <dt>Task ID</dt><dd>{viewTask.id}</dd>
-              <dt>{t('assignDepartment')}</dt><dd>{departmentLabel[viewTask.departmentId] ?? viewTask.departmentId ?? '—'}</dd>
-              <dt>{t('assignZone')}</dt><dd>{ZONE_LABEL[viewTask.zoneId]}</dd>
-              <dt>{t('assignLines')}</dt><dd>{viewTask.linesArea ?? viewTask.notes ?? '—'}</dd>
-              <dt>Task</dt><dd>{taskLabelByLang(getTaskById(viewTask.taskId), lang) || TASK_TYPE_LABEL[viewTask.taskType] || viewTask.taskId || '—'}</dd>
-              <dt>{t('viewAssigned')}</dt><dd>{workerNames(viewTask.workerIds) || '—'}</dd>
-              <dt>Status</dt><dd>{TASK_STATUS_LABELS[viewTask.status]}</dd>
-              <dt>Duration</dt><dd>{viewTask.estimatedMinutes} min</dd>
-              <dt>Notes</dt><dd>{viewTask.notes || '—'}</dd>
-            </dl>
-            <div className={styles.modalActions}>
-              {viewTask.status === TASK_STATUS.PENDING_APPROVAL && (
-                <button type="button" className={styles.btnPrimary} onClick={() => { approveTask(viewTask.id); setViewTask(null); }}>
-                  <i className="fas fa-check fa-fw" /> {t('viewApprove')}
+            <h3 className={styles.modalTitle}><i className="fas fa-clock fa-fw" /> Set expected duration</h3>
+            <p className={styles.modalMessage}>Choose how long this task is expected to take (used for On time / Delayed status).</p>
+            <div className={styles.durationPresets}>
+              {DURATION_PRESETS.map(({ hours, minutes }) => (
+                <button
+                  key={hours}
+                  type="button"
+                  className={acceptDurationMinutes === minutes ? `${styles.durationPresetBtn} ${styles.durationPresetBtnActive}` : styles.durationPresetBtn}
+                  onClick={() => setAcceptDurationMinutes(minutes)}
+                >
+                  {hours}h
                 </button>
-              )}
-              <button type="button" className={styles.btnSecondary} onClick={() => setViewTask(null)}><i className="fas fa-xmark fa-fw" /> {t('viewClose')}</button>
+              ))}
+            </div>
+            <div className={styles.durationCustom}>
+              <label className={styles.durationLabel}>Custom (minutes)</label>
+              <input
+                type="number"
+                min={1}
+                max={600}
+                value={acceptDurationMinutes}
+                onChange={(e) => setAcceptDurationMinutes(Math.max(1, Math.min(600, parseInt(e.target.value, 10) || 60)))}
+                className={styles.modalInput}
+              />
+            </div>
+            <div className={styles.modalActions}>
+              <button type="button" className={styles.btnSecondary} onClick={() => setAcceptDurationTaskId(null)}>
+                Cancel
+              </button>
+              <button type="button" className={styles.btnPrimary} onClick={() => acceptTaskWithDuration(acceptDurationMinutes)}>
+                <i className="fas fa-check fa-fw" /> Accept task
+              </button>
             </div>
           </div>
         </div>
       )}
+
     </div>
   )
 }

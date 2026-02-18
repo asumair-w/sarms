@@ -11,7 +11,7 @@ import {
 } from '../data/workerFlow'
 import { SEED_WORKERS } from '../data/engineerWorkers'
 import { useAppStore } from '../context/AppStoreContext'
-import { TASK_STATUS } from '../data/assignTask'
+import { TASK_STATUS, generateTaskId } from '../data/assignTask'
 import WorkerSettingsModal from '../components/WorkerSettingsModal'
 
 /** Map HeroIcons-style names to Font Awesome class suffix (e.g. 'sun' → fa-sun). */
@@ -45,12 +45,18 @@ export default function WorkerInterface() {
   const navigate = useNavigate()
   const location = useLocation()
   const { lang } = useLanguage()
-  const { sessions, zones = [], addSession, removeSession, updateTaskStatus, addRecord } = useAppStore()
+  const { workers, sessions, zones = [], addSession, removeSession, addTask, updateTaskStatus, addRecord, defaultBatchByZone = {} } = useAppStore()
   const zonesList = (zones && zones.length > 0) ? zones : DEFAULT_ZONES
   const t = (key) => getTranslation(lang, 'worker', key)
 
   const userId = location.state?.userId ?? (typeof window !== 'undefined' ? sessionStorage.getItem('sarms-user-id') : null) ?? 'worker'
-  const worker = useMemo(() => SEED_WORKERS.find((w) => w.employeeId === userId?.trim()?.toLowerCase()), [userId])
+  const worker = useMemo(() => {
+    const key = userId?.trim()?.toLowerCase()
+    if (!key) return null
+    const fromStore = (workers || []).find((w) => (w.employeeId || '').toLowerCase() === key)
+    if (fromStore) return fromStore
+    return SEED_WORKERS.find((w) => w.employeeId === key) || null
+  }, [userId, workers])
   const workerId = worker?.id ?? userId
   const workerName = worker?.fullName ?? userId
 
@@ -157,6 +163,7 @@ export default function WorkerInterface() {
       end_time: new Date().toISOString(),
       status: 'completed',
       duration: Math.round((endMs - startMs) / 60000),
+      engineerNotes: session.notes && session.notes.length ? [...session.notes] : undefined,
     })
     setCompletionNotes('')
     setCompletionImage(null)
@@ -212,7 +219,7 @@ export default function WorkerInterface() {
   }
 
   const LINE_MIN = 1
-  const LINE_MAX = 20
+  const LINE_MAX = 40
 
   function handleLinesStart(e) {
     e.preventDefault()
@@ -246,59 +253,28 @@ export default function WorkerInterface() {
       return
     }
     const now = new Date().toISOString()
-    const sessionId = `s-${Date.now()}`
-    const deptLabel = labelByLang(selectedDept, lang)
-    const taskLabel = labelByLang(selectedTask, lang)
-    const zoneLabel = labelByLang(selectedZone, lang)
-    const session = {
-      id: sessionId,
-      workerId: String(workerId),
-      workerName,
-      department: deptLabel,
+    const linesArea = `${lineFrom.trim()}–${lineTo.trim()}`
+    const taskId = generateTaskId()
+    const task = {
+      id: taskId,
       departmentId: selectedDeptId ?? '',
-      taskTypeId: selectedDeptId ?? '',
-      task: taskLabel,
-      zone: zoneLabel,
       zoneId: selectedZoneId ?? '',
-      linesArea: `${lineFrom.trim()}–${lineTo.trim()}`,
-      startTime: now,
-      expectedMinutes: 60,
-      flagged: false,
-      notes: [],
+      batchId: defaultBatchByZone[selectedZoneId] ?? '1',
+      linesArea,
+      taskType: selectedDeptId ?? '',
+      taskId: selectedTask?.id ?? '',
+      workerIds: [String(workerId)],
+      priority: 'medium',
+      estimatedMinutes: 60,
+      notes: linesArea ? `Lines: ${linesArea}` : '',
+      status: TASK_STATUS.PENDING_APPROVAL,
+      gridRow: 1,
+      gridCol: 1,
+      gridSide: 'left',
+      createdAt: now,
     }
-    addSession(session)
-    const active = {
-      worker_id: userId,
-      department: deptLabel,
-      task: taskLabel,
-      zone: zoneLabel,
-      line_from: lineFrom.trim(),
-      line_to: lineTo.trim(),
-      start_time: now,
-      status: 'in_progress',
-      _sessionId: sessionId,
-    }
-    setActiveSession(active)
+    addTask(task)
     setBlockMessage(null)
-    // Persist so when this worker logs in again they see the in-progress task and can finish it
-    try {
-      localStorage.setItem(
-        WORKER_SESSION_STORAGE_KEY + (userId || '').trim().toLowerCase(),
-        JSON.stringify({
-          sessionId,
-          departmentId: selectedDeptId,
-          taskId: selectedTask?.id,
-          zoneId: selectedZoneId,
-          lineFrom: lineFrom.trim(),
-          lineTo: lineTo.trim(),
-          startTime: now,
-          departmentLabel: deptLabel,
-          taskLabel,
-          zoneLabel,
-        })
-      )
-    } catch (_) {}
-    // Return to login so other workers can use the device
     navigate('/login', { replace: true })
   }
 
@@ -319,6 +295,11 @@ export default function WorkerInterface() {
     const startTime = new Date(activeSession.start_time)
     const durationMs = endTime - startTime
     const durationMins = Math.round(durationMs / 60000)
+    const latestSession = (sessions || []).find((ss) => ss.id === activeSession._sessionId)
+    const engineerNotesStr = (latestSession?.notes?.length)
+      ? latestSession.notes.map((n) => `${new Date(n.at).toLocaleString()}: ${n.text}`).join('\n')
+      : undefined
+    const linesStr = `${activeSession.line_from || ''} – ${activeSession.line_to || ''}`.trim()
     const completed = {
       ...activeSession,
       end_time: endTime.toISOString(),
@@ -332,12 +313,14 @@ export default function WorkerInterface() {
       department: activeSession.department,
       task: activeSession.task,
       zone: activeSession.zone,
-      lines: `${activeSession.line_from || ''} – ${activeSession.line_to || ''}`.trim(),
+      lines: linesStr,
+      linesArea: linesStr,
       dateTime: endTime.toISOString(),
       createdAt: new Date().toISOString(),
       duration: durationMins,
       startTime: activeSession.start_time,
       notes: completionNotes.trim() || undefined,
+      engineerNotes: engineerNotesStr,
       imageData: completionImage || undefined,
     }
     addRecord(record)
@@ -352,6 +335,9 @@ export default function WorkerInterface() {
 
   function saveCompletionRecord() {
     if (!completedSession) return
+    const engineerNotesStr = (completedSession.engineerNotes && completedSession.engineerNotes.length)
+      ? completedSession.engineerNotes.map((n) => `${new Date(n.at).toLocaleString()}: ${n.text}`).join('\n')
+      : undefined
     const record = {
       id: `R-${Date.now()}`,
       recordType: 'production',
@@ -365,6 +351,7 @@ export default function WorkerInterface() {
       duration: completedSession.duration,
       startTime: completedSession.start_time,
       notes: completionNotes.trim() || undefined,
+      engineerNotes: engineerNotesStr,
       imageData: completionImage || undefined,
     }
     addRecord(record)
@@ -590,7 +577,7 @@ export default function WorkerInterface() {
                       className={styles.linesInput}
                       value={lineTo}
                       onChange={(e) => setLineTo(e.target.value)}
-                      placeholder="20"
+                      placeholder="40"
                       inputMode="numeric"
                       autoComplete="off"
                     />

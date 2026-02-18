@@ -31,6 +31,29 @@
   font-size: 0.95rem;
 }
 
+.addWorkerBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--sarms-primary, #5c7b5c);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.addWorkerBtn:hover {
+  filter: brightness(1.08);
+}
+
+.addWorkerBtn .fa-fw {
+  margin-right: 0.1em;
+}
+
 .filter {
   padding: 0.5rem 0.75rem;
   border: 1px solid #e2e8f0;
@@ -154,6 +177,36 @@
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+}
+
+/* Good indicators: green highlight */
+.rankingCardGood {
+  background: #f0fdf4;
+  border-color: #86efac;
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.15);
+}
+
+.rankingCardGood .rankingLabel {
+  color: #166534;
+}
+
+.rankingCardGood .rankingMetric {
+  color: #15803d;
+}
+
+/* Bad indicator: red highlight */
+.rankingCardBad {
+  background: #fef2f2;
+  border-color: #fecaca;
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.15);
+}
+
+.rankingCardBad .rankingLabel {
+  color: #b91c1c;
+}
+
+.rankingCardBad .rankingMetric {
+  color: #dc2626;
 }
 
 .rankingLabel {
@@ -364,4 +417,87 @@
   border-radius: 8px;
   font-weight: 500;
   cursor: pointer;
+}
+
+.deleteSection {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.dangerBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #fff;
+  background: #b91c1c;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  width: 100%;
+  justify-content: center;
+}
+
+.dangerBtn:hover {
+  background: #991b1b;
+}
+
+/* Created worker success panel */
+.createdPanel {
+  padding: 1.25rem;
+}
+
+.createdName {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.createdRow {
+  margin-bottom: 0.75rem;
+}
+
+.createdLabel {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 0.25rem;
+}
+
+.createdCode {
+  display: inline-block;
+  padding: 0.35rem 0.6rem;
+  font-family: ui-monospace, monospace;
+  font-size: 1rem;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  color: #0f172a;
+}
+
+.qrWrap {
+  margin: 1.25rem 0;
+  text-align: center;
+}
+
+.qrWrap .createdLabel {
+  margin-bottom: 0.5rem;
+}
+
+.qrImg {
+  display: block;
+  margin: 0 auto;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.createdHint {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin: 1rem 0 1.25rem;
 }

@@ -7,6 +7,7 @@ import {
   EQUIPMENT_STATUS,
   EQUIPMENT_STATUS_LABELS,
 } from '../../data/inventory'
+import { getInitialZones } from '../../data/workerFlow'
 import { useAppStore } from '../../context/AppStoreContext'
 import styles from './InventoryEquipment.module.css'
 
@@ -15,10 +16,18 @@ const STATUS_LABELS = { [INVENTORY_STATUS.NORMAL]: 'Normal', [INVENTORY_STATUS.L
 
 export default function InventoryEquipment() {
   const navigate = useNavigate()
-  const { inventory, equipment, updateInventoryItem, addInventoryItem } = useAppStore()
+  const { inventory, equipment, updateInventoryItem, addInventoryItem, records, zones: storeZones } = useAppStore()
+  const zonesList = (storeZones && storeZones.length > 0) ? storeZones : getInitialZones()
   const [inventoryOpen, setInventoryOpen] = useState(true)
   const [equipmentOpen, setEquipmentOpen] = useState(false)
   const [alertsOpen, setAlertsOpen] = useState(false)
+  const [harvestOpen, setHarvestOpen] = useState(true)
+  const [harvestFilterZone, setHarvestFilterZone] = useState('')
+  const [harvestFilterSearch, setHarvestFilterSearch] = useState('')
+  const [harvestFilterPeriod, setHarvestFilterPeriod] = useState('all')
+  const [harvestDateFrom, setHarvestDateFrom] = useState('')
+  const [harvestDateTo, setHarvestDateTo] = useState('')
+  const [viewHarvestImage, setViewHarvestImage] = useState(null)
   const [updateModal, setUpdateModal] = useState(null)
   const [addItemOpen, setAddItemOpen] = useState(false)
   const [adjustModal, setAdjustModal] = useState(null)
@@ -88,6 +97,48 @@ export default function InventoryEquipment() {
   const maxCat = Math.max(1, ...analyticsByCategory.map((x) => x.count))
   const maxStatus = Math.max(1, ...analyticsByStatus.map((x) => x.count))
 
+  const harvestRecords = useMemo(
+    () =>
+      (records || [])
+        .filter((r) => r.source === 'harvest_form')
+        .sort((a, b) => new Date(b.dateTime || b.createdAt || 0) - new Date(a.dateTime || a.createdAt || 0)),
+    [records]
+  )
+  const filteredHarvestRecords = useMemo(() => {
+    let list = harvestRecords
+    if (harvestFilterZone) list = list.filter((r) => (r.zoneId || r.zone || '') === harvestFilterZone)
+    if (harvestFilterSearch.trim()) {
+      const q = harvestFilterSearch.trim().toLowerCase()
+      list = list.filter(
+        (r) =>
+          (r.zone || '').toLowerCase().includes(q) ||
+          (r.linesArea || r.lines || '').toLowerCase().includes(q) ||
+          (r.notes || '').toLowerCase().includes(q) ||
+          String(r.quantity || '').includes(q) ||
+          (r.unit || '').toLowerCase().includes(q)
+      )
+    }
+    const now = Date.now()
+    const toDate = (d) => (d ? new Date(d).getTime() : now)
+    if (harvestFilterPeriod === '7d') {
+      const from = now - 7 * 24 * 60 * 60 * 1000
+      list = list.filter((r) => toDate(r.dateTime || r.createdAt) >= from)
+    } else if (harvestFilterPeriod === '30d') {
+      const from = now - 30 * 24 * 60 * 60 * 1000
+      list = list.filter((r) => toDate(r.dateTime || r.createdAt) >= from)
+    } else if (harvestFilterPeriod === 'custom') {
+      if (harvestDateFrom) {
+        const from = new Date(harvestDateFrom).getTime()
+        list = list.filter((r) => toDate(r.dateTime || r.createdAt) >= from)
+      }
+      if (harvestDateTo) {
+        const to = new Date(harvestDateTo + 'T23:59:59').getTime()
+        list = list.filter((r) => toDate(r.dateTime || r.createdAt) <= to)
+      }
+    }
+    return list
+  }, [harvestRecords, harvestFilterZone, harvestFilterSearch, harvestFilterPeriod, harvestDateFrom, harvestDateTo])
+
   return (
     <div className={styles.page}>
       <section className={styles.section}>
@@ -142,6 +193,107 @@ export default function InventoryEquipment() {
                 </tbody>
               </table>
             </div>
+          </>
+        )}
+      </section>
+
+      <section className={styles.section}>
+        <button type="button" className={styles.sectionHeader} onClick={() => setHarvestOpen((o) => !o)}>
+          <h2 className={styles.sectionTitle}><i className="fas fa-wheat-awn fa-fw" /> Harvest records</h2>
+          <span className={styles.expandLabel}>{harvestOpen ? 'Collapse' : 'Expand'}</span>
+          <span className={styles.chevron}>{harvestOpen ? '▼' : '▶'}</span>
+        </button>
+        {harvestOpen && (
+          <>
+            <div className={styles.harvestFilters}>
+              <select
+                value={harvestFilterZone}
+                onChange={(e) => setHarvestFilterZone(e.target.value)}
+                className={styles.filterSelect}
+                title="Filter by zone"
+              >
+                <option value="">All zones</option>
+                {zonesList.map((z) => (
+                  <option key={z.id} value={z.id}>{z.label}</option>
+                ))}
+              </select>
+              <select
+                value={harvestFilterPeriod}
+                onChange={(e) => setHarvestFilterPeriod(e.target.value)}
+                className={styles.filterSelect}
+                title="Time period"
+              >
+                <option value="all">All time</option>
+                <option value="7d">Last 7 days</option>
+                <option value="30d">Last 30 days</option>
+                <option value="custom">Custom range</option>
+              </select>
+              {harvestFilterPeriod === 'custom' && (
+                <>
+                  <input
+                    type="date"
+                    value={harvestDateFrom}
+                    onChange={(e) => setHarvestDateFrom(e.target.value)}
+                    className={styles.filterDate}
+                    title="From date"
+                  />
+                  <input
+                    type="date"
+                    value={harvestDateTo}
+                    onChange={(e) => setHarvestDateTo(e.target.value)}
+                    className={styles.filterDate}
+                    title="To date"
+                  />
+                </>
+              )}
+              <input
+                type="text"
+                value={harvestFilterSearch}
+                onChange={(e) => setHarvestFilterSearch(e.target.value)}
+                placeholder="Search zone, lines, notes, quantity…"
+                className={styles.filterInput}
+              />
+            </div>
+            {filteredHarvestRecords.length === 0 ? (
+              <p className={styles.harvestEmpty}>
+                {harvestRecords.length === 0 ? 'No harvest records yet. Add them from Record Production (Harvest Record form).' : 'No records match the filter.'}
+              </p>
+            ) : (
+              <div className={styles.harvestTableWrap}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Zone</th>
+                      <th>Lines / Area</th>
+                      <th>Date &amp; time</th>
+                      <th>Quantity</th>
+                      <th>Unit</th>
+                      <th>Comment</th>
+                      <th>Photo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredHarvestRecords.map((r) => (
+                      <tr key={r.id}>
+                        <td>{r.zone || r.zoneId || '—'}</td>
+                        <td>{r.linesArea || r.lines || '—'}</td>
+                        <td>{r.dateTime ? new Date(r.dateTime).toLocaleString() : (r.createdAt ? new Date(r.createdAt).toLocaleString() : '—')}</td>
+                        <td>{r.quantity != null ? r.quantity : '—'}</td>
+                        <td>{r.unit || '—'}</td>
+                        <td className={styles.cellNotes}>{r.notes || '—'}</td>
+                        <td>
+                          {r.imageData ? (
+                            <button type="button" className={styles.photoThumb} onClick={() => setViewHarvestImage(r.imageData)}>
+                              <img src={r.imageData} alt="" />
+                            </button>
+                          ) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </>
         )}
       </section>
@@ -363,6 +515,13 @@ export default function InventoryEquipment() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {viewHarvestImage && (
+        <div className={styles.imageOverlay} onClick={() => setViewHarvestImage(null)} role="dialog" aria-modal="true">
+          <img src={viewHarvestImage} alt="" className={styles.imageOverlayImg} onClick={(e) => e.stopPropagation()} />
+          <button type="button" className={styles.imageOverlayClose} onClick={() => setViewHarvestImage(null)} aria-label="Close">×</button>
         </div>
       )}
     </div>

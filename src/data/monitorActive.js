@@ -3,13 +3,13 @@
  */
 
 export const SESSION_STATUS = {
-  ACTIVE: 'active',
+  ON_TIME: 'on_time',
   DELAYED: 'delayed',
   FLAGGED: 'flagged',
 }
 
 export const SESSION_STATUS_LABELS = {
-  [SESSION_STATUS.ACTIVE]: 'Active',
+  [SESSION_STATUS.ON_TIME]: 'On time',
   [SESSION_STATUS.DELAYED]: 'Delayed',
   [SESSION_STATUS.FLAGGED]: 'Flagged',
 }
@@ -50,7 +50,7 @@ export function getInitialSessions() {
       expectedMinutes: 60,
       flagged: true,
       notes: [{ at: new Date().toISOString(), text: 'Waiting for equipment' }],
-      assignedByEngineer: false,
+      assignedByEngineer: true,
     },
     {
       id: 's3',
@@ -84,7 +84,7 @@ export function getInitialSessions() {
       expectedMinutes: 45,
       flagged: false,
       notes: [],
-      assignedByEngineer: false,
+      assignedByEngineer: true,
     },
     {
       id: 's5',
@@ -118,7 +118,7 @@ export function getInitialSessions() {
       expectedMinutes: 90,
       flagged: true,
       notes: [{ at: new Date().toISOString(), text: 'Waiting for spare parts' }],
-      assignedByEngineer: false,
+      assignedByEngineer: true,
     },
     {
       id: 's7',
@@ -152,17 +152,18 @@ export function getInitialSessions() {
       expectedMinutes: 60,
       flagged: false,
       notes: [],
-      assignedByEngineer: false,
+      assignedByEngineer: true,
     },
   ]
 }
 
-/** Compute status: delayed if elapsed > expected, else active; flagged overrides display. */
+/** Compute status: delayed if elapsed > expected, else on_time; flagged overrides display. */
 export function getSessionStatus(session, now = Date.now()) {
   if (session.flagged) return SESSION_STATUS.FLAGGED
   const start = new Date(session.startTime).getTime()
   const elapsedMinutes = (now - start) / (60 * 1000)
-  return elapsedMinutes > session.expectedMinutes ? SESSION_STATUS.DELAYED : SESSION_STATUS.ACTIVE
+  const expected = session.expectedMinutes || 60
+  return elapsedMinutes > expected ? SESSION_STATUS.DELAYED : SESSION_STATUS.ON_TIME
 }
 
 /** Elapsed duration in minutes. */

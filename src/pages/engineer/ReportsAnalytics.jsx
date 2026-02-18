@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { DEPARTMENT_OPTIONS, SEED_WORKERS } from '../../data/engineerWorkers'
 import { TASK_STATUS, TASK_STATUS_LABELS } from '../../data/assignTask'
 import { getInitialZones, getTaskById, TASKS_BY_DEPARTMENT, INVENTORY_TASKS } from '../../data/workerFlow'
 import { getInventoryStatus } from '../../data/inventory'
+import { getSessionStatus, getElapsedMinutes, SESSION_STATUS, SESSION_STATUS_LABELS } from '../../data/monitorActive'
 import { useAppStore } from '../../context/AppStoreContext'
 import styles from './ReportsAnalytics.module.css'
 
@@ -37,10 +38,54 @@ function inDateRange(iso, from, to) {
 }
 
 export default function ReportsAnalytics() {
-  const { tasks, records, faults, inventory, zones: storeZones } = useAppStore()
+  const { sessions, tasks, records, faults, inventory, zones: storeZones } = useAppStore()
   const zonesList = (storeZones && storeZones.length > 0) ? storeZones : getInitialZones()
   const ZONE_LABEL = useMemo(() => Object.fromEntries(zonesList.map((z) => [z.id, z.label])), [zonesList])
+  const [tick, setTick] = useState(0)
   const [dateFrom, setDateFrom] = useState(DEFAULT_DATE_FROM())
+
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 10000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const now = Date.now()
+  const sessionsWithStatus = useMemo(
+    () =>
+      (sessions || []).map((s) => ({
+        ...s,
+        status: getSessionStatus(s, now),
+        elapsedMinutes: getElapsedMinutes(s, now),
+      })),
+    [sessions, tick, now]
+  )
+  const analyticsByZone = useMemo(() => {
+    const map = {}
+    sessionsWithStatus.forEach((s) => {
+      const z = s.zone || s.zoneId || 'Other'
+      map[z] = (map[z] || 0) + 1
+    })
+    return Object.entries(map).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count)
+  }, [sessionsWithStatus])
+  const analyticsByDept = useMemo(() => {
+    const map = {}
+    sessionsWithStatus.forEach((s) => {
+      const d = s.department || s.departmentId || 'Other'
+      map[d] = (map[d] || 0) + 1
+    })
+    return Object.entries(map).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count)
+  }, [sessionsWithStatus])
+  const analyticsByStatus = useMemo(
+    () => [
+      { id: SESSION_STATUS.ON_TIME, label: SESSION_STATUS_LABELS[SESSION_STATUS.ON_TIME], count: sessionsWithStatus.filter((s) => s.status === SESSION_STATUS.ON_TIME).length },
+      { id: SESSION_STATUS.DELAYED, label: SESSION_STATUS_LABELS[SESSION_STATUS.DELAYED], count: sessionsWithStatus.filter((s) => s.status === SESSION_STATUS.DELAYED).length },
+      { id: SESSION_STATUS.FLAGGED, label: SESSION_STATUS_LABELS[SESSION_STATUS.FLAGGED], count: sessionsWithStatus.filter((s) => s.status === SESSION_STATUS.FLAGGED).length },
+    ],
+    [sessionsWithStatus]
+  )
+  const maxZone = Math.max(1, ...analyticsByZone.map((x) => x.count))
+  const maxDept = Math.max(1, ...analyticsByDept.map((x) => x.count))
+  const maxStatus = Math.max(1, ...analyticsByStatus.map((x) => x.count))
   const [dateTo, setDateTo] = useState(DEFAULT_DATE_TO())
   const [filterDept, setFilterDept] = useState('')
   const [filterZone, setFilterZone] = useState('')
@@ -136,14 +181,12 @@ export default function ReportsAnalytics() {
   const tasksByStatus = useMemo(() => {
     const s = {
       [TASK_STATUS.PENDING_APPROVAL]: 0,
-      [TASK_STATUS.APPROVED]: 0,
       [TASK_STATUS.IN_PROGRESS]: 0,
       [TASK_STATUS.COMPLETED]: 0,
     }
     filteredTasks.forEach((t) => { s[t.status] = (s[t.status] || 0) + 1 })
     return [
       { label: TASK_STATUS_LABELS[TASK_STATUS.PENDING_APPROVAL], value: s[TASK_STATUS.PENDING_APPROVAL] ?? 0 },
-      { label: TASK_STATUS_LABELS[TASK_STATUS.APPROVED], value: s[TASK_STATUS.APPROVED] ?? 0 },
       { label: TASK_STATUS_LABELS[TASK_STATUS.IN_PROGRESS], value: s[TASK_STATUS.IN_PROGRESS] ?? 0 },
       { label: TASK_STATUS_LABELS[TASK_STATUS.COMPLETED], value: s[TASK_STATUS.COMPLETED] ?? 0 },
     ]
@@ -250,14 +293,18 @@ export default function ReportsAnalytics() {
 
   function exportExcel() {
     const headers = ['Type', 'Date', 'Worker', 'Zone', 'Details', 'Quantity/Outcome']
-    const rows = filteredRecords.map((r) => [
-      r.recordType || '',
-      r.dateTime || r.createdAt || '',
-      r.worker || '',
-      r.zone || '',
-      r.notes || r.task || '',
-      r.quantity ?? r.qualityOutcome ?? '',
-    ])
+    const rows = filteredRecords.map((r) => {
+      const details = [r.notes || r.task || '']
+      if (r.engineerNotes) details.push(`[Engineer notes]: ${r.engineerNotes}`)
+      return [
+        r.recordType || '',
+        r.dateTime || r.createdAt || '',
+        r.worker || '',
+        r.zone || '',
+        details.join(' '),
+        r.quantity ?? r.qualityOutcome ?? '',
+      ]
+    })
     const csv = [headers.join(','), ...rows.map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))].join('\n')
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -377,6 +424,55 @@ export default function ReportsAnalytics() {
           <div className={styles.card}>
             <span className={styles.cardLabel}>Inventory alerts</span>
             <span className={styles.cardValue}>{summary.inventoryAlerts}</span>
+          </div>
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}><i className="fas fa-chart-column fa-fw" /> Sessions analytics</h2>
+        <p className={styles.sectionDesc}>Active work sessions by zone, department, and status (from Monitor Active Work).</p>
+        <div className={styles.chartsGrid}>
+          <div className={styles.chartWrap}>
+            <h3 className={styles.chartTitle}>Sessions by zone</h3>
+            <div className={styles.barChart}>
+              {analyticsByZone.map((row, i) => (
+                <div key={i} className={styles.barRow}>
+                  <span className={styles.barLabel}>{row.label}</span>
+                  <div className={styles.barTrack}>
+                    <div className={styles.barFill} style={{ width: `${(row.count / maxZone) * 100}%` }} />
+                  </div>
+                  <span className={styles.barValue}>{row.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className={styles.chartWrap}>
+            <h3 className={styles.chartTitle}>Sessions by department</h3>
+            <div className={styles.barChart}>
+              {analyticsByDept.map((row, i) => (
+                <div key={i} className={styles.barRow}>
+                  <span className={styles.barLabel}>{row.label}</span>
+                  <div className={styles.barTrack}>
+                    <div className={styles.barFill} style={{ width: `${(row.count / maxDept) * 100}%` }} />
+                  </div>
+                  <span className={styles.barValue}>{row.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className={styles.chartWrap}>
+            <h3 className={styles.chartTitle}>Sessions by status</h3>
+            <div className={styles.barChart}>
+              {analyticsByStatus.map((row) => (
+                <div key={row.id} className={styles.barRow}>
+                  <span className={styles.barLabel}>{row.label}</span>
+                  <div className={styles.barTrack}>
+                    <div className={styles.barFill} style={{ width: `${(row.count / maxStatus) * 100}%` }} />
+                  </div>
+                  <span className={styles.barValue}>{row.count}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>

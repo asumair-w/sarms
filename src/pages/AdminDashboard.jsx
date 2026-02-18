@@ -96,7 +96,7 @@ export default function AdminDashboard() {
     const activeTasks = tasksInPeriod.filter((task) => task.status === TASK_STATUS.IN_PROGRESS).length
     const delayedTasks = tasksInPeriod.filter(
       (task) =>
-        (task.status === TASK_STATUS.APPROVED || task.status === TASK_STATUS.IN_PROGRESS) &&
+        (task.status === TASK_STATUS.PENDING_APPROVAL || task.status === TASK_STATUS.IN_PROGRESS) &&
         Date.now() - new Date(task.createdAt).getTime() > 24 * 60 * 60 * 1000
     ).length
     const openFaults = faults.filter((f) => f.createdAt && inRange(f.createdAt)).length
@@ -118,7 +118,6 @@ export default function AdminDashboard() {
   const internalChartData = useMemo(() => {
     const byStatus = {
       [TASK_STATUS.PENDING_APPROVAL]: 0,
-      [TASK_STATUS.APPROVED]: 0,
       [TASK_STATUS.IN_PROGRESS]: 0,
       [TASK_STATUS.COMPLETED]: 0,
     }
@@ -128,7 +127,6 @@ export default function AdminDashboard() {
     const max = Math.max(1, ...Object.values(byStatus))
     return [
       { labelKey: 'pendingApproval', value: byStatus[TASK_STATUS.PENDING_APPROVAL], max },
-      { labelKey: 'approved', value: byStatus[TASK_STATUS.APPROVED], max },
       { labelKey: 'inProgress', value: byStatus[TASK_STATUS.IN_PROGRESS], max },
       { labelKey: 'completed', value: byStatus[TASK_STATUS.COMPLETED], max },
     ]

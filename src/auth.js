@@ -1,6 +1,7 @@
 /**
  * SARMS auth: validates credentials, resolves role, enforces routing.
  * No role selection by user – role is always derived from User ID.
+ * Uses MOCK_USERS for seed accounts + workers from localStorage (sarms-workers) for newly added workers.
  */
 
 export const ROLES = {
@@ -13,6 +14,35 @@ const ROUTES_BY_ROLE = {
   [ROLES.WORKER]: '/worker',
   [ROLES.ENGINEER]: '/engineer',
   [ROLES.ADMIN]: '/admin',
+}
+
+const WORKERS_STORAGE_KEY = 'sarms-workers'
+
+/** Map stored worker role to auth ROLES (worker/technician → WORKER). */
+function roleToAuthRole(role) {
+  if (role === 'engineer') return ROLES.ENGINEER
+  if (role === 'admin') return ROLES.ADMIN
+  return ROLES.WORKER
+}
+
+/** Load workers from localStorage (same key as AppStore). */
+function getStoredWorkers() {
+  try {
+    const raw = localStorage.getItem(WORKERS_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) return parsed
+    }
+  } catch (_) {}
+  return []
+}
+
+/** Find stored worker by employeeId (login ID). */
+function findStoredWorker(userId) {
+  const key = userId?.trim()?.toLowerCase()
+  if (!key) return null
+  const workers = getStoredWorkers()
+  return workers.find((w) => (w.employeeId || '').toLowerCase() === key) || null
 }
 
 /**
@@ -56,25 +86,45 @@ const MOCK_USERS = {
 
 /**
  * Validate ID + password. Returns { ok, role, error }.
+ * Checks MOCK_USERS first, then workers from localStorage (newly added workers).
  */
 export function validateCredentials(userId, password) {
   if (!userId?.trim()) return { ok: false, error: 'Invalid ID or password' }
-  const user = MOCK_USERS[userId.trim().toLowerCase()]
-  if (!user) return { ok: false, error: 'Invalid ID or password' }
-  if (user.password !== password) return { ok: false, error: 'Invalid ID or password' }
-  if (!user.active) return { ok: false, error: 'Inactive or unauthorized user' }
-  return { ok: true, role: user.role }
+  const key = userId.trim().toLowerCase()
+  const mockUser = MOCK_USERS[key]
+  if (mockUser) {
+    if (mockUser.password !== password) return { ok: false, error: 'Invalid ID or password' }
+    if (!mockUser.active) return { ok: false, error: 'Inactive or unauthorized user' }
+    return { ok: true, role: mockUser.role }
+  }
+  const worker = findStoredWorker(userId)
+  if (worker) {
+    const pwd = (worker.tempPassword || '').trim()
+    if (pwd !== (password || '').trim()) return { ok: false, error: 'Invalid ID or password' }
+    if (worker.status !== 'active') return { ok: false, error: 'Inactive or unauthorized user' }
+    return { ok: true, role: roleToAuthRole(worker.role) }
+  }
+  return { ok: false, error: 'Invalid ID or password' }
 }
 
 /**
  * Validate User ID from QR code. Same contract as ID+password (role, status).
+ * Checks MOCK_USERS first, then workers from localStorage.
  */
 export function validateUserIdFromQR(userId) {
   if (!userId?.trim()) return { ok: false, error: 'Invalid or expired QR Code' }
-  const user = MOCK_USERS[userId.trim().toLowerCase()]
-  if (!user) return { ok: false, error: 'Invalid or expired QR Code' }
-  if (!user.active) return { ok: false, error: 'Inactive or unauthorized user' }
-  return { ok: true, role: user.role }
+  const key = userId.trim().toLowerCase()
+  const mockUser = MOCK_USERS[key]
+  if (mockUser) {
+    if (!mockUser.active) return { ok: false, error: 'Inactive or unauthorized user' }
+    return { ok: true, role: mockUser.role }
+  }
+  const worker = findStoredWorker(userId)
+  if (worker) {
+    if (worker.status !== 'active') return { ok: false, error: 'Inactive or unauthorized user' }
+    return { ok: true, role: roleToAuthRole(worker.role) }
+  }
+  return { ok: false, error: 'Invalid or expired QR Code' }
 }
 
 /**
