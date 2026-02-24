@@ -13,12 +13,44 @@ export const SEVERITY_OPTIONS = [
   { id: 'low', label: 'Low' },
   { id: 'medium', label: 'Medium' },
   { id: 'high', label: 'High' },
+  { id: 'critical', label: 'Critical' },
 ]
 
 export const MAINTENANCE_TYPES = [
-  { id: 'preventive', label: 'Preventive' },
-  { id: 'corrective', label: 'Corrective' },
+  { id: 'preventive', label: 'Preventive Maintenance' },
+  { id: 'corrective', label: 'Corrective Maintenance' },
+  { id: 'inspection', label: 'Inspection' },
 ]
+
+/** Ticket type for unified Create Ticket modal */
+export const TICKET_TYPES = [
+  { id: 'fault', label: 'Fault' },
+  { id: 'preventive', label: 'Preventive Maintenance' },
+  { id: 'corrective', label: 'Corrective Maintenance' },
+  { id: 'inspection', label: 'Inspection' },
+]
+
+export const PRIORITY_OPTIONS = [
+  { id: 'normal', label: 'Normal' },
+  { id: 'high', label: 'High' },
+  { id: 'urgent', label: 'Urgent' },
+]
+
+export const TICKET_STATUS_OPEN = 'open'
+export const TICKET_STATUS_SCHEDULED = 'scheduled'
+export const TICKET_STATUS_COMPLETED = 'completed'
+
+/** Fault type for system-generated preventive inspection alerts */
+export const FAULT_TYPE_PREVENTIVE_ALERT = 'preventive_maintenance_alert'
+export const FAULT_STATUS_OPEN = 'open'
+export const FAULT_STATUS_RESOLVED = 'resolved'
+
+/** Rolling window (days) for failure count = 1 month */
+export const FAILURE_WINDOW_DAYS = 30
+/** Rate expressed as "per this many days" (30 = failures per month) */
+export const FAILURE_RATE_PER_DAYS = 30
+/** High Failure = ≥ this many failures per month (e.g. 2 = twice a month) */
+export const HIGH_FAILURE_RATE_THRESHOLD = 2
 
 export function getInitialFaults() {
   const ts = (daysAgo) => new Date(Date.now() - daysAgo * 86400000).toISOString()

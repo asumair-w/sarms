@@ -8,6 +8,383 @@
   gap: 1rem;
 }
 
+/* Summary row (widget-style cards like Monitor) */
+.summarySection {
+  background: var(--sarms-card, #e8e8e8);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--sarms-border, #d4d4d4);
+}
+
+.summaryTitle {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--sarms-text, #333);
+  letter-spacing: -0.02em;
+}
+
+.summaryCards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .summaryCards {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+  }
+}
+
+@media (min-width: 900px) {
+  .summaryCards {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.summaryCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-height: 72px;
+  padding: 1rem;
+  border-radius: 12px;
+  border: 2px solid var(--sarms-border, #d4d4d4);
+  background: #f8fafc;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  transition: background 0.2s, border-color 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.summaryCard:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.summaryCard[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--sarms-primary, #5c7b5c);
+}
+
+.summaryCardLabel {
+  font-size: 0.85rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.summaryCardValue {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.summaryCardNormal {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.summaryCardNormal .summaryCardValue {
+  color: #15803d;
+}
+
+.summaryCardLow {
+  border-color: #fdba74;
+  background: #fff7ed;
+}
+
+.summaryCardLow .summaryCardValue {
+  color: #b45309;
+}
+
+.summaryCardCritical {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.summaryCardCritical .summaryCardValue {
+  color: #b91c1c;
+}
+
+/* Harvest: crop / production – fresh green */
+.summaryCardHarvest {
+  border-color: #4ade80;
+  background: #ecfdf5;
+}
+
+.summaryCardHarvest:hover {
+  background: #d1fae5;
+  border-color: #10b981;
+}
+
+.summaryCardHarvest .summaryCardValue,
+.summaryCardHarvest .summaryCardLabel {
+  color: #047857;
+}
+.summaryCardHarvest .summaryCardSub {
+  color: #065f46;
+}
+
+/* Equipment: technical / maintenance – clear blue */
+.summaryCardEquipment {
+  border-color: #60a5fa;
+  background: #eff6ff;
+}
+
+.summaryCardEquipment:hover {
+  background: #dbeafe;
+  border-color: #3b82f6;
+}
+
+.summaryCardEquipment .summaryCardValue,
+.summaryCardEquipment .summaryCardLabel {
+  color: #1d4ed8;
+}
+.summaryCardEquipment .summaryCardStockRow {
+  color: #1e40af;
+}
+.summaryCardEquipment .summaryCardStockRow em {
+  color: #1e3a8a;
+}
+
+/* High Failure Equipment: danger (red) when count > 0 */
+.summaryCardHighFailureDanger {
+  border-color: #f87171;
+  background: #fef2f2;
+}
+
+.summaryCardHighFailureDanger:hover {
+  background: #fee2e2;
+  border-color: #ef4444;
+}
+
+.summaryCardHighFailureDanger .summaryCardValue,
+.summaryCardHighFailureDanger .summaryCardLabel {
+  color: #b91c1c;
+}
+.summaryCardHighFailureDanger .summaryCardSub {
+  color: #991b1b;
+}
+
+/* High Failure Equipment: red theme when 0 devices (same red theme as danger) */
+.summaryCardHighFailureOk {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
+.summaryCardHighFailureOk:hover {
+  background: #fee2e2;
+  border-color: #f87171;
+}
+
+.summaryCardHighFailureOk .summaryCardValue,
+.summaryCardHighFailureOk .summaryCardLabel {
+  color: #b91c1c;
+}
+.summaryCardHighFailureOk .summaryCardSub {
+  color: #991b1b;
+}
+
+.summaryCardIcon {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  font-size: 1rem;
+}
+
+.summaryCardHighFailureDanger .summaryCardIcon {
+  color: #b91c1c;
+}
+
+.summaryCardHighFailureOk .summaryCardIcon {
+  color: #b91c1c;
+}
+
+.summaryCard {
+  position: relative;
+}
+
+.highFailureIcon {
+  display: inline;
+  margin-left: 0.35rem;
+  font-size: 1rem;
+  line-height: 1;
+  color: #b91c1c;
+  cursor: help;
+  vertical-align: middle;
+}
+
+.filterChipWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #b91c1c;
+}
+
+.filterChipClear {
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #b91c1c;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.filterChipClear:hover {
+  background: #fecaca;
+}
+
+/* Stock: inventory / supplies – warm amber tone */
+.summaryCardStock {
+  border-color: #d4a574;
+  background: #fffbeb;
+}
+.summaryCardStock:hover {
+  background: #fef3c7;
+  border-color: #d97706;
+}
+.summaryCardStock .summaryCardStockRow {
+  font-size: 0.8rem;
+  color: var(--sarms-text, #333);
+}
+.summaryCardStock .summaryCardStockRow em {
+  color: #92400e;
+  font-style: normal;
+  margin-right: 0.25rem;
+}
+.summaryCardStock .summaryCardValue,
+.summaryCardStock .summaryCardLabel {
+  color: #78350f;
+}
+.summaryCardStock .summaryCardStockRow {
+  color: #78350f;
+}
+.summaryCardHarvestFilter {
+  margin: 0.25rem 0;
+}
+.summaryHarvestSelect {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid var(--sarms-border, #d4d4d4);
+  background: #fff;
+  cursor: pointer;
+}
+.summaryCardSub {
+  font-size: 0.75rem;
+  color: var(--sarms-text-muted, #555);
+}
+.widgetListSummary {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  color: var(--sarms-text, #333);
+}
+.widgetSubTitle {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--sarms-text-muted, #555);
+}
+.widgetSubTitle:first-child {
+  margin-top: 0;
+}
+
+/* Summary widget popup modal (replaces inline widget list) */
+.summaryPopupModal {
+  background: #fff;
+  border-radius: 12px;
+  padding: 0;
+  max-width: 720px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--sarms-border, #d4d4d4);
+  overflow: hidden;
+}
+
+.summaryPopupModal .widgetListHeader {
+  flex-shrink: 0;
+  background: #fff;
+}
+
+.summaryPopupModal .widgetListContent {
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+/* Widget list panel (legacy / shared content styles) */
+.widgetListSection {
+  background: var(--sarms-card, #e8e8e8);
+  border-radius: 12px;
+  padding: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--sarms-border, #d4d4d4);
+  overflow: hidden;
+}
+
+.widgetListHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--sarms-border, #d4d4d4);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.widgetListTitle {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--sarms-text, #333);
+}
+
+.widgetListClose {
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: #e5e7eb;
+  border-radius: 8px;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  color: #374151;
+  transition: background 0.2s;
+}
+
+.widgetListClose:hover {
+  background: #d1d5db;
+}
+
+.widgetListContent {
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+}
+
+.widgetListEmpty {
+  margin: 0;
+  color: var(--sarms-text-muted, #555);
+  font-size: 0.95rem;
+}
+
 .section {
   background: var(--sarms-card, #e8e8e8);
   border-radius: 12px;
@@ -70,6 +447,37 @@
   gap: 0.75rem;
   padding: 0 1.25rem 1rem;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.filtersBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  padding: 0 1.25rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.filtersRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.filtersRow .filterSelect {
+  min-width: 120px;
+}
+
+.filtersRow .filterInput {
+  min-width: 160px;
+  flex: 0 1 auto;
+}
+
+.filterLabel {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #475569;
 }
 
 .btnPrimary {
@@ -127,6 +535,217 @@
   font-weight: 600;
   color: var(--sarms-text-muted, #555);
   background: rgba(255, 255, 255, 0.6);
+}
+
+.thSort {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--sarms-text-muted, #555);
+  cursor: pointer;
+  text-align: left;
+}
+
+.thSort:hover {
+  color: var(--sarms-primary, #5c7b5c);
+}
+
+.eqStatusSelect {
+  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--sarms-border, #d4d4d4);
+  background: #fff;
+  cursor: pointer;
+  min-width: 10rem;
+}
+
+/* Compact Actions column – dropdown */
+.cellActions {
+  width: 1%;
+  white-space: nowrap;
+  padding: 0.4rem 0.5rem !important;
+  vertical-align: middle;
+}
+.actionsWrap {
+  position: relative;
+  display: inline-block;
+}
+.actionsBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--sarms-primary, #5c7b5c);
+  background: #f0f4f0;
+  border: 1px solid var(--sarms-border, #d4d4d4);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.actionsBtn:hover {
+  background: #e5ebe5;
+}
+.actionsCaret {
+  font-size: 0.65rem;
+  opacity: 0.8;
+}
+.actionsDropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 2px;
+  min-width: 160px;
+  background: #fff;
+  border: 1px solid var(--sarms-border, #d4d4d4);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+  padding: 0.25rem;
+}
+.actionsItem {
+  display: block;
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.8rem;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--sarms-text, #333);
+}
+.actionsItem:hover {
+  background: #f0f4f0;
+  color: var(--sarms-primary, #5c7b5c);
+}
+
+.actionsItemDanger {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.actionsItemDanger:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+/* Inspection counters above equipment table */
+.inspectionCounters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 0 1.25rem 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.inspectionCounterDueSoon {
+  color: #b45309;
+}
+.inspectionCounterOverdue {
+  color: #b91c1c;
+}
+
+/* Inspection status badges in equipment table */
+.inspectionBadgeNone {
+  font-size: 0.8rem;
+  color: var(--sarms-text-muted, #555);
+}
+.inspectionBadgeOk {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: #dcfce7;
+  color: #166534;
+}
+.inspectionBadgeDueSoon {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: #fef9c3;
+  color: #a16207;
+}
+.inspectionBadgeOverdue {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+/* Service Cycle column – days, progress bar, age */
+.cellServiceCycle {
+  padding: 0.4rem 0.5rem !important;
+  vertical-align: middle;
+  min-width: 100px;
+}
+.serviceCycleUnscheduled {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.serviceCycleWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.serviceCycleDaysOk {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #166534;
+}
+.serviceCycleDaysSoon {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #a16207;
+}
+.serviceCycleDaysOverdue {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #b91c1c;
+}
+.progressBarTrack {
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  overflow: hidden;
+  min-width: 60px;
+  max-width: 100px;
+}
+.progressBarFillGreen {
+  height: 100%;
+  border-radius: 3px;
+  background: #22c55e;
+  transition: width 0.25s ease;
+}
+.progressBarFillYellow {
+  height: 100%;
+  border-radius: 3px;
+  background: #eab308;
+  transition: width 0.25s ease;
+}
+.progressBarFillRed {
+  height: 100%;
+  border-radius: 3px;
+  background: #b91c1c;
+  transition: width 0.25s ease;
+}
+.serviceCycleAge {
+  font-size: 0.75rem;
+  color: var(--sarms-text-muted, #555);
+}
+
+.required {
+  color: #b91c1c;
 }
 
 .table tbody tr:hover {
@@ -200,6 +819,21 @@
   color: var(--sarms-primary-hover, #4a6b4a);
 }
 
+.actionLinkDelete {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #b91c1c;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.actionLinkDelete:hover {
+  color: #dc2626;
+}
+
 .alertsContent {
   padding: 0 1.25rem 1.25rem;
 }
@@ -249,6 +883,124 @@
   overflow-y: auto;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   border: 1px solid var(--sarms-border, #d4d4d4);
+}
+
+/* View History modal – wider, scrollable */
+.historyModal {
+  background: #fff;
+  border-radius: 12px;
+  padding: 0;
+  max-width: 560px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--sarms-border, #d4d4d4);
+}
+.historyModalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--sarms-border, #d4d4d4);
+  flex-shrink: 0;
+}
+.historyModalHeader .modalTitle {
+  margin: 0;
+}
+.historyModalBody {
+  padding: 1.25rem;
+  overflow-y: auto;
+}
+.historySection {
+  margin-bottom: 1.25rem;
+}
+.historySection:last-child {
+  margin-bottom: 0;
+}
+.historySectionTitle {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--sarms-text, #333);
+}
+.historyMeta {
+  margin: 0;
+  font-size: 0.9rem;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 1rem;
+}
+.historyMeta dt {
+  color: var(--sarms-text-muted, #555);
+  font-weight: 500;
+}
+.historyMeta dd {
+  margin: 0;
+}
+.historyWarning {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #b91c1c;
+}
+.historyTimeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.historyEmpty {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--sarms-text-muted, #555);
+}
+.historyEventFault,
+.historyEventMaintenance,
+.historyEventInspection {
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  border-left: 4px solid;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  align-items: center;
+}
+.historyEventFault {
+  background: #fef2f2;
+  border-left-color: #b91c1c;
+}
+.historyEventMaintenance {
+  background: #fff7ed;
+  border-left-color: #ea580c;
+}
+.historyEventInspection {
+  background: #f0fdf4;
+  border-left-color: #16a34a;
+}
+.historyEventDate {
+  font-weight: 600;
+  color: var(--sarms-text, #333);
+}
+.historyEventType {
+  font-weight: 600;
+}
+.historyEventMeta {
+  color: var(--sarms-text-muted, #555);
+}
+.historyEventDesc {
+  width: 100%;
+  margin-top: 0.25rem;
+  color: var(--sarms-text-muted, #555);
+  font-size: 0.8rem;
 }
 
 .modalTitle {
@@ -312,7 +1064,7 @@
 .moreBtn { padding: 0.75rem 1.5rem; font-size: 1rem; font-weight: 600; color: #fff; background: var(--sarms-primary, #5c7b5c); border: none; border-radius: 12px; cursor: pointer; transition: transform 0.15s, background 0.15s; }
 .moreBtn:hover { transform: translateY(-1px); background: var(--sarms-primary-hover, #4a6b4a); }
 
-/* Harvest records */
+/* Harvest Inventory */
 .harvestFilters {
   display: flex;
   gap: 0.75rem;

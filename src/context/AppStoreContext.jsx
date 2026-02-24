@@ -181,12 +181,49 @@ function storeReducer(state, action) {
     }
     case 'ADD_INVENTORY_ITEM':
       return { ...state, inventory: [action.payload, ...state.inventory] }
+    case 'REMOVE_INVENTORY_ITEM': {
+      const itemId = action.payload
+      return { ...state, inventory: state.inventory.filter((i) => i.id !== itemId) }
+    }
     case 'SET_EQUIPMENT':
       return { ...state, equipment: action.payload }
+    case 'ADD_EQUIPMENT':
+      return { ...state, equipment: [action.payload, ...state.equipment] }
+    case 'UPDATE_EQUIPMENT_ITEM': {
+      const { equipmentId, updates } = action.payload
+      return {
+        ...state,
+        equipment: state.equipment.map((e) =>
+          e.id === equipmentId ? { ...e, ...updates } : e
+        ),
+      }
+    }
+    case 'REMOVE_EQUIPMENT': {
+      const equipmentId = action.payload
+      return { ...state, equipment: state.equipment.filter((e) => e.id !== equipmentId) }
+    }
     case 'ADD_FAULT':
       return { ...state, faults: [action.payload, ...state.faults] }
+    case 'UPDATE_FAULT': {
+      const { faultId, updates } = action.payload
+      return {
+        ...state,
+        faults: state.faults.map((f) =>
+          f.id === faultId ? { ...f, ...updates } : f
+        ),
+      }
+    }
     case 'ADD_MAINTENANCE_PLAN':
       return { ...state, maintenancePlans: [action.payload, ...state.maintenancePlans] }
+    case 'UPDATE_MAINTENANCE_PLAN': {
+      const { planId, updates } = action.payload
+      return {
+        ...state,
+        maintenancePlans: state.maintenancePlans.map((p) =>
+          p.id === planId ? { ...p, ...updates } : p
+        ),
+      }
+    }
     case 'ADD_ZONE':
       return { ...state, zones: [...state.zones, action.payload] }
     case 'REMOVE_ZONE': {
@@ -285,9 +322,19 @@ export function AppStoreProvider({ children }) {
   const updateInventoryItem = useCallback((itemId, updates) =>
     dispatch({ type: 'UPDATE_INVENTORY_ITEM', payload: { itemId, updates } }), [])
   const addInventoryItem = useCallback((item) => dispatch({ type: 'ADD_INVENTORY_ITEM', payload: item }), [])
+  const removeInventoryItem = useCallback((itemId) => dispatch({ type: 'REMOVE_INVENTORY_ITEM', payload: itemId }), [])
+
+  const updateEquipmentItem = useCallback((equipmentId, updates) =>
+    dispatch({ type: 'UPDATE_EQUIPMENT_ITEM', payload: { equipmentId, updates } }), [])
+  const addEquipmentItem = useCallback((item) => dispatch({ type: 'ADD_EQUIPMENT', payload: item }), [])
+  const removeEquipmentItem = useCallback((equipmentId) => dispatch({ type: 'REMOVE_EQUIPMENT', payload: equipmentId }), [])
 
   const addFault = useCallback((fault) => dispatch({ type: 'ADD_FAULT', payload: fault }), [])
+  const updateFault = useCallback((faultId, updates) =>
+    dispatch({ type: 'UPDATE_FAULT', payload: { faultId, updates } }), [])
   const addMaintenancePlan = useCallback((plan) => dispatch({ type: 'ADD_MAINTENANCE_PLAN', payload: plan }), [])
+  const updateMaintenancePlan = useCallback((planId, updates) =>
+    dispatch({ type: 'UPDATE_MAINTENANCE_PLAN', payload: { planId, updates } }), [])
   const addZone = useCallback((zone) => dispatch({ type: 'ADD_ZONE', payload: zone }), [])
   const removeZone = useCallback((zoneId) => dispatch({ type: 'REMOVE_ZONE', payload: zoneId }), [])
   const setBatchesByZone = useCallback((payload) => dispatch({ type: 'SET_BATCHES_BY_ZONE', payload }), [])
@@ -309,8 +356,14 @@ export function AppStoreProvider({ children }) {
     setInventory,
     updateInventoryItem,
     addInventoryItem,
+    removeInventoryItem,
+    updateEquipmentItem,
+    addEquipmentItem,
+    removeEquipmentItem,
     addFault,
+    updateFault,
     addMaintenancePlan,
+    updateMaintenancePlan,
     addZone,
     removeZone,
     setBatchesByZone,

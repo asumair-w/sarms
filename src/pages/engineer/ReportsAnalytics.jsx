@@ -1,8 +1,10 @@
 import { useState, useMemo, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { DEPARTMENT_OPTIONS, SEED_WORKERS } from '../../data/engineerWorkers'
 import { TASK_STATUS, TASK_STATUS_LABELS } from '../../data/assignTask'
 import { getInitialZones, getTaskById, TASKS_BY_DEPARTMENT, INVENTORY_TASKS } from '../../data/workerFlow'
-import { getInventoryStatus } from '../../data/inventory'
+import { getInventoryStatus, INVENTORY_CATEGORIES, INVENTORY_STATUS } from '../../data/inventory'
+import { FAULT_CATEGORIES, SEVERITY_OPTIONS } from '../../data/faults'
 import { getSessionStatus, getElapsedMinutes, SESSION_STATUS, SESSION_STATUS_LABELS } from '../../data/monitorActive'
 import { useAppStore } from '../../context/AppStoreContext'
 import styles from './ReportsAnalytics.module.css'
@@ -38,6 +40,7 @@ function inDateRange(iso, from, to) {
 }
 
 export default function ReportsAnalytics() {
+  const navigate = useNavigate()
   const { sessions, tasks, records, faults, inventory, zones: storeZones } = useAppStore()
   const zonesList = (storeZones && storeZones.length > 0) ? storeZones : getInitialZones()
   const ZONE_LABEL = useMemo(() => Object.fromEntries(zonesList.map((z) => [z.id, z.label])), [zonesList])
@@ -86,6 +89,52 @@ export default function ReportsAnalytics() {
   const maxZone = Math.max(1, ...analyticsByZone.map((x) => x.count))
   const maxDept = Math.max(1, ...analyticsByDept.map((x) => x.count))
   const maxStatus = Math.max(1, ...analyticsByStatus.map((x) => x.count))
+
+  /* Inventory analytics (Items by category / status) – moved from Inventory page */
+  const inventoryWithStatusForAnalytics = useMemo(
+    () => (inventory || []).map((i) => ({ ...i, status: getInventoryStatus(i) })),
+    [inventory]
+  )
+  const invAnalyticsByCategory = useMemo(() => {
+    const map = Object.fromEntries(INVENTORY_CATEGORIES.map((c) => [c.id, 0]))
+    inventoryWithStatusForAnalytics.forEach((i) => { if (map[i.category] !== undefined) map[i.category] += 1 })
+    return INVENTORY_CATEGORIES.map((c) => ({ id: c.id, label: c.label, count: map[c.id] || 0 }))
+  }, [inventoryWithStatusForAnalytics])
+  const invAnalyticsByStatus = useMemo(() => {
+    const map = { [INVENTORY_STATUS.NORMAL]: 0, [INVENTORY_STATUS.LOW]: 0, [INVENTORY_STATUS.CRITICAL]: 0 }
+    inventoryWithStatusForAnalytics.forEach((i) => { if (map[i.status] !== undefined) map[i.status] += 1 })
+    return [
+      { id: INVENTORY_STATUS.NORMAL, label: 'Normal', count: map[INVENTORY_STATUS.NORMAL] },
+      { id: INVENTORY_STATUS.LOW, label: 'Low', count: map[INVENTORY_STATUS.LOW] },
+      { id: INVENTORY_STATUS.CRITICAL, label: 'Critical', count: map[INVENTORY_STATUS.CRITICAL] },
+    ]
+  }, [inventoryWithStatusForAnalytics])
+  const maxInvCat = Math.max(1, ...invAnalyticsByCategory.map((x) => x.count))
+  const maxInvStatus = Math.max(1, ...invAnalyticsByStatus.map((x) => x.count))
+
+  /* Faults analytics (by category, severity, equipment) – moved from Log Fault page */
+  const faultAnalyticsByCategory = useMemo(() => {
+    const map = Object.fromEntries(FAULT_CATEGORIES.map((c) => [c.id, 0]))
+    ;(faults || []).forEach((f) => { if (map[f.category] !== undefined) map[f.category] += 1 })
+    return FAULT_CATEGORIES.map((c) => ({ id: c.id, label: c.label, count: map[c.id] || 0 }))
+  }, [faults])
+  const faultAnalyticsBySeverity = useMemo(() => {
+    const map = Object.fromEntries(SEVERITY_OPTIONS.map((s) => [s.id, 0]))
+    ;(faults || []).forEach((f) => { if (map[f.severity] !== undefined) map[f.severity] += 1 })
+    return SEVERITY_OPTIONS.map((s) => ({ id: s.id, label: s.label, count: map[s.id] || 0 }))
+  }, [faults])
+  const faultAnalyticsByEquipment = useMemo(() => {
+    const map = {}
+    ;(faults || []).forEach((f) => {
+      const name = f.equipmentName || f.equipmentId || 'Unknown'
+      map[name] = (map[name] || 0) + 1
+    })
+    return Object.entries(map).map(([name, count]) => ({ label: name, count })).sort((a, b) => b.count - a.count).slice(0, 6)
+  }, [faults])
+  const maxFaultCat = Math.max(1, ...faultAnalyticsByCategory.map((x) => x.count))
+  const maxFaultSev = Math.max(1, ...faultAnalyticsBySeverity.map((x) => x.count))
+  const maxFaultEq = Math.max(1, ...faultAnalyticsByEquipment.map((x) => x.count))
+
   const [dateTo, setDateTo] = useState(DEFAULT_DATE_TO())
   const [filterDept, setFilterDept] = useState('')
   const [filterZone, setFilterZone] = useState('')
@@ -424,6 +473,95 @@ export default function ReportsAnalytics() {
           <div className={styles.card}>
             <span className={styles.cardLabel}>Inventory alerts</span>
             <span className={styles.cardValue}>{summary.inventoryAlerts}</span>
+          </div>
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}><i className="fas fa-chart-column fa-fw" /> Analytics</h2>
+        <p className={styles.sectionDesc}>Inventory items by category and status.</p>
+        <div className={styles.chartsRow}>
+          <div className={styles.chartWrap}>
+            <h3 className={styles.chartTitle}>Items by category</h3>
+            <div className={styles.barChart}>
+              {invAnalyticsByCategory.map((row) => (
+                <div key={row.id} className={styles.barRow}>
+                  <span className={styles.barLabel}>{row.label}</span>
+                  <div className={styles.barTrack}>
+                    <div className={styles.barFill} style={{ width: `${(row.count / maxInvCat) * 100}%` }} />
+                  </div>
+                  <span className={styles.barValue}>{row.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className={styles.chartWrap}>
+            <h3 className={styles.chartTitle}>Items by status</h3>
+            <div className={styles.barChart}>
+              {invAnalyticsByStatus.map((row) => (
+                <div key={row.id} className={styles.barRow}>
+                  <span className={styles.barLabel}>{row.label}</span>
+                  <div className={styles.barTrack}>
+                    <div className={styles.barFill} style={{ width: `${(row.count / maxInvStatus) * 100}%` }} />
+                  </div>
+                  <span className={styles.barValue}>{row.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className={styles.moreWrap}>
+          <button type="button" className={styles.moreBtn} onClick={() => navigate('/engineer/inventory')}>
+            More Details
+          </button>
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}><i className="fas fa-triangle-exclamation fa-fw" /> Faults analytics</h2>
+        <p className={styles.sectionDesc}>Faults by category, severity, and equipment (from Log Fault).</p>
+        <div className={styles.chartsGrid}>
+          <div className={styles.chartWrap}>
+            <h3 className={styles.chartTitle}>Faults by category</h3>
+            <div className={styles.barChart}>
+              {faultAnalyticsByCategory.map((row) => (
+                <div key={row.id} className={styles.barRow}>
+                  <span className={styles.barLabel}>{row.label}</span>
+                  <div className={styles.barTrack}>
+                    <div className={styles.barFill} style={{ width: `${(row.count / maxFaultCat) * 100}%` }} />
+                  </div>
+                  <span className={styles.barValue}>{row.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className={styles.chartWrap}>
+            <h3 className={styles.chartTitle}>Faults by severity</h3>
+            <div className={styles.barChart}>
+              {faultAnalyticsBySeverity.map((row) => (
+                <div key={row.id} className={styles.barRow}>
+                  <span className={styles.barLabel}>{row.label}</span>
+                  <div className={styles.barTrack}>
+                    <div className={styles.barFill} style={{ width: `${(row.count / maxFaultSev) * 100}%` }} />
+                  </div>
+                  <span className={styles.barValue}>{row.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className={styles.chartWrap}>
+            <h3 className={styles.chartTitle}>Faults by equipment</h3>
+            <div className={styles.barChart}>
+              {faultAnalyticsByEquipment.map((row, i) => (
+                <div key={i} className={styles.barRow}>
+                  <span className={styles.barLabel}>{row.label}</span>
+                  <div className={styles.barTrack}>
+                    <div className={styles.barFill} style={{ width: `${(row.count / maxFaultEq) * 100}%` }} />
+                  </div>
+                  <span className={styles.barValue}>{row.count}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>

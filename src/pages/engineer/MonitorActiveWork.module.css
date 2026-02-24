@@ -433,6 +433,73 @@
   color: #166534;
 }
 
+/* Actions dropdown (grouped) */
+.cellActions {
+  white-space: nowrap;
+}
+.actionsWrap {
+  position: relative;
+  display: inline-block;
+}
+.actionsBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--sarms-primary, #16a34a);
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.actionsBtn:hover {
+  background: #dcfce7;
+  border-color: #4ade80;
+}
+.actionsCaret {
+  font-size: 0.65rem;
+  opacity: 0.9;
+}
+.actionsDropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  min-width: 140px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+  z-index: 20;
+  padding: 0.25rem;
+}
+.actionsItem {
+  display: block;
+  width: 100%;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.85rem;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #334155;
+}
+.actionsItem:hover {
+  background: #f0fdf4;
+  color: #15803d;
+}
+.actionsItemComplete {
+  font-weight: 600;
+  color: #15803d;
+}
+.actionsItemComplete:hover {
+  background: #dcfce7;
+  color: #166534;
+}
+
 /* Modals */
 .modalOverlay {
   position: fixed;
@@ -632,7 +699,7 @@
   .page { max-width: none !important; padding: 0.5rem !important; }
   .tableSection { box-shadow: none !important; border: none !important; break-inside: auto !important; }
   .filtersActions { display: none !important; }
-  .actionLink, .actionLinkComplete { display: none !important; }
+  .actionLink, .actionLinkComplete, .actionsWrap { display: none !important; }
   .tableWrap { overflow: visible !important; }
   .table { font-size: 0.75rem !important; table-layout: fixed !important; width: 100% !important; }
   .table th, .table td { padding: 0.35rem 0.5rem !important; }

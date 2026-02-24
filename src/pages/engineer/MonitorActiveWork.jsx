@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import {
   getSessionStatus,
@@ -78,6 +79,8 @@ export default function MonitorActiveWork() {
   const [sortBy, setSortBy] = useState('startTime')
   const [sortOrder, setSortOrder] = useState('asc')
   const [profileWorker, setProfileWorker] = useState(null)
+  const [openActionsSessionId, setOpenActionsSessionId] = useState(null)
+  const [dropdownAnchor, setDropdownAnchor] = useState(null) // { top, left } for portal menu
   const [riskModalOpen, setRiskModalOpen] = useState(false)
 
   useEffect(() => {
@@ -85,6 +88,17 @@ export default function MonitorActiveWork() {
     const interval = setInterval(() => setTick((t) => t + 1), ms)
     return () => clearInterval(interval)
   }, [])
+
+  useEffect(() => {
+    if (!openActionsSessionId) return
+    const onDocClick = (ev) => {
+      if (ev.target.closest('[data-actions-wrap]') || ev.target.closest('[data-actions-menu]')) return
+      setOpenActionsSessionId(null)
+      setDropdownAnchor(null)
+    }
+    document.addEventListener('click', onDocClick)
+    return () => document.removeEventListener('click', onDocClick)
+  }, [openActionsSessionId])
 
   const now = Date.now()
   const activeSessionsOnly = useMemo(() => sessions.filter((s) => !s.completedAt), [sessions])
@@ -511,25 +525,28 @@ export default function MonitorActiveWork() {
                         </span>
                       )}
                     </td>
-                    <td>
-                      <button type="button" className={styles.actionLink} onClick={() => setViewSession(s)}>View</button>
-                      {' · '}
-                      <button type="button" className={styles.actionLink} onClick={() => setProfileWorker((workers || []).find((w) => String(w.id) === String(s.workerId)) || null)}>Profile</button>
-                      {s.status !== 'completed' && (
-                        <>
-                          {' · '}
-                          <button type="button" className={styles.actionLink} onClick={() => { setNoteSession(s); setNoteText(''); }}>Note</button>
-                          {' · '}
-                          <button type="button" className={styles.actionLink} onClick={() => toggleFlag(s.id)}>
-                            {s.flagged ? 'Unflag' : 'Flag'}
+                    <td className={styles.cellActions}>
+                        <div className={styles.actionsWrap} data-actions-wrap>
+                          <button
+                            type="button"
+                            className={styles.actionsBtn}
+                            onClick={(ev) => {
+                              if (openActionsSessionId === s.id) {
+                                setOpenActionsSessionId(null)
+                                setDropdownAnchor(null)
+                              } else {
+                                const rect = ev.currentTarget.getBoundingClientRect()
+                                setOpenActionsSessionId(s.id)
+                                setDropdownAnchor({ top: rect.bottom + 2, left: rect.left })
+                              }
+                            }}
+                            aria-expanded={openActionsSessionId === s.id}
+                            aria-haspopup="true"
+                          >
+                            Actions <span className={styles.actionsCaret}>{openActionsSessionId === s.id ? '▲' : '▼'}</span>
                           </button>
-                          {' · '}
-                          <button type="button" className={styles.actionLinkComplete} onClick={() => markCompleted(s.id)}>
-                            Complete
-                          </button>
-                        </>
-                      )}
-                    </td>
+                        </div>
+                      </td>
                   </tr>
                 ))
               )}
@@ -537,6 +554,37 @@ export default function MonitorActiveWork() {
           </table>
         </div>
       </section>
+
+      {openActionsSessionId && dropdownAnchor && (() => {
+        const openSession = sortedFiltered.find((ss) => ss.id === openActionsSessionId)
+        if (!openSession) return null
+        const closeMenu = () => { setOpenActionsSessionId(null); setDropdownAnchor(null) }
+        return createPortal(
+          <div
+            className={styles.actionsDropdown}
+            data-actions-menu
+            style={{
+              position: 'fixed',
+              top: dropdownAnchor.top,
+              left: dropdownAnchor.left,
+              zIndex: 9999,
+            }}
+          >
+            <button type="button" className={styles.actionsItem} onClick={() => { setViewSession(openSession); closeMenu(); }}>View</button>
+            <button type="button" className={styles.actionsItem} onClick={() => { setProfileWorker((workers || []).find((w) => String(w.id) === String(openSession.workerId)) || null); closeMenu(); }}>Profile</button>
+            {openSession.status !== 'completed' && (
+              <>
+                <button type="button" className={styles.actionsItem} onClick={() => { setNoteSession(openSession); setNoteText(''); closeMenu(); }}>Note</button>
+                <button type="button" className={styles.actionsItem} onClick={() => { toggleFlag(openSession.id); closeMenu(); }}>
+                  {openSession.flagged ? 'Unflag' : 'Flag'}
+                </button>
+                <button type="button" className={`${styles.actionsItem} ${styles.actionsItemComplete}`} onClick={() => { markCompleted(openSession.id); closeMenu(); }}>Complete</button>
+              </>
+            )}
+          </div>,
+          document.body
+        )
+      })()}
 
       {/* View session modal – use latest from store so notes/flag updates show */}
       {viewSession && (() => {

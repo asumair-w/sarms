@@ -313,7 +313,7 @@ export default function RecordProduction() {
           onClick={() => setHarvestSectionOpen((o) => !o)}
           aria-expanded={harvestSectionOpen}
         >
-          <h2 className={styles.sectionTitle}><i className="fas fa-wheat-awn fa-fw" /> Harvest Record</h2>
+          <h2 className={styles.sectionTitle}><i className="fas fa-wheat-awn fa-fw" /> Record harvest</h2>
           <span className={styles.expandLabel}>{harvestSectionOpen ? 'Collapse' : 'Expand'}</span>
           <span className={styles.chevron}>{harvestSectionOpen ? '▼' : '▶'}</span>
         </button>
