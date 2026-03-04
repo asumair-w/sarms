@@ -45,9 +45,21 @@ export const OVERVIEW_LEFT_ROWS = 20
 export const OVERVIEW_RIGHT_ROWS = 20
 export const OVERVIEW_TOTAL_ROWS = 40
 
-/** Generate a short task ID for display. */
-export function generateTaskId() {
-  return `T${Date.now().toString(36).toUpperCase().slice(-6)}`
+/** Generate next task ID: T001, T002, … (pass existing tasks to avoid duplicates). Handles seed ids like T001A1. */
+export function generateTaskId(existingTasks = []) {
+  const list = Array.isArray(existingTasks) ? existingTasks : []
+  const regex = /^T(\d+)/i
+  let max = 0
+  for (const t of list) {
+    const id = t?.id ?? t
+    if (typeof id !== 'string') continue
+    const m = id.match(regex)
+    if (m) {
+      const n = parseInt(m[1], 10)
+      if (!Number.isNaN(n)) max = Math.max(max, n)
+    }
+  }
+  return `T${String(max + 1).padStart(3, '0')}`
 }
 
 /** Default tasks for demo (in-memory; can be replaced by API). */

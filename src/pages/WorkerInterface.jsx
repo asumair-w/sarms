@@ -12,6 +12,7 @@ import {
 import { SEED_WORKERS } from '../data/engineerWorkers'
 import { useAppStore } from '../context/AppStoreContext'
 import { TASK_STATUS, generateTaskId } from '../data/assignTask'
+import { nextRecordId } from '../utils/idGenerators'
 import WorkerSettingsModal from '../components/WorkerSettingsModal'
 
 /** Map HeroIcons-style names to Font Awesome class suffix (e.g. 'sun' → fa-sun). */
@@ -45,7 +46,7 @@ export default function WorkerInterface() {
   const navigate = useNavigate()
   const location = useLocation()
   const { lang } = useLanguage()
-  const { workers, sessions, zones = [], addSession, removeSession, addTask, updateTaskStatus, addRecord, defaultBatchByZone = {} } = useAppStore()
+  const { workers, sessions, zones = [], records = [], tasks = [], addSession, removeSession, addTask, updateTaskStatus, addRecord, defaultBatchByZone = {} } = useAppStore()
   const zonesList = (zones && zones.length > 0) ? zones : DEFAULT_ZONES
   const t = (key) => getTranslation(lang, 'worker', key)
 
@@ -76,7 +77,7 @@ export default function WorkerInterface() {
 
   const selectedDept = useMemo(() => (selectedDeptId ? getDepartment(selectedDeptId) : null), [selectedDeptId])
   const selectedZone = useMemo(() => (selectedZoneId ? getZone(selectedZoneId, zonesList) : null), [selectedZoneId, zonesList])
-  const tasks = useMemo(() => (selectedDeptId ? getTasksForDepartment(selectedDeptId) : []), [selectedDeptId])
+  const departmentTasks = useMemo(() => (selectedDeptId ? getTasksForDepartment(selectedDeptId) : []), [selectedDeptId])
 
   /** Sessions assigned to this worker by the engineer (show first; worker can only complete them). */
   const myAssignedSessions = useMemo(
@@ -153,6 +154,30 @@ export default function WorkerInterface() {
     const [lineFromPart, lineToPart] = (session.linesArea || '–').split('–')
     const startMs = new Date(session.startTime).getTime()
     const endMs = Date.now()
+    const endTime = new Date().toISOString()
+    const durationMins = Math.round((endMs - startMs) / 60000)
+    const linesStr = `${(lineFromPart || '').trim()} – ${(lineToPart || '').trim()}`.trim()
+    const engineerNotesStr = (session.notes && session.notes.length)
+      ? session.notes.map((n) => `${new Date(n.at).toLocaleString()}: ${n.text}`).join('\n')
+      : undefined
+    const record = {
+      id: nextRecordId(records),
+      recordType: 'production',
+      worker: workerName,
+      department: session.department,
+      task: session.task,
+      zone: session.zone,
+      lines: linesStr,
+      linesArea: linesStr,
+      dateTime: endTime,
+      createdAt: new Date().toISOString(),
+      duration: durationMins,
+      startTime: session.startTime,
+      notes: undefined,
+      engineerNotes: engineerNotesStr,
+      imageData: undefined,
+    }
+    addRecord(record)
     setCompletedSession({
       department: session.department,
       task: session.task,
@@ -160,14 +185,14 @@ export default function WorkerInterface() {
       line_from: (lineFromPart || '').trim(),
       line_to: (lineToPart || '').trim(),
       start_time: session.startTime,
-      end_time: new Date().toISOString(),
+      end_time: endTime,
       status: 'completed',
-      duration: Math.round((endMs - startMs) / 60000),
+      duration: durationMins,
       engineerNotes: session.notes && session.notes.length ? [...session.notes] : undefined,
     })
     setCompletionNotes('')
     setCompletionImage(null)
-    setRecordSavedForCompletion(false)
+    setRecordSavedForCompletion(true)
     setStep(STEPS.CONFIRMATION)
   }
 
@@ -254,7 +279,7 @@ export default function WorkerInterface() {
     }
     const now = new Date().toISOString()
     const linesArea = `${lineFrom.trim()}–${lineTo.trim()}`
-    const taskId = generateTaskId()
+    const taskId = generateTaskId(tasks)
     const task = {
       id: taskId,
       departmentId: selectedDeptId ?? '',
@@ -307,7 +332,7 @@ export default function WorkerInterface() {
       duration: durationMins,
     }
     const record = {
-      id: `R-${Date.now()}`,
+      id: nextRecordId(records),
       recordType: 'production',
       worker: workerName,
       department: activeSession.department,
@@ -339,7 +364,7 @@ export default function WorkerInterface() {
       ? completedSession.engineerNotes.map((n) => `${new Date(n.at).toLocaleString()}: ${n.text}`).join('\n')
       : undefined
     const record = {
-      id: `R-${Date.now()}`,
+      id: nextRecordId(records),
       recordType: 'production',
       worker: workerName,
       department: completedSession.department,
@@ -358,7 +383,7 @@ export default function WorkerInterface() {
   }
 
   function handleLogAnother() {
-    saveCompletionRecord()
+    if (completedSession && !recordSavedForCompletion) saveCompletionRecord()
     setCompletedSession(null)
     setCompletionNotes('')
     setCompletionImage(null)
@@ -510,7 +535,7 @@ export default function WorkerInterface() {
             </div>
           ) : (
             <div className={styles.taskGrid}>
-              {tasks.map((tsk) => (
+              {departmentTasks.map((tsk) => (
                 <button
                   key={tsk.id}
                   type="button"

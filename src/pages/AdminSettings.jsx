@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useLanguage } from '../context/LanguageContext'
+import { useAppStore } from '../context/AppStoreContext'
 import { getTranslation } from '../i18n/translations'
 import { POWER_BI_STORAGE_KEY } from '../config/powerBi'
 import styles from './AdminSettings.module.css'
@@ -14,10 +15,12 @@ function getStoredPowerBiUrl() {
 
 export default function AdminSettings() {
   const { lang, setLang } = useLanguage()
+  const { resetToSeed } = useAppStore()
   const t = (key) => getTranslation(lang, 'admin', key)
   const [powerBiUrl, setPowerBiUrl] = useState('')
   const [powerBiSaved, setPowerBiSaved] = useState(false)
   const [account, setAccount] = useState({ userId: '', role: '' })
+  const [resetDone, setResetDone] = useState(false)
 
   useEffect(() => {
     setPowerBiUrl(getStoredPowerBiUrl())
@@ -107,6 +110,28 @@ export default function AdminSettings() {
             {t('saveUrl')}
             {powerBiSaved && <span className={styles.saved}>{t('saved')}</span>}
           </button>
+        </div>
+      </section>
+
+      {/* Testing: reset data to seed */}
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}><i className="fas fa-database fa-fw" /> {t('testingData')}</h2>
+        <p className={styles.sectionDesc}>
+          {t('testingDataDesc')}
+        </p>
+        <div className={styles.row}>
+          <button
+            type="button"
+            className={styles.resetDataBtn}
+            onClick={() => {
+              resetToSeed()
+              setResetDone(true)
+              setTimeout(() => setResetDone(false), 3000)
+            }}
+          >
+            {t('resetDataToSeed')}
+          </button>
+          {resetDone && <span className={styles.saved}>{t('resetDataDone')}</span>}
         </div>
       </section>
 

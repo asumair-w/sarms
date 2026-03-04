@@ -7,15 +7,17 @@
   --sarms-text: #333;
   --sarms-text-muted: #555;
   --sarms-border: #d4d4d4;
-  --sarms-success: #22c55e;
-  --sarms-warning: #eab308;
+  --sarms-success: #34d399;
+  --sarms-warning: #fde047;
   --sarms-warning-bg: #fef9c3;
-  /* Muted chart palette (aligned with system) */
-  --sarms-chart-success: #5c7b5c;
-  --sarms-chart-warning: #b89a4a;
-  --sarms-chart-info: #6b7b8a;
-  --sarms-chart-muted: #8b95a0;
-  --sarms-chart-bar: #6b8a6b;
+  --sarms-danger: #f87171;
+  --sarms-neutral: #94a3b8;
+  /* Chart palette – quiet (unified across all charts) */
+  --sarms-chart-success: #34d399;
+  --sarms-chart-warning: #fde047;
+  --sarms-chart-info: #93c5fd;
+  --sarms-chart-muted: #94a3b8;
+  --sarms-chart-bar: #34d399;
 }
 
 /* Arabic: SaudiWeb-Regular (from public/fonts) */

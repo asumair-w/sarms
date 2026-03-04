@@ -26,7 +26,7 @@ const defaultOptions = {
 /**
  * Chart.js Bar chart. Data: [{ label, value }].
  */
-export default function ChartJsBar({ data = [], title = '', color = '#5c7b5c' }) {
+export default function ChartJsBar({ data = [], title = '', color = '#34d399' }) {
   const chartData = {
     labels: data.map((d) => d.label),
     datasets: [

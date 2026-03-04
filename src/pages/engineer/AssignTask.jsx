@@ -16,6 +16,7 @@ import { SEED_WORKERS, DEPARTMENT_OPTIONS } from '../../data/engineerWorkers'
 import { useAppStore } from '../../context/AppStoreContext'
 import { useLanguage } from '../../context/LanguageContext'
 import { getTranslation } from '../../i18n/translations'
+import { nextBatchNumber } from '../../utils/idGenerators'
 import styles from './AssignTask.module.css'
 
 const ASSIGN_TASK_SELECTION_KEY = 'sarms-assign-task-selection'
@@ -39,6 +40,17 @@ function normalizeBatchList(arr) {
   const first = arr[0]
   if (typeof first === 'string') return arr.map((s) => ({ id: s, name: `Batch ${s}` }))
   return arr.map((b) => ({ id: b.id ?? b, name: b.name ?? `Batch ${b.id ?? b}` }))
+}
+
+/** Normalize task status for consistent counts (handles approved, casing, etc.). */
+function normalizeTaskStatus(status) {
+  if (!status) return null
+  const s = String(status).toLowerCase()
+  if (s === TASK_STATUS.PENDING_APPROVAL || s === 'approved') return TASK_STATUS.PENDING_APPROVAL
+  if (s === TASK_STATUS.IN_PROGRESS) return TASK_STATUS.IN_PROGRESS
+  if (s === TASK_STATUS.COMPLETED) return TASK_STATUS.COMPLETED
+  if (s === TASK_STATUS.REJECTED) return TASK_STATUS.REJECTED
+  return null
 }
 
 /* مسار العمليات: Pending → In Progress → Completed (بدون Approved) */
@@ -254,22 +266,25 @@ export default function AssignTask() {
       [TASK_STATUS.IN_PROGRESS]: 0,
       [TASK_STATUS.COMPLETED]: 0,
     }
-    tasksInZone.forEach((t) => { s[t.status] = (s[t.status] || 0) + 1 })
+    tasksInZone.forEach((t) => {
+      const status = normalizeTaskStatus(t.status)
+      if (status && s[status] !== undefined) s[status] += 1
+    })
     return s
   }, [tasksInZone])
 
   const totalZones = (zones || []).length
   /* Operations Management widget: counts and lists across ALL zones */
   const allPendingCount = useMemo(
-    () => (tasks || []).filter((t) => t.status === TASK_STATUS.PENDING_APPROVAL || t.status === 'approved').length,
+    () => (tasks || []).filter((t) => normalizeTaskStatus(t.status) === TASK_STATUS.PENDING_APPROVAL).length,
     [tasks]
   )
   const allInProgressCount = useMemo(
-    () => (tasks || []).filter((t) => t.status === TASK_STATUS.IN_PROGRESS).length,
+    () => (tasks || []).filter((t) => normalizeTaskStatus(t.status) === TASK_STATUS.IN_PROGRESS).length,
     [tasks]
   )
   const allCompletedCount = useMemo(
-    () => (tasks || []).filter((t) => t.status === TASK_STATUS.COMPLETED).length,
+    () => (tasks || []).filter((t) => normalizeTaskStatus(t.status) === TASK_STATUS.COMPLETED).length,
     [tasks]
   )
   /* Per zone+batch (for Operation path under selected batch) */
@@ -281,15 +296,15 @@ export default function AssignTask() {
   const kpiQuickList = useMemo(() => {
     if (!kpiFilter) return []
     if (kpiFilter === TASK_STATUS.PENDING_APPROVAL) {
-      const list = (tasks || []).filter((t) => t.status === TASK_STATUS.PENDING_APPROVAL || t.status === 'approved')
+      const list = (tasks || []).filter((t) => normalizeTaskStatus(t.status) === TASK_STATUS.PENDING_APPROVAL)
       return [...list].sort((a, b) => (ZONE_LABEL[a.zoneId] ?? a.zoneId).localeCompare(ZONE_LABEL[b.zoneId] ?? b.zoneId))
     }
     if (kpiFilter === TASK_STATUS.IN_PROGRESS) {
-      const list = (tasks || []).filter((t) => t.status === TASK_STATUS.IN_PROGRESS)
+      const list = (tasks || []).filter((t) => normalizeTaskStatus(t.status) === TASK_STATUS.IN_PROGRESS)
       return [...list].sort((a, b) => (ZONE_LABEL[a.zoneId] ?? a.zoneId).localeCompare(ZONE_LABEL[b.zoneId] ?? b.zoneId))
     }
     if (kpiFilter === TASK_STATUS.COMPLETED) {
-      const list = (tasks || []).filter((t) => t.status === TASK_STATUS.COMPLETED)
+      const list = (tasks || []).filter((t) => normalizeTaskStatus(t.status) === TASK_STATUS.COMPLETED)
       return [...list].sort((a, b) => (ZONE_LABEL[a.zoneId] ?? a.zoneId).localeCompare(ZONE_LABEL[b.zoneId] ?? b.zoneId))
     }
     if (kpiFilter === 'zones') {
@@ -327,9 +342,9 @@ export default function AssignTask() {
 
   function confirmAddBatch(e) {
     e?.preventDefault()
-    const name = (newBatchName || '').trim() || 'Batch'
     const list = normalizeBatchList(batchesByZone[selectedZone])
-    const newId = `b-${Date.now()}`
+    const newId = nextBatchNumber(list)
+    const name = (newBatchName || '').trim() || `Batch ${newId}`
     const newBatch = { id: newId, name }
     setBatchesByZone({
       ...batchesByZone,
@@ -415,7 +430,7 @@ export default function AssignTask() {
 
   function confirmAssign(e) {
     e.preventDefault()
-    const taskId = generateTaskId()
+    const taskId = generateTaskId(tasks)
     const task = {
       id: taskId,
       departmentId: assignForm.departmentId,
@@ -492,16 +507,24 @@ export default function AssignTask() {
     setAddZoneOpen(true)
   }
 
+  const ZONE_LETTER_AR = { A: 'أ', B: 'ب', C: 'ج', D: 'د', E: 'ه', F: 'و', G: 'ز', H: 'ح', I: 'ي', J: 'ي', K: 'ك', L: 'ل', M: 'م', N: 'ن', O: 'و', P: 'ب', Q: 'ق', R: 'ر', S: 'س', T: 'ت', U: 'و', V: 'ف', W: 'و', X: 'كس', Y: 'ي', Z: 'ز' }
+
   function confirmAddZone(e) {
     e.preventDefault()
     const name = newZoneName.trim()
     if (!name) return
-    const id = `z-${Date.now().toString(36)}`
+    const baseName = name.replace(/^Zone\s+/i, '').trim() || name
+    const slug = baseName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || 'zone'
+    const id = (zones || []).some((z) => z.id === slug) ? `${slug}-${Date.now().toString(36).slice(-4)}` : slug
     const label = name.startsWith('Zone ') ? name : `Zone ${name}`
+    const singleLetter = baseName.length === 1 ? baseName.toUpperCase() : null
+    const labelAr = singleLetter && ZONE_LETTER_AR[singleLetter]
+      ? (name.startsWith('Zone ') ? `المنطقة ${ZONE_LETTER_AR[singleLetter]}` : ZONE_LETTER_AR[singleLetter])
+      : (name.startsWith('Zone ') ? `المنطقة ${baseName}` : baseName)
     addZone({
       id,
-      labelEn: name,
-      labelAr: name,
+      labelEn: baseName,
+      labelAr,
       label,
       icon: 'squares-2x2',
     })
@@ -959,18 +982,6 @@ export default function AssignTask() {
               </tbody>
             </table>
           </div>
-        </div>
-      </section>
-
-      {/* Link to full analytics (charts live on General Reports) */}
-      <section className={styles.reviewSection}>
-        <div className={styles.analyticsLinkCard}>
-          <p className={styles.analyticsLinkText}>
-            <i className="fas fa-chart-pie fa-fw" /> Task analytics (by status, zone, type) and reports are in <strong>General Reports</strong>.
-          </p>
-          <button type="button" className={styles.analyticsLinkBtn} onClick={() => navigate('/engineer/reports')}>
-            <i className="fas fa-external-link-alt fa-fw" /> Open General Reports
-          </button>
         </div>
       </section>
 

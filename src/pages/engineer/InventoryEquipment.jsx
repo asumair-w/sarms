@@ -1,12 +1,15 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import {
   INVENTORY_CATEGORIES,
   INVENTORY_STATUS,
+  INVENTORY_MOVEMENT_REASON,
   getInventoryStatus,
 } from '../../data/inventory'
 import { FAULT_TYPE_PREVENTIVE_ALERT, FAULT_STATUS_OPEN } from '../../data/faults'
 import { getInitialZones } from '../../data/workerFlow'
 import { useAppStore } from '../../context/AppStoreContext'
+import { nextMovementId, nextInventoryItemId, nextFaultId } from '../../utils/idGenerators'
 import styles from './InventoryEquipment.module.css'
 
 /** Today's date (local timezone) as YYYY-MM-DD for comparison */
@@ -53,17 +56,9 @@ const CAT_LABELS = Object.fromEntries(INVENTORY_CATEGORIES.map((c) => [c.id, c.l
 const STATUS_LABELS = { [INVENTORY_STATUS.NORMAL]: 'Normal', [INVENTORY_STATUS.LOW]: 'Low', [INVENTORY_STATUS.CRITICAL]: 'Critical' }
 
 export default function InventoryEquipment() {
-  const { inventory, equipment, updateInventoryItem, addInventoryItem, removeInventoryItem, faults, maintenancePlans, addFault, updateFault, records, zones: storeZones } = useAppStore()
+  const { inventory, inventoryMovements, equipment, updateInventoryItem, addInventoryItem, removeInventoryItem, addInventoryMovement, faults, maintenancePlans, addFault, updateFault, zones: storeZones } = useAppStore()
   const zonesList = (storeZones && storeZones.length > 0) ? storeZones : getInitialZones()
-  const [inventoryOpen, setInventoryOpen] = useState(false)
-  const [harvestOpen, setHarvestOpen] = useState(false)
-  const [selectedWidget, setSelectedWidget] = useState(null) // 'total' | 'normal' | 'low' | 'critical' | 'harvest' | 'equipment'
-  const [harvestFilterZone, setHarvestFilterZone] = useState('')
-  const [harvestFilterSearch, setHarvestFilterSearch] = useState('')
-  const [harvestFilterPeriod, setHarvestFilterPeriod] = useState('all')
-  const [harvestDateFrom, setHarvestDateFrom] = useState('')
-  const [harvestDateTo, setHarvestDateTo] = useState('')
-  const [viewHarvestImage, setViewHarvestImage] = useState(null)
+  const [inventoryOpen, setInventoryOpen] = useState(true)
   const [updateModal, setUpdateModal] = useState(null)
   const [qtyMode, setQtyMode] = useState('set')
   const [qtyValue, setQtyValue] = useState('')
@@ -73,8 +68,13 @@ export default function InventoryEquipment() {
   const [filterStatus, setFilterStatus] = useState('')
   const [filterSearch, setFilterSearch] = useState('')
   const [editItem, setEditItem] = useState(null)
-  const [summaryHarvestMonth, setSummaryHarvestMonth] = useState('this') // 'this' | 'last'
-
+  const [historyModalItem, setHistoryModalItem] = useState(null)
+  const [updateReason, setUpdateReason] = useState(INVENTORY_MOVEMENT_REASON.MANUAL_UPDATE)
+  const [openActionsId, setOpenActionsId] = useState(null)
+  const [dropdownAnchor, setDropdownAnchor] = useState(null)
+  const [filterNeedsRefillOnly, setFilterNeedsRefillOnly] = useState(false)
+  const [filterUpdatedLast7Days, setFilterUpdatedLast7Days] = useState(false)
+  const [movementPeriod, setMovementPeriod] = useState('week') // 'week' | 'month'
   const inventoryWithStatus = useMemo(
     () => inventory.map((i) => ({ ...i, status: getInventoryStatus(i) })),
     [inventory]
@@ -86,6 +86,11 @@ export default function InventoryEquipment() {
       else list = list.filter((i) => i.category === filterCategory)
     }
     if (filterStatus) list = list.filter((i) => (i.status || '') === filterStatus)
+    if (filterNeedsRefillOnly) list = list.filter((i) => i.status === INVENTORY_STATUS.CRITICAL || i.status === INVENTORY_STATUS.LOW)
+    if (filterUpdatedLast7Days) {
+      const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000
+      list = list.filter((i) => new Date(i.lastUpdated || 0).getTime() >= cutoff)
+    }
     if (filterSearch.trim()) {
       const q = filterSearch.trim().toLowerCase()
       list = list.filter(
@@ -97,12 +102,13 @@ export default function InventoryEquipment() {
       )
     }
     return list
-  }, [inventoryWithStatus, filterCategory, filterStatus, filterSearch])
+  }, [inventoryWithStatus, filterCategory, filterStatus, filterSearch, filterNeedsRefillOnly, filterUpdatedLast7Days])
 
   function openQuantityModal(item) {
     setUpdateModal(item)
     setQtyMode('set')
     setQtyValue(String(item.quantity ?? 0))
+    setUpdateReason(INVENTORY_MOVEMENT_REASON.MANUAL_UPDATE)
   }
 
   function handleUpdateQuantity(e) {
@@ -118,9 +124,23 @@ export default function InventoryEquipment() {
       newQty = current + delta
       if (newQty < 0) return
     }
+    if (newQty !== current) {
+      const delta = newQty - current
+      addInventoryMovement({
+        id: nextMovementId(inventoryMovements),
+        itemId: updateModal.id,
+        old_quantity: current,
+        new_quantity: newQty,
+        change_amount: delta,
+        reason: updateReason,
+        created_at: new Date().toISOString(),
+        movementType: delta > 0 ? 'updated' : 'decreased', // updated = زودت كمية لصنف موجود، decreased = سحبت منه
+      })
+    }
     updateInventoryItem(updateModal.id, { quantity: newQty })
     setUpdateModal(null)
     setQtyValue('')
+    setUpdateReason(INVENTORY_MOVEMENT_REASON.MANUAL_UPDATE)
   }
 
   function handleAddItem(e) {
@@ -128,16 +148,28 @@ export default function InventoryEquipment() {
     if (!newItem.name.trim()) return
     const category = newItem.category === 'other' ? 'other' : newItem.category
     const customCategory = newItem.category === 'other' ? (newItem.customCategory || '').trim() || undefined : undefined
+    const itemId = nextInventoryItemId(inventory)
+    const initialQty = Number(newItem.quantity) || 0
     addInventoryItem({
-      id: `inv${Date.now()}`,
+      id: itemId,
       name: newItem.name.trim(),
       category,
       ...(customCategory != null && customCategory !== '' && { customCategory }),
-      quantity: Number(newItem.quantity) || 0,
+      quantity: initialQty,
       unit: newItem.unit,
       minQty: Number(newItem.minQty) || 0,
       warningQty: Number(newItem.warningQty) || 0,
       lastUpdated: new Date().toISOString(),
+    })
+    addInventoryMovement({
+      id: nextMovementId(inventoryMovements),
+      itemId,
+      old_quantity: 0,
+      new_quantity: initialQty,
+      change_amount: initialQty,
+      reason: INVENTORY_MOVEMENT_REASON.ITEM_ADDED,
+      created_at: new Date().toISOString(),
+      movementType: 'added', // صنف جديد فقط
     })
     setNewItem({ name: '', category: 'supplies', customCategory: '', quantity: 0, unit: 'units', minQty: 0, warningQty: 10 })
     setAddItemOpen(false)
@@ -150,28 +182,14 @@ export default function InventoryEquipment() {
 
   const categoryLabel = (i) => (i.category === 'other' && (i.customCategory || '')) ? i.customCategory : (CAT_LABELS[i.category] ?? i.category)
 
-  function exportInventoryCSV() {
-    const headers = ['Item name', 'Category', 'Quantity', 'Unit', 'Status', 'Last updated']
-    const rows = filteredInventory.map((i) => [
-      i.name ?? '',
-      categoryLabel(i),
-      i.quantity ?? '',
-      i.unit ?? '',
-      STATUS_LABELS[i.status] ?? i.status ?? '',
-      i.lastUpdated ? new Date(i.lastUpdated).toLocaleString() : '',
-    ])
-    const csv = [headers.join(','), ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))].join('\n')
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `inventory-${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
   function exportInventoryPDF() {
     const dateStr = new Date().toISOString().slice(0, 10)
+    const generatedAt = new Date().toLocaleString()
+    const filterLines = [
+      `Category: ${filterCategory ? (CAT_LABELS[filterCategory] || filterCategory) : 'All'}`,
+      `Status: ${filterStatus ? (STATUS_LABELS[filterStatus] || filterStatus) : 'All'}`,
+      `Search: ${filterSearch.trim() || '—'}`,
+    ]
     const rows = filteredInventory.map((i) => `
       <tr>
         <td>${escapeHtml(i.name ?? '')}</td>
@@ -187,25 +205,34 @@ export default function InventoryEquipment() {
 <html dir="ltr">
 <head>
   <meta charset="utf-8">
-  <title>Inventory – ${dateStr}</title>
+  <title>Inventory Report – ${dateStr}</title>
   <style>
     body { font-family: system-ui, sans-serif; padding: 20px; color: #1e293b; }
-    h1 { font-size: 1.5rem; margin: 0 0 1rem; }
-    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 1rem; }
-    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    h1 { font-size: 1.5rem; margin: 0 0 0.5rem; }
+    .report-meta { color: #64748b; font-size: 0.9rem; margin-bottom: 0.5rem; }
+    .report-filters { font-size: 0.85rem; color: #475569; margin-bottom: 1rem; padding: 8px 0; border-bottom: 1px solid #e2e8f0; }
+    .report-filters p { margin: 0.25rem 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 0.5rem; }
     th, td { border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; }
     th { background: #f1f5f9; font-weight: 600; }
     tr:nth-child(even) { background: #f8fafc; }
+    .report-footer { margin-top: 1rem; padding-top: 8px; border-top: 1px solid #e2e8f0; font-size: 0.9rem; color: #64748b; }
+    .print-hint { margin-top: 1rem; font-size: 0.8rem; color: #94a3b8; }
   </style>
 </head>
 <body>
-  <h1>Inventory</h1>
-  <p class="meta">Generated ${new Date().toLocaleString()} · ${filteredInventory.length} item(s)</p>
+  <h1>Inventory Report</h1>
+  <p class="report-meta">Generated at: ${escapeHtml(generatedAt)}</p>
+  <div class="report-filters">
+    <p><strong>Filters applied:</strong></p>
+    <p>${escapeHtml(filterLines.join(' · '))}</p>
+  </div>
   <table>
     <thead><tr><th>Item name</th><th>Category</th><th>Quantity</th><th>Unit</th><th>Status</th><th>Last updated</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
-  <p class="meta" style="margin-top:1rem;">Use the browser print dialog and choose &quot;Save as PDF&quot; to save as PDF.</p>
+  <p class="report-footer">Total items exported: ${filteredInventory.length}</p>
+  <p class="print-hint">Use the browser print dialog and choose &quot;Save as PDF&quot; to save as PDF.</p>
 </body>
 </html>`
     const win = window.open('', '_blank')
@@ -235,7 +262,6 @@ export default function InventoryEquipment() {
       unit: editItem.unit || 'units',
       minQty: Number(editItem.minQty) >= 0 ? Number(editItem.minQty) : 0,
       warningQty: Number(editItem.warningQty) >= 0 ? Number(editItem.warningQty) : 0,
-      lastUpdated: new Date().toISOString(),
     })
     setEditItem(null)
   }
@@ -253,80 +279,78 @@ export default function InventoryEquipment() {
     }
   }, [inventoryWithStatus])
 
-  const harvestRecords = useMemo(
-    () =>
-      (records || [])
-        .filter((r) => r.source === 'harvest_form')
-        .sort((a, b) => new Date(b.dateTime || b.createdAt || 0) - new Date(a.dateTime || a.createdAt || 0)),
-    [records]
-  )
+  const recentlyUpdatedCount = useMemo(() => {
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000
+    return inventoryWithStatus.filter((i) => new Date(i.lastUpdated || 0).getTime() >= cutoff).length
+  }, [inventoryWithStatus])
 
-  const harvestRecordsInSummaryMonth = useMemo(() => {
+  const categoryCounts = useMemo(() => {
+    const counts = {}
+    INVENTORY_CATEGORIES.forEach((c) => { counts[c.id] = 0 })
+    const knownIds = new Set(INVENTORY_CATEGORIES.map((c) => c.id))
+    inventoryWithStatus.forEach((i) => {
+      const raw = i.category || 'other'
+      const cat = knownIds.has(raw) ? raw : 'other'
+      counts[cat] = (counts[cat] || 0) + 1
+    })
+    return counts
+  }, [inventoryWithStatus])
+
+  /** Stock movement in selected period (this week / this month). Uses inventoryMovements for all inventory items. */
+  const stockMovementStats = useMemo(() => {
     const now = new Date()
-    const y = now.getFullYear()
-    const m = now.getMonth()
-    if (summaryHarvestMonth === 'last') {
-      const start = new Date(y, m - 1, 1).getTime()
-      const end = new Date(y, m, 0, 23, 59, 59).getTime()
-      return harvestRecords.filter((r) => {
-        const t = new Date(r.dateTime || r.createdAt || 0).getTime()
-        return t >= start && t <= end
-      })
+    let cutoffMs = 0
+    if (movementPeriod === 'week') {
+      const startOfWeek = new Date(now)
+      startOfWeek.setDate(now.getDate() - now.getDay())
+      startOfWeek.setHours(0, 0, 0, 0)
+      cutoffMs = startOfWeek.getTime()
+    } else if (movementPeriod === 'month') {
+      cutoffMs = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
     }
-    const start = new Date(y, m, 1).getTime()
-    const end = now.getTime()
-    return harvestRecords.filter((r) => {
-      const t = new Date(r.dateTime || r.createdAt || 0).getTime()
-      return t >= start && t <= end
-    })
-  }, [harvestRecords, summaryHarvestMonth])
-
-  const harvestTopProduct = useMemo(() => {
-    if (harvestRecordsInSummaryMonth.length === 0) return null
-    const byUnit = {}
-    harvestRecordsInSummaryMonth.forEach((r) => {
-      const u = r.unit || 'units'
-      byUnit[u] = (byUnit[u] || 0) + (Number(r.quantity) || 0)
-    })
-    const entries = Object.entries(byUnit).sort((a, b) => b[1] - a[1])
-    const top = entries[0]
-    return top ? { unit: top[0], total: top[1] } : null
-  }, [harvestRecordsInSummaryMonth])
-
-  const filteredHarvestRecords = useMemo(() => {
-    let list = harvestRecords
-    if (harvestFilterZone) list = list.filter((r) => (r.zoneId || r.zone || '') === harvestFilterZone)
-    if (harvestFilterSearch.trim()) {
-      const q = harvestFilterSearch.trim().toLowerCase()
-      list = list.filter(
-        (r) =>
-          (r.zone || '').toLowerCase().includes(q) ||
-          (r.linesArea || r.lines || '').toLowerCase().includes(q) ||
-          (r.notes || '').toLowerCase().includes(q) ||
-          String(r.quantity || '').includes(q) ||
-          (r.unit || '').toLowerCase().includes(q)
-      )
-    }
-    const now = Date.now()
-    const toDate = (d) => (d ? new Date(d).getTime() : now)
-    if (harvestFilterPeriod === '7d') {
-      const from = now - 7 * 24 * 60 * 60 * 1000
-      list = list.filter((r) => toDate(r.dateTime || r.createdAt) >= from)
-    } else if (harvestFilterPeriod === '30d') {
-      const from = now - 30 * 24 * 60 * 60 * 1000
-      list = list.filter((r) => toDate(r.dateTime || r.createdAt) >= from)
-    } else if (harvestFilterPeriod === 'custom') {
-      if (harvestDateFrom) {
-        const from = new Date(harvestDateFrom).getTime()
-        list = list.filter((r) => toDate(r.dateTime || r.createdAt) >= from)
+    const allItemIds = new Set(inventoryWithStatus.map((i) => i.id))
+    const movements = (inventoryMovements || []).filter(
+      (m) =>
+        allItemIds.has(m.itemId) &&
+        new Date(m.created_at || 0).getTime() >= cutoffMs
+    )
+    let added = 0
+    let updated = 0
+    let decreased = 0
+    movements.forEach((m) => {
+      const type = m.movementType
+      const oldQty = Number(m.old_quantity) || 0
+      const newQty = Number(m.new_quantity) || 0
+      const delta = m.change_amount ?? (newQty - oldQty)
+      if (type === 'added' || (type == null && oldQty === 0)) {
+        added += 1
+      } else if (type === 'updated' || (type == null && delta > 0 && oldQty > 0)) {
+        updated += 1
+      } else if (type === 'decreased' || (type == null && delta < 0)) {
+        decreased += 1
       }
-      if (harvestDateTo) {
-        const to = new Date(harvestDateTo + 'T23:59:59').getTime()
-        list = list.filter((r) => toDate(r.dateTime || r.createdAt) <= to)
-      }
+    })
+    if (added + updated + decreased > 0) {
+      return { added, updated, decreased, hasMovement: true }
     }
-    return list
-  }, [harvestRecords, harvestFilterZone, harvestFilterSearch, harvestFilterPeriod, harvestDateFrom, harvestDateTo])
+    const fallbackUpdated = inventoryWithStatus.filter(
+      (i) => new Date(i.lastUpdated || 0).getTime() >= cutoffMs
+    ).length
+    return {
+      added: 0,
+      updated: fallbackUpdated,
+      decreased: 0,
+      hasMovement: fallbackUpdated > 0,
+    }
+  }, [inventoryWithStatus, inventoryMovements, movementPeriod])
+
+  function clearSummaryFilters() {
+    setFilterCategory('')
+    setFilterStatus('')
+    setFilterSearch('')
+    setFilterNeedsRefillOnly(false)
+    setFilterUpdatedLast7Days(false)
+  }
 
   const equipmentWithInspection = useMemo(() => {
     const today = getTodayLocal()
@@ -356,11 +380,15 @@ export default function InventoryEquipment() {
   }, [equipment])
 
   useEffect(() => {
-    if (!selectedWidget) return
-    const onKey = (e) => { if (e.key === 'Escape') setSelectedWidget(null) }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [selectedWidget])
+    if (!openActionsId) return
+    const onDocClick = (ev) => {
+      if (ev.target.closest('[data-actions-wrap]') || ev.target.closest('[data-actions-menu]')) return
+      setOpenActionsId(null)
+      setDropdownAnchor(null)
+    }
+    document.addEventListener('click', onDocClick)
+    return () => document.removeEventListener('click', onDocClick)
+  }, [openActionsId])
 
   useEffect(() => {
     const today = getTodayLocal()
@@ -377,7 +405,7 @@ export default function InventoryEquipment() {
         return
       }
       addFault({
-        id: `F-PMA-${e.id}-${Date.now()}`,
+        id: nextFaultId(faults),
         equipmentId: e.id,
         equipmentName: e.name,
         type: FAULT_TYPE_PREVENTIVE_ALERT,
@@ -397,84 +425,78 @@ export default function InventoryEquipment() {
       <section className={styles.summarySection}>
         <h2 className={styles.summaryTitle}><i className="fas fa-chart-pie fa-fw" /> Summary</h2>
         <div className={styles.summaryCards}>
-          <button type="button" className={`${styles.summaryCard} ${styles.summaryCardStock}`} onClick={() => setSelectedWidget(selectedWidget === 'stock' ? null : 'stock')} aria-pressed={selectedWidget === 'stock'}>
-            <span className={styles.summaryCardLabel}>Stock</span>
-            <span className={styles.summaryCardStockRow}><em>Critical:</em> {summaryCounts.critical}</span>
-            <span className={styles.summaryCardStockRow}><em>Low:</em> {summaryCounts.low}</span>
-            <span className={styles.summaryCardStockRow}><em>Needs refill:</em> {summaryCounts.needsRefill}</span>
-          </button>
-          <button type="button" className={`${styles.summaryCard} ${styles.summaryCardHarvest}`} onClick={() => setSelectedWidget(selectedWidget === 'harvest' ? null : 'harvest')} aria-pressed={selectedWidget === 'harvest'}>
-            <span className={styles.summaryCardLabel}>Harvest</span>
-            <div className={styles.summaryCardHarvestFilter}>
-              <select value={summaryHarvestMonth} onChange={(e) => { e.stopPropagation(); setSummaryHarvestMonth(e.target.value); }} className={styles.summaryHarvestSelect} onClick={(e) => e.stopPropagation()}>
-                <option value="this">This month</option>
-                <option value="last">Last month</option>
-              </select>
+          <button type="button" className={`${styles.summaryCard} ${styles.summaryCardStock} ${filterNeedsRefillOnly ? styles.summaryCardActive : ''}`} onClick={() => { setFilterNeedsRefillOnly(true); setFilterUpdatedLast7Days(false); setFilterCategory(''); setFilterStatus(''); setInventoryOpen(true); }}>
+            <span className={styles.summaryCardLabel}>Stock Health</span>
+            <div className={styles.summaryCardBody}>
+              <div className={styles.summaryRow}><span className={styles.stockCritical}>Critical</span><strong>{summaryCounts.critical}</strong></div>
+              <div className={styles.summaryRow}><span className={styles.stockLow}>Low</span><strong>{summaryCounts.low}</strong></div>
+              <div className={styles.summaryRow}><span className={styles.stockRefill}>Needs refill</span><strong>{summaryCounts.needsRefill}</strong></div>
             </div>
-            <span className={styles.summaryCardValue}>
-              {harvestTopProduct ? `${harvestTopProduct.total} ${harvestTopProduct.unit}` : '—'}
-            </span>
-            <span className={styles.summaryCardSub}>Top product</span>
           </button>
-        </div>
-      </section>
-
-      {selectedWidget && (
-        <div className={styles.modalOverlay} onClick={() => setSelectedWidget(null)}>
-          <div className={styles.summaryPopupModal} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.widgetListHeader}>
-              <h3 className={styles.modalTitle}>
-                {selectedWidget === 'stock' && 'Stock – Critical, Low & Needs refill'}
-                {selectedWidget === 'harvest' && `Harvest – Top product (${summaryHarvestMonth === 'this' ? 'This month' : 'Last month'})`}
-              </h3>
-              <button type="button" className={styles.widgetListClose} onClick={() => setSelectedWidget(null)} aria-label="Close">×</button>
+          <div className={`${styles.summaryCard} ${styles.summaryCardTotalUpdated} ${!filterNeedsRefillOnly && !filterUpdatedLast7Days && !filterCategory && !filterStatus && !filterSearch.trim() ? styles.summaryCardActive : ''} ${filterUpdatedLast7Days ? styles.summaryCardActiveUpdated : ''}`}>
+            <span className={styles.summaryCardLabel}>Items</span>
+            <div className={styles.summaryCardBody}>
+              <button type="button" className={styles.summaryRowBtn} onClick={() => { clearSummaryFilters(); setInventoryOpen(true); }} title="Show all items">
+                <span>Total</span><strong>{summaryCounts.total}</strong>
+              </button>
+              <button type="button" className={styles.summaryRowBtn} onClick={() => { setFilterUpdatedLast7Days(true); setFilterNeedsRefillOnly(false); setFilterCategory(''); setFilterStatus(''); setInventoryOpen(true); }} title="Filter by last 7 days">
+                <span>Updated (7d)</span><strong>{recentlyUpdatedCount}</strong>
+              </button>
             </div>
-            <div className={styles.widgetListContent}>
-              {selectedWidget === 'stock' && (
-                summaryCounts.needsRefill === 0 ? <p className={styles.widgetListEmpty}>No items needing refill.</p> : (
-                  <table className={styles.table}>
-                    <thead><tr><th>Item name</th><th>Category</th><th>Quantity</th><th>Unit</th><th>Status</th><th>Min / Warning</th></tr></thead>
-                    <tbody>
-                      {inventoryWithStatus.filter((i) => i.status !== INVENTORY_STATUS.NORMAL).map((i) => (
-                        <tr key={i.id}>
-                          <td>{i.name}</td>
-                          <td>{categoryLabel(i)}</td>
-                          <td>{i.quantity}</td>
-                          <td>{i.unit}</td>
-                          <td><span className={styles.statusBadge} data-status={i.status}>{STATUS_LABELS[i.status]}</span></td>
-                          <td>{i.minQty} / {i.warningQty}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )
-              )}
-              {selectedWidget === 'harvest' && (
-                harvestRecordsInSummaryMonth.length === 0 ? <p className={styles.widgetListEmpty}>No harvest records for this period. Add from Record Production.</p> : (
-                  <>
-                    {harvestTopProduct && <p className={styles.widgetListSummary}>Most harvested: <strong>{harvestTopProduct.total} {harvestTopProduct.unit}</strong></p>}
-                    <table className={styles.table}>
-                      <thead><tr><th>Zone</th><th>Lines / Area</th><th>Date &amp; time</th><th>Quantity</th><th>Unit</th><th>Comment</th></tr></thead>
-                      <tbody>
-                        {harvestRecordsInSummaryMonth.map((r) => (
-                          <tr key={r.id}>
-                            <td>{r.zone || r.zoneId || '—'}</td>
-                            <td>{r.linesArea || r.lines || '—'}</td>
-                            <td>{r.dateTime ? new Date(r.dateTime).toLocaleString() : (r.createdAt ? new Date(r.createdAt).toLocaleString() : '—')}</td>
-                            <td>{r.quantity != null ? r.quantity : '—'}</td>
-                            <td>{r.unit || '—'}</td>
-                            <td className={styles.cellNotes}>{r.notes || '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </>
-                )
+          </div>
+          <div className={`${styles.summaryCard} ${styles.summaryCardCategory}`}>
+            <span className={styles.summaryCardLabel}>By Category</span>
+            <div className={styles.summaryCardBody}>
+              <div className={styles.summaryCategoryGrid}>
+                {INVENTORY_CATEGORIES.map((c) => (
+                  <button type="button" key={c.id} className={styles.summaryCategoryChip} onClick={() => { setFilterCategory(c.id); setFilterNeedsRefillOnly(false); setFilterUpdatedLast7Days(false); setFilterStatus(''); setInventoryOpen(true); }} title={`Filter by ${c.label}`}>
+                    <span className={styles.summaryCategoryName}>{c.label}</span>
+                    <span className={styles.summaryCategoryCount}>{categoryCounts[c.id] ?? 0}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className={`${styles.summaryCard} ${styles.summaryCardMovement}`}>
+            <span className={styles.summaryCardLabel}>Stock Movement</span>
+            <div className={styles.summaryCardBody} onClick={(e) => e.stopPropagation()}>
+              <div className={styles.summaryHarvestHead}>
+                <select
+                  value={movementPeriod}
+                  onChange={(e) => setMovementPeriod(e.target.value)}
+                  className={styles.summaryHarvestSelect}
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label="Period"
+                >
+                  <option value="week">This week</option>
+                  <option value="month">This month</option>
+                </select>
+              </div>
+              {stockMovementStats.hasMovement ? (
+                <>
+                  <div className={`${styles.summaryRow} ${styles.summaryRowAdded}`}>
+                    <span>Added</span>
+                    <strong>{stockMovementStats.added}</strong>
+                  </div>
+                  <div className={`${styles.summaryRow} ${styles.summaryRowUpdated}`}>
+                    <span>Updated</span>
+                    <strong>{stockMovementStats.updated}</strong>
+                  </div>
+                  <div className={`${styles.summaryRow} ${styles.summaryRowDecreased}`}>
+                    <span>Decreased</span>
+                    <strong>{stockMovementStats.decreased}</strong>
+                  </div>
+                </>
+              ) : (
+                <div className={styles.summaryRowSub}>
+                  No stock movement in the selected period.
+                </div>
               )}
             </div>
           </div>
         </div>
-      )}
+      </section>
+
       <section className={styles.section}>
         <button type="button" className={styles.sectionHeader} onClick={() => setInventoryOpen((o) => !o)}>
           <h2 className={styles.sectionTitle}><i className="fas fa-boxes-stacked fa-fw" /> Manage Stock</h2>
@@ -522,15 +544,16 @@ export default function InventoryEquipment() {
                   className={styles.filterInput}
                 />
               </div>
-              <button type="button" className={styles.btnSecondary} onClick={exportInventoryCSV} disabled={filteredInventory.length === 0}>
-                <i className="fas fa-file-csv fa-fw" /> CSV
-              </button>
-              <button type="button" className={styles.btnSecondary} onClick={exportInventoryPDF} disabled={filteredInventory.length === 0}>
-                <i className="fas fa-file-pdf fa-fw" /> PDF
-              </button>
-              <button type="button" className={styles.btnPrimary} onClick={() => setAddItemOpen(true)}>
-                Add item
-              </button>
+              <div className={styles.filtersBarActions}>
+                <button type="button" className={styles.btnPrimary} onClick={() => setAddItemOpen(true)}>
+                  Add item
+                </button>
+              </div>
+              <div className={styles.filtersBarExport}>
+                <button type="button" className={styles.btnSecondary} onClick={exportInventoryPDF} disabled={filteredInventory.length === 0}>
+                  <i className="fas fa-file-pdf fa-fw" /> Export PDF
+                </button>
+              </div>
             </div>
             <div className={styles.tableWrap}>
               <table className={styles.table}>
@@ -559,11 +582,26 @@ export default function InventoryEquipment() {
                       </td>
                       <td>{new Date(i.lastUpdated).toLocaleString()}</td>
                       <td>
-                        <button type="button" className={styles.actionLink} onClick={() => openQuantityModal(i)}>Update</button>
-                        {' · '}
-                        <button type="button" className={styles.actionLink} onClick={() => setEditItem({ ...i, customCategory: i.customCategory || '' })}>Edit</button>
-                        {' · '}
-                        <button type="button" className={styles.actionLinkDelete} onClick={() => handleDeleteItem(i)}>Delete</button>
+                        <div className={styles.actionsWrap} data-actions-wrap>
+                          <button
+                            type="button"
+                            className={styles.actionsBtn}
+                            onClick={(ev) => {
+                              if (openActionsId === i.id) {
+                                setOpenActionsId(null)
+                                setDropdownAnchor(null)
+                              } else {
+                                const rect = ev.currentTarget.getBoundingClientRect()
+                                setOpenActionsId(i.id)
+                                setDropdownAnchor({ top: rect.bottom + 2, left: rect.left })
+                              }
+                            }}
+                            aria-expanded={openActionsId === i.id}
+                            aria-haspopup="true"
+                          >
+                            Actions <span className={styles.actionsCaret}>{openActionsId === i.id ? '▲' : '▼'}</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -574,119 +612,44 @@ export default function InventoryEquipment() {
         )}
       </section>
 
-      <section className={styles.section}>
-        <button type="button" className={styles.sectionHeader} onClick={() => setHarvestOpen((o) => !o)}>
-          <h2 className={styles.sectionTitle}><i className="fas fa-wheat-awn fa-fw" /> Harvest Log</h2>
-          <span className={styles.expandLabel}>{harvestOpen ? 'Collapse' : 'Expand'}</span>
-          <span className={styles.chevron}>{harvestOpen ? '▼' : '▶'}</span>
-        </button>
-        {harvestOpen && (
-          <>
-            <div className={styles.harvestFilters}>
-              <select
-                value={harvestFilterZone}
-                onChange={(e) => setHarvestFilterZone(e.target.value)}
-                className={styles.filterSelect}
-                title="Filter by zone"
-              >
-                <option value="">All zones</option>
-                {zonesList.map((z) => (
-                  <option key={z.id} value={z.id}>{z.label}</option>
-                ))}
-              </select>
-              <select
-                value={harvestFilterPeriod}
-                onChange={(e) => setHarvestFilterPeriod(e.target.value)}
-                className={styles.filterSelect}
-                title="Time period"
-              >
-                <option value="all">All time</option>
-                <option value="7d">Last 7 days</option>
-                <option value="30d">Last 30 days</option>
-                <option value="custom">Custom range</option>
-              </select>
-              {harvestFilterPeriod === 'custom' && (
-                <>
-                  <input
-                    type="date"
-                    value={harvestDateFrom}
-                    onChange={(e) => setHarvestDateFrom(e.target.value)}
-                    className={styles.filterDate}
-                    title="From date"
-                  />
-                  <input
-                    type="date"
-                    value={harvestDateTo}
-                    onChange={(e) => setHarvestDateTo(e.target.value)}
-                    className={styles.filterDate}
-                    title="To date"
-                  />
-                </>
-              )}
-              <input
-                type="text"
-                value={harvestFilterSearch}
-                onChange={(e) => setHarvestFilterSearch(e.target.value)}
-                placeholder="Search zone, lines, notes, quantity…"
-                className={styles.filterInput}
-              />
-            </div>
-            {filteredHarvestRecords.length === 0 ? (
-              <p className={styles.harvestEmpty}>
-                {harvestRecords.length === 0 ? 'No harvest inventory yet. Add them from Record Production (Harvest Record form).' : 'No records match the filter.'}
-              </p>
-            ) : (
-              <div className={styles.harvestTableWrap}>
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th>Zone</th>
-                      <th>Lines / Area</th>
-                      <th>Date &amp; time</th>
-                      <th>Quantity</th>
-                      <th>Unit</th>
-                      <th>Comment</th>
-                      <th>Photo</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredHarvestRecords.map((r) => (
-                      <tr key={r.id}>
-                        <td>{r.zone || r.zoneId || '—'}</td>
-                        <td>{r.linesArea || r.lines || '—'}</td>
-                        <td>{r.dateTime ? new Date(r.dateTime).toLocaleString() : (r.createdAt ? new Date(r.createdAt).toLocaleString() : '—')}</td>
-                        <td>{r.quantity != null ? r.quantity : '—'}</td>
-                        <td>{r.unit || '—'}</td>
-                        <td className={styles.cellNotes}>{r.notes || '—'}</td>
-                        <td>
-                          {r.imageData ? (
-                            <button type="button" className={styles.photoThumb} onClick={() => setViewHarvestImage(r.imageData)}>
-                              <img src={r.imageData} alt="" />
-                            </button>
-                          ) : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
-        )}
-      </section>
+      {openActionsId && dropdownAnchor && (() => {
+        const openItem = filteredInventory.find((it) => it.id === openActionsId)
+        if (!openItem) return null
+        const closeMenu = () => { setOpenActionsId(null); setDropdownAnchor(null) }
+        return createPortal(
+          <div
+            className={styles.actionsDropdown}
+            data-actions-menu
+            style={{
+              position: 'fixed',
+              top: dropdownAnchor.top,
+              left: dropdownAnchor.left,
+              zIndex: 9999,
+            }}
+          >
+            <button type="button" className={styles.actionsItem} onClick={() => { openQuantityModal(openItem); closeMenu(); }}>Update quantity</button>
+            <button type="button" className={styles.actionsItem} onClick={() => { setEditItem({ ...openItem, customCategory: openItem.customCategory || '' }); closeMenu(); }}>Edit</button>
+            <button type="button" className={styles.actionsItem} onClick={() => { setHistoryModalItem(openItem); closeMenu(); }}>View History</button>
+            <button type="button" className={`${styles.actionsItem} ${styles.actionsItemDanger}`} onClick={() => { handleDeleteItem(openItem); closeMenu(); }}>Delete</button>
+          </div>,
+          document.body
+        )
+      })()}
+
+      {/* Harvest Log moved to Record Production page */}
 
       {/* Manage Equipment section moved to Log Fault page */}
 
       {/* Update quantity modal (set to / adjust by) */}
       {updateModal && (
-        <div className={styles.modalOverlay} onClick={() => setUpdateModal(null)}>
+        <div className={styles.modalOverlay} onClick={() => { setUpdateModal(null); setUpdateReason(INVENTORY_MOVEMENT_REASON.MANUAL_UPDATE); }}>
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
             <h3 className={styles.modalTitle}>Update quantity – {updateModal.name}</h3>
             <p className={styles.modalHint}>Current: {updateModal.quantity} {updateModal.unit}</p>
             <form onSubmit={handleUpdateQuantity} className={styles.modalForm}>
               <div className={styles.formRow}>
                 <label>
-                  <input type="radio" name="qtyMode" checked={qtyMode === 'set'} onChange={() => { setQtyMode('set'); setQtyValue(String(updateModal.quantity ?? 0)); }} />
+                  <input type="radio" name="qtyMode" checked={qtyMode === 'set'} onChange={() => { setQtyMode('set'); setQtyValue(String(updateModal.quantity ?? 0)); setUpdateReason(INVENTORY_MOVEMENT_REASON.MANUAL_UPDATE); }} />
                   {' '}Set to
                 </label>
                 <input
@@ -698,10 +661,28 @@ export default function InventoryEquipment() {
                   className={styles.input}
                   disabled={qtyMode !== 'set'}
                 />
+                <div className={styles.quickAddWrap}>
+                  <span className={styles.quickAddLabel}>Quick add:</span>
+                  {[100, 250, 500].map((inc) => (
+                    <button
+                      key={inc}
+                      type="button"
+                      className={styles.quickAddBtn}
+                      onClick={() => {
+                        const base = qtyMode === 'set' ? (Number(qtyValue) || 0) : (Number(updateModal.quantity) || 0)
+                        const newVal = Math.max(0, base + inc)
+                        setQtyMode('set')
+                        setQtyValue(String(newVal))
+                      }}
+                    >
+                      +{inc}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className={styles.formRow}>
                 <label>
-                  <input type="radio" name="qtyMode" checked={qtyMode === 'adjust'} onChange={() => { setQtyMode('adjust'); setQtyValue(''); }} />
+                  <input type="radio" name="qtyMode" checked={qtyMode === 'adjust'} onChange={() => { setQtyMode('adjust'); setQtyValue(''); setUpdateReason(INVENTORY_MOVEMENT_REASON.MANUAL_UPDATE); }} />
                   {' '}Adjust by (+/-)
                 </label>
                 <input
@@ -714,8 +695,8 @@ export default function InventoryEquipment() {
                 />
               </div>
               <div className={styles.modalActions}>
-                <button type="button" className={styles.btnSecondary} onClick={() => setUpdateModal(null)}>Cancel</button>
-                <button type="submit" className={styles.btnPrimary}>Save</button>
+                <button type="button" className={styles.btnSecondary} onClick={() => { setUpdateModal(null); setUpdateReason(INVENTORY_MOVEMENT_REASON.MANUAL_UPDATE); }}>Cancel</button>
+                <button type="submit" className={styles.btnPrimary}>Update quantity</button>
               </div>
             </form>
           </div>
@@ -810,6 +791,50 @@ export default function InventoryEquipment() {
         </div>
       )}
 
+      {/* Stock History modal */}
+      {historyModalItem && (
+        <div className={styles.modalOverlay} onClick={() => setHistoryModalItem(null)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()} style={{ maxWidth: '560px' }}>
+            <h3 className={styles.modalTitle}>Stock History – {historyModalItem.name}</h3>
+            <div className={styles.historyTableWrap}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Old Qty</th>
+                    <th>New Qty</th>
+                    <th>Change</th>
+                    <th>Reason</th>
+                    <th>By</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(inventoryMovements || [])
+                    .filter((m) => m.itemId === historyModalItem.id)
+                    .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+                    .map((m) => (
+                      <tr key={m.id}>
+                        <td>{m.created_at ? new Date(m.created_at).toLocaleString() : '—'}</td>
+                        <td>{m.old_quantity}</td>
+                        <td>{m.new_quantity}</td>
+                        <td>{m.change_amount >= 0 ? `+${m.change_amount}` : m.change_amount}</td>
+                        <td>{m.reason || '—'}</td>
+                        <td>{m.changed_by || '—'}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+            {(inventoryMovements || []).filter((m) => m.itemId === historyModalItem.id).length === 0 && (
+              <p className={styles.modalHint}>No quantity changes recorded yet.</p>
+            )}
+            <div className={styles.modalActions}>
+              <button type="button" className={styles.btnSecondary} onClick={() => setHistoryModalItem(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add item modal */}
       {addItemOpen && (
         <div className={styles.modalOverlay} onClick={() => setAddItemOpen(false)}>
@@ -871,12 +896,6 @@ export default function InventoryEquipment() {
         </div>
       )}
 
-      {viewHarvestImage && (
-        <div className={styles.imageOverlay} onClick={() => setViewHarvestImage(null)} role="dialog" aria-modal="true">
-          <img src={viewHarvestImage} alt="" className={styles.imageOverlayImg} onClick={(e) => e.stopPropagation()} />
-          <button type="button" className={styles.imageOverlayClose} onClick={() => setViewHarvestImage(null)} aria-label="Close">×</button>
-        </div>
-      )}
     </div>
   )
 }

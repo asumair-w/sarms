@@ -1,5 +1,6 @@
 /* Admin Settings – sections, form controls */
 
+/* Shared page/section specs (Assign Task reference) */
 .page {
   width: 100%;
   max-width: 720px;
@@ -8,19 +9,20 @@
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 1rem;
+  width: 100%;
 }
 
 @media (min-width: 768px) {
   .page {
     padding: 1.5rem;
-    gap: 2.5rem;
+    gap: 1.5rem;
   }
 }
 
 .pageTitle {
-  margin: 0;
-  font-size: 1.5rem;
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
   font-weight: 700;
   color: #0f172a;
   letter-spacing: -0.02em;
@@ -29,16 +31,17 @@
 .section {
   background: #fff;
   border-radius: 16px;
-  padding: 1.25rem 1.5rem;
+  padding: 1.25rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   border: 1px solid #e2e8f0;
 }
 
 .sectionTitle {
   margin: 0 0 1rem;
-  font-size: 1.1rem;
-  font-weight: 600;
+  font-size: 1.25rem;
+  font-weight: 700;
   color: #0f172a;
+  letter-spacing: -0.02em;
 }
 
 .sectionDesc {
@@ -51,7 +54,7 @@
 .row {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.35rem;
   margin-bottom: 1rem;
 }
 
@@ -60,7 +63,7 @@
 }
 
 .label {
-  font-size: 0.875rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: #334155;
 }
@@ -68,10 +71,10 @@
 .input {
   width: 100%;
   max-width: 100%;
-  padding: 0.6rem 0.75rem;
-  font-size: 0.9rem;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.95rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
   background: #fff;
   color: #0f172a;
   box-sizing: border-box;
@@ -171,4 +174,23 @@
   font-size: 0.8rem;
   color: #16a34a;
   margin-left: 0.5rem;
+}
+
+.resetDataBtn {
+  align-self: flex-start;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: 1px solid #dc2626;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #b91c1c;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.resetDataBtn:hover {
+  background: #fee2e2;
+  border-color: #b91c1c;
+  color: #991b1b;
 }

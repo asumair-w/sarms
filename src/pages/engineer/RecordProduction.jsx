@@ -1,9 +1,11 @@
 import { useState, useMemo } from 'react'
+import { jsPDF } from 'jspdf'
 import { UNITS } from '../../data/recordEvent'
 import { getInitialZones } from '../../data/workerFlow'
-import { getQRCodeUrl } from '../../data/engineerWorkers'
 import { useAppStore } from '../../context/AppStoreContext'
+import { nextRecordId } from '../../utils/idGenerators'
 import styles from './RecordProduction.module.css'
+import invStyles from './InventoryEquipment.module.css'
 
 const defaultForm = () => ({
   recordType: 'production',
@@ -17,20 +19,85 @@ const defaultForm = () => ({
 })
 
 export default function RecordProduction() {
-  const { addRecord, records, zones: storeZones, workers: storeWorkers } = useAppStore()
+  const { addRecord, updateRecord, removeRecord, records, zones: storeZones } = useAppStore()
   const zonesList = (storeZones && storeZones.length > 0) ? storeZones : getInitialZones()
   const ZONE_LABELS = useMemo(() => Object.fromEntries(zonesList.map((z) => [z.id, z.label])), [zonesList])
   const [form, setForm] = useState(defaultForm())
   const [saved, setSaved] = useState(null)
-  const [viewImageUrl, setViewImageUrl] = useState(null)
   const [harvestSectionOpen, setHarvestSectionOpen] = useState(false)
-  const [profileWorker, setProfileWorker] = useState(null)
+  const [harvestLogOpen, setHarvestLogOpen] = useState(true)
+  const [harvestFilterZone, setHarvestFilterZone] = useState('')
+  const [harvestFilterSearch, setHarvestFilterSearch] = useState('')
+  const [harvestFilterPeriod, setHarvestFilterPeriod] = useState('all')
+  const [harvestDateFrom, setHarvestDateFrom] = useState('')
+  const [harvestDateTo, setHarvestDateTo] = useState('')
+  const [viewHarvestImage, setViewHarvestImage] = useState(null)
+  const [editHarvestRecord, setEditHarvestRecord] = useState(null)
+  const [editForm, setEditForm] = useState(null)
   const [opsFilterZone, setOpsFilterZone] = useState('')
   const [opsFilterWorker, setOpsFilterWorker] = useState('')
   const [opsFilterPeriod, setOpsFilterPeriod] = useState('all')
   const [opsFilterDateFrom, setOpsFilterDateFrom] = useState('')
   const [opsFilterDateTo, setOpsFilterDateTo] = useState('')
   const [opsFilterSearch, setOpsFilterSearch] = useState('')
+  const [summaryHarvestMonth, setSummaryHarvestMonth] = useState('this') // 'this' | 'last' | '7d' | 'all' | 'custom'
+  const [summaryHarvestCustom, setSummaryHarvestCustom] = useState(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  }) // 'YYYY-MM' when custom
+
+  /** Summary period bounds: current period and previous equivalent period (full month or 7d). */
+  const summaryPeriodBounds = useMemo(() => {
+    const now = new Date()
+    const nowMs = now.getTime()
+    let currStart, currEnd
+    if (summaryHarvestMonth === 'last') {
+      const y = now.getFullYear()
+      const m = now.getMonth()
+      currStart = new Date(y, m - 1, 1).getTime()
+      currEnd = new Date(y, m, 0, 23, 59, 59, 999).getTime()
+    } else if (summaryHarvestMonth === '7d') {
+      currEnd = nowMs
+      currStart = currEnd - 7 * 24 * 60 * 60 * 1000
+    } else if (summaryHarvestMonth === 'all') {
+      currStart = 0
+      currEnd = nowMs
+    } else if (summaryHarvestMonth === 'custom' && summaryHarvestCustom) {
+      const [yStr, mStr] = summaryHarvestCustom.split('-')
+      const y = parseInt(yStr, 10)
+      const m = parseInt(mStr, 10) - 1
+      currStart = new Date(y, m, 1).getTime()
+      currEnd = new Date(y, m + 1, 0, 23, 59, 59, 999).getTime()
+    } else {
+      const y = now.getFullYear()
+      const m = now.getMonth()
+      currStart = new Date(y, m, 1).getTime()
+      currEnd = nowMs
+    }
+    let prevStart = null
+    let prevEnd = null
+    if (summaryHarvestMonth === 'this') {
+      const y = now.getFullYear()
+      const m = now.getMonth()
+      prevStart = new Date(y, m - 1, 1).getTime()
+      prevEnd = new Date(y, m, 0, 23, 59, 59, 999).getTime()
+    } else if (summaryHarvestMonth === 'last') {
+      const y = now.getFullYear()
+      const m = now.getMonth()
+      prevStart = new Date(y, m - 2, 1).getTime()
+      prevEnd = new Date(y, m - 1, 0, 23, 59, 59, 999).getTime()
+    } else if (summaryHarvestMonth === '7d') {
+      prevEnd = currStart - 1
+      prevStart = prevEnd - 7 * 24 * 60 * 60 * 1000
+    } else if (summaryHarvestMonth === 'custom' && summaryHarvestCustom) {
+      const [yStr, mStr] = summaryHarvestCustom.split('-')
+      const y = parseInt(yStr, 10)
+      const m = parseInt(mStr, 10) - 1
+      prevStart = new Date(y, m - 1, 1).getTime()
+      prevEnd = new Date(y, m, 0, 23, 59, 59, 999).getTime()
+    }
+    return { currStart, currEnd, prevStart, prevEnd }
+  }, [summaryHarvestMonth, summaryHarvestCustom])
 
   /** Operations log: production records from workers (task completion), excluding Harvest Record form entries. */
   const recentProductionRecords = useMemo(() => {
@@ -87,102 +154,204 @@ export default function RecordProduction() {
     return list
   }, [recentProductionRecords, opsFilterZone, opsFilterWorker, opsFilterPeriod, opsFilterDateFrom, opsFilterDateTo, opsFilterSearch])
 
-  /** Previous period (same length) for % change. Same filters except time window shifted back. */
-  const previousPeriodRecords = useMemo(() => {
-    const toDate = (d) => (d ? new Date(d).getTime() : 0)
-    const now = Date.now()
-    let from = 0
-    let to = now
-    if (opsFilterPeriod === '7d') {
-      to = now - 7 * 24 * 60 * 60 * 1000
-      from = now - 14 * 24 * 60 * 60 * 1000
-    } else if (opsFilterPeriod === '30d') {
-      to = now - 30 * 24 * 60 * 60 * 1000
-      from = now - 60 * 24 * 60 * 60 * 1000
-    } else if (opsFilterPeriod === 'custom' && opsFilterDateFrom && opsFilterDateTo) {
-      const currFrom = new Date(opsFilterDateFrom).getTime()
-      const currTo = new Date(opsFilterDateTo + 'T23:59:59').getTime()
-      const len = currTo - currFrom
-      to = currFrom - 1
-      from = currFrom - len
-    } else if (opsFilterPeriod === 'all') {
-      to = now - 30 * 24 * 60 * 60 * 1000
-      from = now - 60 * 24 * 60 * 60 * 1000
-    } else {
-      return []
-    }
-    let list = recentProductionRecords.filter((r) => {
-      const t = toDate(r.dateTime || r.createdAt)
-      return t >= from && t <= to
+  /** Harvest log: records from Harvest Record form (source === 'harvest_form'). */
+  const harvestRecords = useMemo(
+    () =>
+      (records || [])
+        .filter((r) => r.source === 'harvest_form')
+        .sort((a, b) => new Date(b.dateTime || b.createdAt || 0) - new Date(a.dateTime || a.createdAt || 0)),
+    [records]
+  )
+
+  /** Harvest summary: records in selected period (driven by summary period filter). */
+  const harvestRecordsInSummaryPeriod = useMemo(() => {
+    const { currStart, currEnd } = summaryPeriodBounds
+    return harvestRecords.filter((r) => {
+      const t = new Date(r.dateTime || r.createdAt || 0).getTime()
+      return t >= currStart && t <= currEnd
     })
-    if (opsFilterZone) {
-      const zoneLabel = ZONE_LABELS[opsFilterZone] || opsFilterZone
-      list = list.filter((r) => (r.zoneId || '') === opsFilterZone || (r.zone || '') === zoneLabel)
+  }, [harvestRecords, summaryPeriodBounds])
+
+  /** Previous equivalent period records (for trend/growth). */
+  const previousPeriodHarvestRecords = useMemo(() => {
+    const { prevStart, prevEnd } = summaryPeriodBounds
+    if (prevStart == null || prevEnd == null) return []
+    return harvestRecords.filter((r) => {
+      const t = new Date(r.dateTime || r.createdAt || 0).getTime()
+      return t >= prevStart && t <= prevEnd
+    })
+  }, [harvestRecords, summaryPeriodBounds])
+
+  const harvestTopProduct = useMemo(() => {
+    if (harvestRecordsInSummaryPeriod.length === 0) return null
+    const byUnit = {}
+    harvestRecordsInSummaryPeriod.forEach((r) => {
+      const u = r.unit || 'units'
+      byUnit[u] = (byUnit[u] || 0) + (Number(r.quantity) || 0)
+    })
+    const entries = Object.entries(byUnit).sort((a, b) => b[1] - a[1])
+    const top = entries[0]
+    return top ? { unit: top[0], total: top[1] } : null
+  }, [harvestRecordsInSummaryPeriod])
+
+  /** Total production in selected period: sum per unit (all units), plus dominant for trend. */
+  const kpiTotalProduction = useMemo(() => {
+    const byUnit = {}
+    harvestRecordsInSummaryPeriod.forEach((r) => {
+      const u = r.unit || 'kg'
+      byUnit[u] = (byUnit[u] || 0) + (Number(r.quantity) || 0)
+    })
+    const entries = Object.entries(byUnit).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
+    const dominant = entries[0]
+    return {
+      byUnit: Object.fromEntries(entries),
+      dominantUnit: dominant ? dominant[0] : 'kg',
+      dominantTotal: dominant ? dominant[1] : 0,
     }
-    if (opsFilterWorker) list = list.filter((r) => (r.worker || '').trim() === opsFilterWorker)
-    if (opsFilterSearch.trim()) {
-      const q = opsFilterSearch.trim().toLowerCase()
+  }, [harvestRecordsInSummaryPeriod])
+
+  /** Previous period total for dominant unit (for trend). Null only when no previous period (e.g. All time). */
+  const kpiPreviousTotalProduction = useMemo(() => {
+    const { prevStart } = summaryPeriodBounds
+    if (prevStart == null) return null
+    const unit = kpiTotalProduction.dominantUnit
+    const total = previousPeriodHarvestRecords.reduce((s, r) => s + ((r.unit || 'kg') === unit ? Number(r.quantity) || 0 : 0), 0)
+    return { total, unit }
+  }, [summaryPeriodBounds, previousPeriodHarvestRecords, kpiTotalProduction.dominantUnit])
+
+  /** Trend: percentage change vs previous period (dominant unit). Null if no previous data. Capped for display. */
+  const kpiTrendPct = useMemo(() => {
+    if (kpiPreviousTotalProduction == null) return null
+    if (kpiPreviousTotalProduction.total === 0) return kpiTotalProduction.dominantTotal > 0 ? 100 : 0
+    const curr = kpiTotalProduction.dominantTotal
+    const prev = kpiPreviousTotalProduction.total
+    const raw = Math.round(((curr - prev) / prev) * 100)
+    return Math.max(-99, Math.min(999, raw))
+  }, [kpiTotalProduction, kpiPreviousTotalProduction])
+
+  /** Top zones by production in selected period (top 2). Sums only the dominant unit per zone for consistent comparison. */
+  const kpiTopZones = useMemo(() => {
+    if (harvestRecordsInSummaryPeriod.length === 0) return []
+    const dominantUnit = kpiTotalProduction.dominantUnit
+    const byZone = {}
+    harvestRecordsInSummaryPeriod.forEach((r) => {
+      const u = (r.unit || 'kg').toLowerCase()
+      if (u !== (dominantUnit || 'kg').toLowerCase()) return
+      const key = r.zoneId || r.zone || '—'
+      const label = r.zone || ZONE_LABELS[r.zoneId] || key
+      if (!byZone[key]) byZone[key] = { zoneId: r.zoneId, zoneLabel: label, total: 0 }
+      byZone[key].total += Number(r.quantity) || 0
+    })
+    const sorted = Object.values(byZone).sort((a, b) => b.total - a.total)
+    return sorted.slice(0, 2).map((x) => ({ ...x, unit: dominantUnit }))
+  }, [harvestRecordsInSummaryPeriod, kpiTotalProduction.dominantUnit, ZONE_LABELS])
+
+  const filteredHarvestRecords = useMemo(() => {
+    let list = harvestRecords
+    if (harvestFilterZone) list = list.filter((r) => (r.zoneId || r.zone || '') === harvestFilterZone)
+    if (harvestFilterSearch.trim()) {
+      const q = harvestFilterSearch.trim().toLowerCase()
       list = list.filter(
         (r) =>
-          (r.worker || '').toLowerCase().includes(q) ||
           (r.zone || '').toLowerCase().includes(q) ||
           (r.linesArea || r.lines || '').toLowerCase().includes(q) ||
           (r.notes || '').toLowerCase().includes(q) ||
-          (r.engineerNotes || '').toLowerCase().includes(q)
+          String(r.quantity || '').includes(q) ||
+          (r.unit || '').toLowerCase().includes(q)
       )
     }
+    const now = Date.now()
+    const toDate = (d) => (d ? new Date(d).getTime() : now)
+    if (harvestFilterPeriod === '7d') {
+      const from = now - 7 * 24 * 60 * 60 * 1000
+      list = list.filter((r) => toDate(r.dateTime || r.createdAt) >= from)
+    } else if (harvestFilterPeriod === '30d') {
+      const from = now - 30 * 24 * 60 * 60 * 1000
+      list = list.filter((r) => toDate(r.dateTime || r.createdAt) >= from)
+    } else if (harvestFilterPeriod === 'custom') {
+      if (harvestDateFrom) {
+        const from = new Date(harvestDateFrom).getTime()
+        list = list.filter((r) => toDate(r.dateTime || r.createdAt) >= from)
+      }
+      if (harvestDateTo) {
+        const to = new Date(harvestDateTo + 'T23:59:59').getTime()
+        list = list.filter((r) => toDate(r.dateTime || r.createdAt) <= to)
+      }
+    }
     return list
-  }, [recentProductionRecords, opsFilterZone, opsFilterWorker, opsFilterPeriod, opsFilterDateFrom, opsFilterDateTo, opsFilterSearch])
+  }, [harvestRecords, harvestFilterZone, harvestFilterSearch, harvestFilterPeriod, harvestDateFrom, harvestDateTo])
 
-  const EXPECTED_AVG_MINUTES = 60
-  const YELLOW_AVG_MINUTES = 120
+  function exportHarvestLogPDF() {
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+    const margin = 12
+    const pageW = 297
+    const pageH = 210
+    const maxY = pageH - margin
+    let y = margin
+    const lineH = 5
+    const headH = 8
+    const cellPad = 2
 
-  const kpiTotalRecords = useMemo(() => {
-    const total = filteredOpsLog.length
-    const previous = previousPeriodRecords.length
-    const pctChange = previous !== 0 ? Math.round(((total - previous) / previous) * 100) : null
-    return { total, pctChange }
-  }, [filteredOpsLog.length, previousPeriodRecords.length])
+    const cols = [
+      { key: 'zone', label: 'Zone', w: 28 },
+      { key: 'lines', label: 'Lines / Area', w: 28 },
+      { key: 'date', label: 'Date & time', w: 38 },
+      { key: 'quantity', label: 'Quantity', w: 22 },
+      { key: 'unit', label: 'Unit', w: 18 },
+      { key: 'comment', label: 'Comment', w: 52 },
+    ]
+    const totalW = cols.reduce((s, c) => s + c.w, 0)
 
-  const kpiTotalLoggedTime = useMemo(() => {
-    const withDuration = filteredOpsLog.filter((r) => r.duration != null)
-    const totalMinutes = withDuration.reduce((s, r) => s + (Number(r.duration) || 0), 0)
-    const uniqueWorkers = new Set(filteredOpsLog.map((r) => (r.worker || '').trim()).filter(Boolean)).size
-    const avgPerWorkerMinutes = uniqueWorkers > 0 ? totalMinutes / uniqueWorkers : 0
-    return { totalMinutes, avgPerWorkerMinutes, uniqueWorkers }
-  }, [filteredOpsLog])
+    const drawTableRow = (cells, isHeader = false) => {
+      if (y > maxY - headH) { pdf.addPage('a4', 'landscape'); y = margin }
+      const startY = y
+      let rowH = headH
+      const cellTexts = cells.map((text, i) => {
+        const w = cols[i].w - cellPad * 2
+        const lines = pdf.splitTextToSize(String(text || '—').trim(), w)
+        return lines
+      })
+      rowH = Math.max(headH, Math.min(20, cellTexts.reduce((max, lines) => Math.max(max, lines.length * lineH + cellPad * 2), 0)))
+      let x = margin
+      cols.forEach((col, i) => {
+        pdf.rect(x, y, col.w, rowH)
+        pdf.setFontSize(isHeader ? 9 : 8)
+        pdf.setFont('helvetica', isHeader ? 'bold' : 'normal')
+        const lines = cellTexts[i] || []
+        const textY = y + cellPad + (lineH * 0.85)
+        lines.slice(0, Math.ceil((rowH - cellPad * 2) / lineH)).forEach((line, j) => {
+          pdf.text(line, x + cellPad, textY + j * lineH)
+        })
+        x += col.w
+      })
+      y += rowH
+    }
 
-  const kpiAvgDuration = useMemo(() => {
-    const withDuration = filteredOpsLog.filter((r) => r.duration != null)
-    if (withDuration.length === 0) return { avgMinutes: 0, status: 'none' }
-    const totalMinutes = withDuration.reduce((s, r) => s + (Number(r.duration) || 0), 0)
-    const avgMinutes = totalMinutes / withDuration.length
-    const status = avgMinutes <= EXPECTED_AVG_MINUTES ? 'ok' : avgMinutes <= YELLOW_AVG_MINUTES ? 'warn' : 'high'
-    return { avgMinutes, status }
-  }, [filteredOpsLog])
+    pdf.setFontSize(14)
+    pdf.setFont('helvetica', 'bold')
+    pdf.text('Harvest Log', margin, y)
+    y += 8
+    pdf.setFontSize(9)
+    pdf.setFont('helvetica', 'normal')
+    pdf.text(`Generated: ${new Date().toLocaleString()}  |  Filters: Zone ${harvestFilterZone ? (ZONE_LABELS[harvestFilterZone] || harvestFilterZone) : 'All'}  |  Period ${harvestFilterPeriod === '7d' ? 'Last 7 days' : harvestFilterPeriod === '30d' ? 'Last 30 days' : harvestFilterPeriod === 'custom' ? `${harvestDateFrom || '—'} to ${harvestDateTo || '—'}` : 'All time'}${harvestFilterSearch.trim() ? `  |  Search: ${harvestFilterSearch.trim()}` : ''}`, margin, y)
+    y += 10
 
-  const kpiTopZone = useMemo(() => {
-    const byZone = {}
-    filteredOpsLog.forEach((r) => {
-      if (r.duration == null) return
-      const key = r.zoneId || r.zone || '—'
-      if (!byZone[key]) byZone[key] = { zoneId: r.zoneId, zone: r.zone || key, totalMinutes: 0 }
-      byZone[key].totalMinutes += Number(r.duration) || 0
+    const headers = cols.map((c) => c.label)
+    drawTableRow(headers, true)
+
+    filteredHarvestRecords.forEach((r) => {
+      const dt = r.dateTime || r.createdAt
+      drawTableRow([
+        r.zone || r.zoneId || '—',
+        r.linesArea || r.lines || '—',
+        dt ? new Date(dt).toLocaleString() : '—',
+        r.quantity != null ? String(r.quantity) : '—',
+        r.unit || '—',
+        (r.notes || '').trim() || '—',
+      ])
     })
-    const totalMinutes = Object.values(byZone).reduce((s, x) => s + x.totalMinutes, 0)
-    if (totalMinutes === 0) return null
-    const top = Object.values(byZone).sort((a, b) => b.totalMinutes - a.totalMinutes)[0]
-    const pct = Math.round((top.totalMinutes / totalMinutes) * 100)
-    const zoneIdForFilter = top.zoneId || (zonesList.find((z) => z.label === top.zone)?.id ?? '')
-    return { ...top, pct, zoneIdForFilter }
-  }, [filteredOpsLog, zonesList])
 
-  function formatMinutesToHoursMinutes(mins) {
-    if (mins == null || Number.isNaN(mins)) return '0h 0m'
-    const m = Math.round(Number(mins))
-    const h = Math.floor(m / 60)
-    const rem = m % 60
-    return `${h}h ${rem}m`
+    pdf.save(`Harvest-log-${new Date().toISOString().slice(0, 10)}.pdf`)
   }
 
   function validateForm() {
@@ -193,7 +362,7 @@ export default function RecordProduction() {
 
   function buildRecord() {
     return {
-      id: `R${Date.now()}`,
+      id: nextRecordId(records),
       recordType: 'production',
       source: 'harvest_form',
       zone: ZONE_LABELS[form.zoneId] ?? form.zoneId,
@@ -230,79 +399,142 @@ export default function RecordProduction() {
     setSaved(null)
   }
 
-  function printOpsLog() {
-    const prevTitle = document.title
-    document.title = `Operations log – ${new Date().toISOString().slice(0, 10)}`
-    window.print()
-    document.title = prevTitle
+  function toDateTimeLocal(iso) {
+    if (!iso) return ''
+    const d = new Date(iso)
+    const y = d.getFullYear()
+    const mo = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    const h = String(d.getHours()).padStart(2, '0')
+    const min = String(d.getMinutes()).padStart(2, '0')
+    return `${y}-${mo}-${day}T${h}:${min}`
   }
 
-  function exportOpsLogCSV() {
-    const headers = ['Worker', 'Zone', 'Lines', 'Date / time', 'Duration (min)', 'Quantity', 'Unit', 'Comment (worker)', 'Engineer notes']
-    const rows = filteredOpsLog.map((r) => [
-      r.worker ?? '',
-      (r.zone || r.zoneId) ?? '',
-      (r.linesArea || r.lines) ?? '',
-      r.dateTime ? new Date(r.dateTime).toLocaleString() : (r.createdAt ? new Date(r.createdAt).toLocaleString() : ''),
-      r.duration != null ? r.duration : '',
-      r.quantity != null ? r.quantity : '',
-      r.unit ?? '',
-      (r.notes || '').replace(/\r?\n/g, ' '),
-      (r.engineerNotes || '').replace(/\r?\n/g, ' '),
-    ])
-    const csv = [headers.join(','), ...rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))].join('\n')
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `operations-log-${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+  function openEditHarvest(r) {
+    setEditHarvestRecord(r)
+    const zoneId = r.zoneId || (zonesList.find((z) => z.label === r.zone)?.id ?? '')
+    setEditForm({
+      zoneId,
+      linesArea: r.linesArea ?? '',
+      dateTime: toDateTimeLocal(r.dateTime || r.createdAt),
+      quantity: r.quantity ?? '',
+      unit: r.unit || 'kg',
+      notes: r.notes ?? '',
+      imageData: r.imageData ?? '',
+    })
+  }
+
+  function handleSaveEditHarvest(e) {
+    e.preventDefault()
+    if (!editHarvestRecord || !editForm) return
+    if (!editForm.zoneId?.trim() || editForm.quantity === '' || editForm.quantity == null) return
+    updateRecord(editHarvestRecord.id, {
+      zone: ZONE_LABELS[editForm.zoneId] ?? editForm.zoneId,
+      zoneId: editForm.zoneId,
+      linesArea: editForm.linesArea,
+      dateTime: editForm.dateTime,
+      quantity: editForm.quantity,
+      unit: editForm.unit,
+      notes: editForm.notes,
+      imageData: editForm.imageData || undefined,
+    })
+    setEditHarvestRecord(null)
+    setEditForm(null)
+  }
+
+  function handleDeleteHarvestFromEdit() {
+    if (!editHarvestRecord) return
+    if (window.confirm('Delete this record? This cannot be undone.')) {
+      removeRecord(editHarvestRecord.id)
+      setEditHarvestRecord(null)
+      setEditForm(null)
+    }
+  }
+
+  function formatQuantity(value) {
+    if (value == null || Number.isNaN(value)) return '0'
+    const n = Number(value)
+    if (n >= 1000) return n.toLocaleString()
+    if (n % 1 !== 0) return n.toFixed(1).replace(/\.0$/, '')
+    return String(Math.round(n))
   }
 
   return (
     <div className={styles.page}>
       <section className={styles.kpiSection}>
         <h2 className={styles.sectionTitle}><i className="fas fa-chart-pie fa-fw" /> Summary</h2>
-        <div className={styles.opsKpiCards}>
-          <div className={styles.opsKpiCard}>
-            <span className={styles.opsKpiLabel}>Total Records</span>
-            <span className={styles.opsKpiValue}>{kpiTotalRecords.total}</span>
-            {kpiTotalRecords.pctChange != null && (
-              <span className={styles.opsKpiSub}>
-                {kpiTotalRecords.pctChange >= 0 ? '↑' : '↓'} {kpiTotalRecords.pctChange >= 0 ? '+' : ''}{kpiTotalRecords.pctChange}% vs previous period
-              </span>
-            )}
-          </div>
-          <div className={styles.opsKpiCard}>
-            <span className={styles.opsKpiLabel}>Total Logged Time</span>
-            <span className={styles.opsKpiValue}>{formatMinutesToHoursMinutes(kpiTotalLoggedTime.totalMinutes)}</span>
-            <span className={styles.opsKpiSub}>Avg per Worker: {formatMinutesToHoursMinutes(kpiTotalLoggedTime.avgPerWorkerMinutes)}</span>
-          </div>
-          <div className={`${styles.opsKpiCard} ${styles[`opsKpiAvg${kpiAvgDuration.status === 'ok' ? 'Ok' : kpiAvgDuration.status === 'warn' ? 'Warn' : kpiAvgDuration.status === 'high' ? 'High' : ''}`]}`}>
-            <span className={styles.opsKpiLabel}>Avg Duration</span>
-            <span className={styles.opsKpiValue}>{formatMinutesToHoursMinutes(kpiAvgDuration.avgMinutes)}</span>
-            <span className={styles.opsKpiSub}>
-              {kpiAvgDuration.status === 'ok' ? 'Within expected range' : kpiAvgDuration.status === 'warn' ? 'Slightly above expected' : kpiAvgDuration.status === 'high' ? 'Above expected' : '—'}
-            </span>
-          </div>
-          {kpiTopZone ? (
-            <button
-              type="button"
-              className={styles.opsKpiCard}
-              onClick={() => setOpsFilterZone(kpiTopZone.zoneIdForFilter)}
-            >
-              <span className={styles.opsKpiLabel}>Most Time-Consuming Zone</span>
-              <span className={styles.opsKpiValue}>{kpiTopZone.zone}</span>
-              <span className={styles.opsKpiSub}>{formatMinutesToHoursMinutes(kpiTopZone.totalMinutes)} ({kpiTopZone.pct}% of total time)</span>
-            </button>
-          ) : (
-            <div className={styles.opsKpiCard}>
-              <span className={styles.opsKpiLabel}>Most Time-Consuming Zone</span>
-              <span className={styles.opsKpiValue}>—</span>
-              <span className={styles.opsKpiSub}>No duration data</span>
+        <div className={`${invStyles.summaryCards} ${styles.summaryCardsThree}`}>
+          <div className={`${invStyles.summaryCard} ${invStyles.summaryCardHarvest}`}>
+            <span className={invStyles.summaryCardLabel}>Harvest</span>
+            <div className={invStyles.summaryCardBody} onClick={(e) => e.stopPropagation()}>
+              <div className={invStyles.summaryHarvestHead}>
+                <select value={summaryHarvestMonth} onChange={(e) => setSummaryHarvestMonth(e.target.value)} className={invStyles.summaryHarvestSelect} onClick={(e) => e.stopPropagation()}>
+                  <option value="this">This month</option>
+                  <option value="last">Last month</option>
+                  <option value="7d">Last 7 days</option>
+                  <option value="all">All time</option>
+                  <option value="custom">Custom month</option>
+                </select>
+                {summaryHarvestMonth === 'custom' && (
+                  <input
+                    type="month"
+                    value={summaryHarvestCustom}
+                    onChange={(e) => setSummaryHarvestCustom(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    className={invStyles.summaryHarvestMonthInput}
+                    title="Choose month"
+                  />
+                )}
+              </div>
+              <div className={invStyles.summaryRow}><span>Records</span><strong>{harvestRecordsInSummaryPeriod.length}</strong></div>
+              <div className={invStyles.summaryRowSub}>Top: {harvestTopProduct ? `${formatQuantity(harvestTopProduct.total)} ${harvestTopProduct.unit}` : '—'}</div>
             </div>
-          )}
+          </div>
+          <div className={`${invStyles.summaryCard} ${styles.summaryKpiCard}`}>
+            <span className={invStyles.summaryCardLabel}>Total Production</span>
+            <div className={invStyles.summaryCardBody}>
+              {Object.keys(kpiTotalProduction.byUnit).length > 0 ? (
+                <>
+                  {Object.entries(kpiTotalProduction.byUnit).map(([unit, total]) => (
+                    <div key={unit} className={invStyles.summaryRow}>
+                      <span>{unit}</span>
+                      <strong>{formatQuantity(total)} {unit}</strong>
+                    </div>
+                  ))}
+                </>
+              ) : (
+                <div className={invStyles.summaryRow}>
+                  <span>Quantity</span>
+                  <strong>0</strong>
+                </div>
+              )}
+              {kpiTrendPct != null && kpiPreviousTotalProduction != null && kpiTotalProduction.dominantTotal > 0 && (
+                <div className={`${styles.summaryKpiTrend} ${kpiTrendPct >= 0 ? styles.summaryKpiTrendUp : styles.summaryKpiTrendDown}`}>
+                  {kpiTrendPct >= 0 ? '↑' : '↓'} {kpiTrendPct >= 0 ? '+' : ''}{kpiTrendPct}% vs previous period ({kpiTotalProduction.dominantUnit})
+                </div>
+              )}
+            </div>
+          </div>
+          <div className={`${invStyles.summaryCard} ${styles.summaryKpiCard} ${styles.summaryKpiCardZone}`}>
+            <span className={invStyles.summaryCardLabel}>Production by Zone</span>
+            <div className={invStyles.summaryCardBody}>
+              {kpiTopZones.length > 0 ? (
+                <>
+                  <div className={invStyles.summaryRow}>
+                    <span>Top zone</span>
+                    <strong>{kpiTopZones[0].zoneLabel} ({formatQuantity(kpiTopZones[0].total)} {kpiTopZones[0].unit})</strong>
+                  </div>
+                  {kpiTopZones[1] && (
+                    <div className={invStyles.summaryRowSub}>
+                      2nd: {kpiTopZones[1].zoneLabel} ({formatQuantity(kpiTopZones[1].total)} {kpiTopZones[1].unit})
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className={invStyles.summaryRowSub}>No records in period</div>
+              )}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -412,7 +644,6 @@ export default function RecordProduction() {
             )}
           </div>
 
-          {/* Actions */}
           <div className={styles.actions}>
             <button type="button" className={styles.btnSecondary} onClick={handleCancel}>
               Cancel
@@ -432,187 +663,212 @@ export default function RecordProduction() {
         )}
       </section>
 
-      <section className={styles.operationsLogSection}>
-        <div className={styles.opsLogHeader}>
-          <h2 className={styles.sectionTitle}><i className="fas fa-list-check fa-fw" /> Operations log</h2>
-          <button type="button" className={styles.opsExportBtn} onClick={exportOpsLogCSV} disabled={filteredOpsLog.length === 0}>
-            <i className="fas fa-file-csv fa-fw" /> Export CSV
-          </button>
-          <button type="button" className={styles.opsPrintBtn} onClick={printOpsLog} disabled={filteredOpsLog.length === 0}>
-            <i className="fas fa-print fa-fw" /> Print / PDF
-          </button>
-        </div>
-
-        <div className={styles.opsFilters}>
-          <select
-            value={opsFilterZone}
-            onChange={(e) => setOpsFilterZone(e.target.value)}
-            className={styles.opsFilterSelect}
-            title="Zone"
-          >
-            <option value="">All zones</option>
-            {zonesList.map((z) => (
-              <option key={z.id} value={z.id}>{z.label}</option>
-            ))}
-          </select>
-          <select
-            value={opsFilterWorker}
-            onChange={(e) => setOpsFilterWorker(e.target.value)}
-            className={styles.opsFilterSelect}
-            title="Worker"
-          >
-            <option value="">All workers</option>
-            {opsLogWorkers.map((w) => (
-              <option key={w} value={w}>{w}</option>
-            ))}
-          </select>
-          <select
-            value={opsFilterPeriod}
-            onChange={(e) => setOpsFilterPeriod(e.target.value)}
-            className={styles.opsFilterSelect}
-            title="Time period"
-          >
-            <option value="all">All time</option>
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-            <option value="custom">Custom range</option>
-          </select>
-          {opsFilterPeriod === 'custom' && (
-            <>
+      <section className={styles.section}>
+        <button type="button" className={styles.sectionHeader} onClick={() => setHarvestLogOpen((o) => !o)}>
+          <h2 className={styles.sectionTitle}><i className="fas fa-wheat-awn fa-fw" /> Harvest Log</h2>
+          <span className={styles.expandLabel}>{harvestLogOpen ? 'Collapse' : 'Expand'}</span>
+          <span className={styles.chevron}>{harvestLogOpen ? '▼' : '▶'}</span>
+        </button>
+        {harvestLogOpen && (
+          <>
+            <div className={invStyles.harvestFilters}>
+              <select
+                value={harvestFilterZone}
+                onChange={(e) => setHarvestFilterZone(e.target.value)}
+                className={invStyles.filterSelect}
+                title="Filter by zone"
+              >
+                <option value="">All zones</option>
+                {zonesList.map((z) => (
+                  <option key={z.id} value={z.id}>{z.label}</option>
+                ))}
+              </select>
+              <select
+                value={harvestFilterPeriod}
+                onChange={(e) => setHarvestFilterPeriod(e.target.value)}
+                className={invStyles.filterSelect}
+                title="Time period"
+              >
+                <option value="all">All time</option>
+                <option value="7d">Last 7 days</option>
+                <option value="30d">Last 30 days</option>
+                <option value="custom">Custom range</option>
+              </select>
+              {harvestFilterPeriod === 'custom' && (
+                <>
+                  <input
+                    type="date"
+                    value={harvestDateFrom}
+                    onChange={(e) => setHarvestDateFrom(e.target.value)}
+                    className={invStyles.filterDate}
+                    title="From date"
+                  />
+                  <input
+                    type="date"
+                    value={harvestDateTo}
+                    onChange={(e) => setHarvestDateTo(e.target.value)}
+                    className={invStyles.filterDate}
+                    title="To date"
+                  />
+                </>
+              )}
               <input
-                type="date"
-                value={opsFilterDateFrom}
-                onChange={(e) => setOpsFilterDateFrom(e.target.value)}
-                className={styles.opsFilterDate}
-                title="From"
+                type="text"
+                value={harvestFilterSearch}
+                onChange={(e) => setHarvestFilterSearch(e.target.value)}
+                placeholder="Search zone, lines, notes, quantity…"
+                className={invStyles.filterInput}
               />
-              <input
-                type="date"
-                value={opsFilterDateTo}
-                onChange={(e) => setOpsFilterDateTo(e.target.value)}
-                className={styles.opsFilterDate}
-                title="To"
-              />
-            </>
-          )}
-          <input
-            type="text"
-            value={opsFilterSearch}
-            onChange={(e) => setOpsFilterSearch(e.target.value)}
-            placeholder="Search worker, zone, lines, comments…"
-            className={styles.opsFilterSearch}
-          />
-        </div>
-        {recentProductionRecords.length === 0 ? (
-          <p className={styles.operationsLogEmpty}>No production records yet.</p>
-        ) : filteredOpsLog.length === 0 ? (
-          <p className={styles.operationsLogEmpty}>No records match the filter.</p>
-        ) : (
-          <div className={styles.operationsLogList}>
-            {filteredOpsLog.map((r) => (
-              <div key={r.id} className={styles.opsCard}>
-                {r.worker && (
-                  <div className={styles.opsRow}>
-                    <span className={styles.opsLabel}>Worker</span>
-                    <span className={styles.opsValue}>{r.worker}</span>
-                  </div>
-                )}
-                <div className={styles.opsRow}>
-                  <span className={styles.opsLabel}>Zone</span>
-                  <span className={styles.opsValue}>{r.zone || r.zoneId || '—'}</span>
-                </div>
-                <div className={styles.opsRow}>
-                  <span className={styles.opsLabel}>Lines</span>
-                  <span className={styles.opsValue}>{r.linesArea || r.lines || '—'}</span>
-                </div>
-                <div className={styles.opsRow}>
-                  <span className={styles.opsLabel}>Date / time</span>
-                  <span className={styles.opsValue}>{r.dateTime ? new Date(r.dateTime).toLocaleString() : (r.createdAt ? new Date(r.createdAt).toLocaleString() : '—')}</span>
-                </div>
-                {r.duration != null && (
-                  <div className={styles.opsRow}>
-                    <span className={styles.opsLabel}>Duration</span>
-                    <span className={styles.opsValue}>{r.duration} min</span>
-                  </div>
-                )}
-                {r.quantity != null && (
-                  <div className={styles.opsRow}>
-                    <span className={styles.opsLabel}>Quantity</span>
-                    <span className={styles.opsValue}>{`${r.quantity} ${r.unit || ''}`.trim()}</span>
-                  </div>
-                )}
-                {r.notes && (
-                  <div className={styles.opsRow}>
-                    <span className={styles.opsLabel}>Comment (worker)</span>
-                    <span className={styles.opsValue}>{r.notes}</span>
-                  </div>
-                )}
-                {r.engineerNotes && (
-                  <div className={styles.opsRow}>
-                    <span className={styles.opsLabel}>Engineer notes</span>
-                    <span className={styles.opsValue}>{r.engineerNotes}</span>
-                  </div>
-                )}
-                {r.imageData && (
-                  <div className={styles.opsRow}>
-                    <span className={styles.opsLabel}>Photo</span>
-                    <span className={styles.opsValue}>
-                      <button type="button" className={styles.opsPhotoThumb} onClick={() => setViewImageUrl(r.imageData)}>
-                        <img src={r.imageData} alt="" />
-                      </button>
-                    </span>
-                  </div>
-                )}
-                <div className={styles.opsRow}>
-                  <span className={styles.opsLabel} />
-                  <span className={styles.opsValue}>
-                    <button
-                      type="button"
-                      className={styles.opsActionLink}
-                      onClick={() => setProfileWorker((storeWorkers || []).find((w) => (r.workerId != null && String(w.id) === String(r.workerId)) || (w.fullName || '').trim() === (r.worker || '').trim()) || null)}
-                    >
-                      View Profile
-                    </button>
-                  </span>
-                </div>
+              <div className={invStyles.filtersBarExport}>
+                <button type="button" className={invStyles.btnSecondary} onClick={exportHarvestLogPDF} disabled={filteredHarvestRecords.length === 0} title="Download as PDF">
+                  <i className="fas fa-file-pdf fa-fw" /> Export PDF
+                </button>
               </div>
-            ))}
-          </div>
+            </div>
+            {filteredHarvestRecords.length === 0 ? (
+              <p className={invStyles.harvestEmpty}>
+                {harvestRecords.length === 0 ? 'No harvest inventory yet. Add them from Record Production (Harvest Record form).' : 'No records match the filter.'}
+              </p>
+            ) : (
+              <div className={invStyles.harvestTableWrap}>
+                <table className={invStyles.table}>
+                  <thead>
+                    <tr>
+                      <th>Zone</th>
+                      <th>Lines / Area</th>
+                      <th>Date &amp; time</th>
+                      <th>Quantity</th>
+                      <th>Unit</th>
+                      <th>Comment</th>
+                      <th>Photo</th>
+                      <th aria-label="Edit" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredHarvestRecords.map((r) => (
+                      <tr key={r.id}>
+                        <td>{r.zone || r.zoneId || '—'}</td>
+                        <td>{r.linesArea || r.lines || '—'}</td>
+                        <td>{r.dateTime ? new Date(r.dateTime).toLocaleString() : (r.createdAt ? new Date(r.createdAt).toLocaleString() : '—')}</td>
+                        <td>{r.quantity != null ? r.quantity : '—'}</td>
+                        <td>{r.unit || '—'}</td>
+                        <td className={invStyles.cellNotes}>{r.notes || '—'}</td>
+                        <td>
+                          {r.imageData ? (
+                            <button type="button" className={invStyles.photoThumb} onClick={() => setViewHarvestImage(r.imageData)}>
+                              <img src={r.imageData} alt="" />
+                            </button>
+                          ) : '—'}
+                        </td>
+                        <td className={styles.harvestActions}>
+                          <button type="button" className={styles.btnEdit} onClick={() => openEditHarvest(r)} title="Edit">
+                            <i className="fas fa-pen fa-fw" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </section>
 
-      {viewImageUrl && (
-        <div className={styles.imageOverlay} onClick={() => setViewImageUrl(null)} role="dialog" aria-modal="true">
-          <img src={viewImageUrl} alt="" className={styles.imageOverlayImg} onClick={(e) => e.stopPropagation()} />
-          <button type="button" className={styles.imageOverlayClose} onClick={() => setViewImageUrl(null)} aria-label="Close">×</button>
+      {viewHarvestImage && (
+        <div className={invStyles.imageOverlay} onClick={() => setViewHarvestImage(null)} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Escape' && setViewHarvestImage(null)}>
+          <img src={viewHarvestImage} alt="" className={invStyles.imageOverlayImg} onClick={(e) => e.stopPropagation()} />
         </div>
       )}
 
-      {profileWorker && (
-        <div className={styles.modalOverlay} onClick={() => setProfileWorker(null)}>
+      {editHarvestRecord && editForm && (
+        <div className={styles.modalOverlay} onClick={() => { setEditHarvestRecord(null); setEditForm(null) }} role="dialog" aria-modal="true">
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.modalHeader}>
-              <h3 className={styles.modalTitle}><i className="fas fa-user fa-fw" /> {profileWorker.fullName}</h3>
-              <button type="button" className={styles.closeBtn} onClick={() => setProfileWorker(null)} aria-label="Close">×</button>
-            </div>
-            <p className={styles.profileSubtitle}>{profileWorker.employeeId} · {profileWorker.department}</p>
-            <div className={styles.profileCreds}>
-              <div className={styles.profileCredRow}>
-                <span className={styles.profileCredLabel}>Username</span>
-                <strong className={styles.profileCredValue}>{profileWorker.employeeId || '—'}</strong>
+            <h3 className={styles.modalTitle}>Edit harvest record</h3>
+            <form onSubmit={handleSaveEditHarvest} className={styles.form}>
+              <div className={styles.row}>
+                <div className={styles.field}>
+                  <label>Zone</label>
+                  <select
+                    value={editForm.zoneId}
+                    onChange={(e) => setEditForm((f) => ({ ...f, zoneId: e.target.value }))}
+                    required
+                    className={styles.select}
+                  >
+                    <option value="">Select zone</option>
+                    {zonesList.map((z) => (
+                      <option key={z.id} value={z.id}>{z.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className={styles.field}>
+                  <label>Lines / Area range</label>
+                  <input
+                    type="text"
+                    value={editForm.linesArea}
+                    onChange={(e) => setEditForm((f) => ({ ...f, linesArea: e.target.value }))}
+                    placeholder="e.g. 5–8"
+                    className={styles.input}
+                  />
+                </div>
               </div>
-              <div className={styles.profileCredRow}>
-                <span className={styles.profileCredLabel}>Password</span>
-                <strong className={styles.profileCredValue}>{profileWorker.tempPassword || '—'}</strong>
+              <div className={styles.row}>
+                <div className={styles.field}>
+                  <label>Date &amp; time</label>
+                  <input
+                    type="datetime-local"
+                    value={editForm.dateTime}
+                    onChange={(e) => setEditForm((f) => ({ ...f, dateTime: e.target.value }))}
+                    required
+                    className={styles.input}
+                  />
+                </div>
+                <div className={styles.field}>
+                  <label>Quantity</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={editForm.quantity}
+                    onChange={(e) => setEditForm((f) => ({ ...f, quantity: e.target.value }))}
+                    required
+                    className={styles.input}
+                  />
+                </div>
+                <div className={styles.field}>
+                  <label>Unit</label>
+                  <select
+                    value={editForm.unit}
+                    onChange={(e) => setEditForm((f) => ({ ...f, unit: e.target.value }))}
+                    className={styles.select}
+                  >
+                    {UNITS.map((u) => (
+                      <option key={u.id} value={u.id}>{u.label}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            </div>
-            <div className={styles.profileQr}>
-              <span className={styles.profileCredLabel}>QR code (login)</span>
-              <img src={getQRCodeUrl(profileWorker.employeeId || '', 160)} alt="" className={styles.profileQrImg} />
-            </div>
-            <div className={styles.modalActions}>
-              <button type="button" className={styles.btnSecondary} onClick={() => setProfileWorker(null)}>Close</button>
-            </div>
+              <div className={styles.formBlock}>
+                <label className={styles.label}>Comment (optional)</label>
+                <textarea
+                  value={editForm.notes}
+                  onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
+                  rows={2}
+                  className={styles.textarea}
+                />
+              </div>
+              <div className={styles.modalActions}>
+                <button type="button" className={styles.btnDeleteInModal} onClick={handleDeleteHarvestFromEdit} title="Delete this record">
+                  <i className="fas fa-trash-alt fa-fw" /> Delete record
+                </button>
+                <div className={styles.modalActionsRight}>
+                  <button type="button" className={styles.btnSecondary} onClick={() => { setEditHarvestRecord(null); setEditForm(null) }}>
+                    Cancel
+                  </button>
+                  <button type="submit" className={styles.btnPrimary}>Save changes</button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}

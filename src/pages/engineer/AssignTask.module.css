@@ -1,4 +1,7 @@
-/* Assign Task – zone list, workspace grid, review, analytics */
+/* Assign Task – zone list, workspace grid, review, analytics
+ * REFERENCE: This file defines the shared page/section/modal/table/button specs
+ * used across all engineer and admin pages. Keep in sync when changing global UX.
+ */
 
 /* Font Awesome icon spacing within this page */
 .page :global(.fa-fw) {

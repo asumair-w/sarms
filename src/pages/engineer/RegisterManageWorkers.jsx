@@ -35,6 +35,17 @@ function isInTask(worker, sessions) {
 
 const IS_WORKER_OR_TECH = (role) => role === 'worker' || role === 'technician'
 
+/** Normalize task status for consistent comparison. */
+function normalizeTaskStatus(status) {
+  if (!status) return null
+  const s = String(status).toLowerCase()
+  if (s === TASK_STATUS.PENDING_APPROVAL || s === 'approved') return TASK_STATUS.PENDING_APPROVAL
+  if (s === TASK_STATUS.IN_PROGRESS) return TASK_STATUS.IN_PROGRESS
+  if (s === TASK_STATUS.COMPLETED) return TASK_STATUS.COMPLETED
+  if (s === TASK_STATUS.REJECTED) return TASK_STATUS.REJECTED
+  return null
+}
+
 /** Tasks assigned to worker (workerIds includes id). */
 function getWorkerTasks(tasks, workerId) {
   const wid = String(workerId)
@@ -47,29 +58,41 @@ function getTasksThisWeek(tasks, workerId) {
   return getWorkerTasks(tasks, workerId).filter((t) => new Date(t.createdAt).getTime() >= weekStart)
 }
 
-/** Overdue: not completed and past due (createdAt + estimatedMinutes). */
-function getOverdueTasks(tasks, workerId) {
+/** Overdue: not completed and past due. Uses session start time when task has an active session. */
+function getOverdueTasks(tasks, workerId, sessions = []) {
   const now = Date.now()
+  const activeSessionsByTaskId = sessions
+    .filter((s) => !s.completedAt && s.taskId)
+    .reduce((acc, s) => {
+      acc[String(s.taskId)] = s
+      return acc
+    }, {})
   return getWorkerTasks(tasks, workerId).filter((t) => {
-    if (t.status === TASK_STATUS.COMPLETED) return false
-    const created = new Date(t.createdAt).getTime()
+    if (normalizeTaskStatus(t.status) === TASK_STATUS.COMPLETED) return false
+    const created = t.createdAt ? new Date(t.createdAt).getTime() : 0
+    const session = activeSessionsByTaskId[String(t.id)]
+    if (!session && !created) return false
     const mins = t.estimatedMinutes || 60
-    const due = created + mins * 60 * 1000
-    return due < now
+    const dueTime = session
+      ? new Date(session.startTime).getTime() + (session.expectedMinutes ?? mins) * 60 * 1000
+      : created + mins * 60 * 1000
+    if (!Number.isFinite(dueTime) || dueTime <= 0) return false
+    return dueTime < now
   })
 }
 
-/** Active tasks (pending or in progress). */
+/** Active tasks (pending approval or in progress). */
 function getActiveTasks(tasks, workerId) {
-  return getWorkerTasks(tasks, workerId).filter(
-    (t) => t.status === TASK_STATUS.IN_PROGRESS || t.status === TASK_STATUS.PENDING_APPROVAL
-  )
+  return getWorkerTasks(tasks, workerId).filter((t) => {
+    const status = normalizeTaskStatus(t.status)
+    return status === TASK_STATUS.IN_PROGRESS || status === TASK_STATUS.PENDING_APPROVAL
+  })
 }
 
 function getEfficiency(tasks, workerId) {
   const assigned = getWorkerTasks(tasks, workerId)
   if (assigned.length === 0) return null
-  const completed = assigned.filter((t) => t.status === TASK_STATUS.COMPLETED).length
+  const completed = assigned.filter((t) => normalizeTaskStatus(t.status) === TASK_STATUS.COMPLETED).length
   return Math.round((completed / assigned.length) * 100)
 }
 
@@ -80,7 +103,7 @@ function efficiencyClass(pct) {
   return 'effLow'
 }
 
-export default function RegisterManageWorkers() {
+function RegisterManageWorkers() {
   const location = useLocation()
   const isEngineerRoute = location.pathname.startsWith('/engineer')
   const { lang } = useLanguage()
@@ -130,7 +153,6 @@ export default function RegisterManageWorkers() {
 
   const ranking = useMemo(() => {
     const list = isEngineerRoute ? (workers || []).filter((w) => w.role !== 'admin') : (workers || [])
-    const now = Date.now()
     let topPerformer = null
     let mostOverloaded = null
     let mostDelayed = null
@@ -139,9 +161,9 @@ export default function RegisterManageWorkers() {
     let maxOverdue = 0
     list.forEach((w) => {
       const weekTasks = getWorkerTasks(tasks || [], w.id).filter((t) => new Date(t.createdAt).getTime() >= weekStart)
-      const completedThisWeek = weekTasks.filter((t) => t.status === TASK_STATUS.COMPLETED).length
+      const completedThisWeek = weekTasks.filter((t) => normalizeTaskStatus(t.status) === TASK_STATUS.COMPLETED).length
       const activeCount = getActiveTasks(tasks || [], w.id).length
-      const overdueCount = getOverdueTasks(tasks || [], w.id).length
+      const overdueCount = getOverdueTasks(tasks || [], w.id, sessions || []).length
       if (completedThisWeek > maxCompleted) {
         maxCompleted = completedThisWeek
         topPerformer = { worker: w, value: completedThisWeek }
@@ -156,7 +178,7 @@ export default function RegisterManageWorkers() {
       }
     })
     return { topPerformer, mostOverloaded, mostDelayed }
-  }, [workers, tasks, weekStart, isEngineerRoute])
+  }, [workers, tasks, sessions, weekStart, isEngineerRoute])
 
   function openEdit(w) {
     setEditWorker(w)
@@ -254,13 +276,11 @@ export default function RegisterManageWorkers() {
 
   return (
     <div className={styles.page}>
-      <h1 className={styles.title}><i className="fas fa-users fa-fw" /> {t('navRegister')}</h1>
-
       {/* Worker Ranking Widget */}
       <section className={styles.rankingSection}>
         <h2 className={styles.rankingTitle}><i className="fas fa-trophy fa-fw" /> Worker Ranking</h2>
         <div className={styles.rankingGrid}>
-          <div className={`${styles.rankingCard} ${styles.rankingCardGood}`}>
+          <div className={`${styles.rankingCard} ${styles.rankingCardGold}`}>
             <span className={styles.rankingLabel}>Top Performer (this week)</span>
             {ranking.topPerformer ? (
               isEngineerRoute ? (
@@ -275,7 +295,7 @@ export default function RegisterManageWorkers() {
             )}
             {ranking.topPerformer && <span className={styles.rankingMetric}>{ranking.topPerformer.value} completed</span>}
           </div>
-          <div className={`${styles.rankingCard} ${styles.rankingCardGood}`}>
+          <div className={`${styles.rankingCard} ${styles.rankingCardNeutral}`}>
             <span className={styles.rankingLabel}>Most Overloaded (active tasks)</span>
             {ranking.mostOverloaded && ranking.mostOverloaded.value > 0 ? (
               isEngineerRoute ? (
@@ -320,9 +340,6 @@ export default function RegisterManageWorkers() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <button type="button" className={styles.addWorkerBtn} onClick={openAdd}>
-          <i className="fas fa-user-plus fa-fw" /> Add New Worker
-        </button>
         <select className={styles.filter} value={isEngineerRoute && filterRole === 'admin' ? '' : filterRole} onChange={(e) => setFilterRole(e.target.value)}>
           <option value="">All roles</option>
           {roleOptions.map((r) => (
@@ -346,6 +363,9 @@ export default function RegisterManageWorkers() {
           <option value="active">Active</option>
           <option value="not_active">Not active</option>
         </select>
+        <button type="button" className={styles.addWorkerBtn} onClick={openAdd}>
+          <i className="fas fa-user-plus fa-fw" /> Add New Worker
+        </button>
       </div>
 
       <div className={styles.tableWrap}>
@@ -373,7 +393,7 @@ export default function RegisterManageWorkers() {
               const showInTask = IS_WORKER_OR_TECH(w.role)
               const inTask = showInTask && isInTask(w, sessions)
               const tasksWeek = getTasksThisWeek(tasks || [], w.id).length
-              const overdue = getOverdueTasks(tasks || [], w.id).length
+              const overdue = getOverdueTasks(tasks || [], w.id, sessions || []).length
               const eff = getEfficiency(tasks || [], w.id)
               const effCls = styles[efficiencyClass(eff)]
               const skills = Array.isArray(w.skills) ? w.skills : []
@@ -554,3 +574,5 @@ export default function RegisterManageWorkers() {
     </div>
   )
 }
+
+export default RegisterManageWorkers

@@ -17,6 +17,7 @@ import {
 } from '../../data/faults'
 import { getInitialZones } from '../../data/workerFlow'
 import { useAppStore } from '../../context/AppStoreContext'
+import { nextFaultId, nextMaintenancePlanId, nextEquipmentId } from '../../utils/idGenerators'
 import styles from './LogFaultMaintenance.module.css'
 import eqStyles from './InventoryEquipment.module.css'
 
@@ -58,7 +59,6 @@ export default function LogFaultMaintenance() {
   const [equipmentOpen, setEquipmentOpen] = useState(true)
   const [eqFilterZone, setEqFilterZone] = useState('')
   const [eqFilterStatus, setEqFilterStatus] = useState('')
-  const [eqFilterInspection, setEqFilterInspection] = useState('')
   const [eqFilterSearch, setEqFilterSearch] = useState('')
   const [eqSortBy, setEqSortBy] = useState('name')
   const [eqSortDir, setEqSortDir] = useState('asc')
@@ -69,7 +69,18 @@ export default function LogFaultMaintenance() {
   const [openActionsId, setOpenActionsId] = useState(null)
   const [dropdownAnchor, setDropdownAnchor] = useState(null) // { top, left } for portal menu
   const [eqFilterHighFailure, setEqFilterHighFailure] = useState(false)
-  const [selectedSummaryWidget, setSelectedSummaryWidget] = useState(null) // 'equipment' | null
+  const [activeTicketsFilter, setActiveTicketsFilter] = useState('all') // 'all' | 'overdue' | 'this_week'
+  const activeTicketsSectionRef = useRef(null)
+  const equipmentSectionRef = useRef(null)
+
+  function scrollToTickets(filter) {
+    setActiveTicketsFilter(filter)
+    setTimeout(() => activeTicketsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
+  }
+  function scrollToEquipment() {
+    setEquipmentOpen(true)
+    setTimeout(() => equipmentSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
+  }
 
   const equipmentWithInspection = useMemo(() => {
     const today = getTodayLocal()
@@ -96,22 +107,31 @@ export default function LogFaultMaintenance() {
     })
   }, [equipment])
 
+  const equipmentWithLastCheck = useMemo(() => {
+    const toMs = (d) => (d ? new Date(d).getTime() : 0)
+    const toDateStr = (ms) => (ms ? new Date(ms).toISOString().slice(0, 10) : null)
+    return equipmentWithInspection.map((e) => {
+      let latestMs = toMs(e.lastInspection) || 0
+      let lastTicketCreatedMs = 0
+      ;(faults || []).forEach((f) => {
+        if (f.equipmentId !== e.id) return
+        if (toMs(f.createdAt) > latestMs) latestMs = toMs(f.createdAt)
+        if (toMs(f.resolvedAt) > latestMs) latestMs = toMs(f.resolvedAt)
+        if (toMs(f.createdAt) > lastTicketCreatedMs) lastTicketCreatedMs = toMs(f.createdAt)
+      })
+      ;(maintenancePlans || []).forEach((m) => {
+        if (m.equipmentId !== e.id) return
+        if (toMs(m.plannedDate) > latestMs) latestMs = toMs(m.plannedDate)
+        if (toMs(m.createdAt) > latestMs) latestMs = toMs(m.createdAt)
+        if (toMs(m.resolvedAt) > latestMs) latestMs = toMs(m.resolvedAt)
+        if (toMs(m.createdAt) > lastTicketCreatedMs) lastTicketCreatedMs = toMs(m.createdAt)
+      })
+      return { ...e, lastCheck: toDateStr(latestMs) || e.lastInspection || null, lastTicketCreated: lastTicketCreatedMs ? toDateStr(lastTicketCreatedMs) : null }
+    })
+  }, [equipmentWithInspection, faults, maintenancePlans])
+
   const inspectionDueSoonCount = useMemo(() => equipmentWithInspection.filter((e) => e.inspectionStatus === 'due_soon').length, [equipmentWithInspection])
   const inspectionOverdueCount = useMemo(() => equipmentWithInspection.filter((e) => e.inspectionStatus === 'overdue').length, [equipmentWithInspection])
-
-  const equipmentSummary = useMemo(() => {
-    const dueSoon = equipmentWithInspection.filter((e) => e.inspectionStatus === 'due_soon').length
-    const overdue = equipmentWithInspection.filter((e) => e.inspectionStatus === 'overdue').length
-    const now = Date.now()
-    const ms90 = 90 * 24 * 60 * 60 * 1000
-    const cutoff = now - ms90
-    const toMs = (d) => (d ? new Date(d).getTime() : 0)
-    const eventCountByEq = {}
-    ;(faults || []).forEach((f) => { if (toMs(f.createdAt) >= cutoff) eventCountByEq[f.equipmentId] = (eventCountByEq[f.equipmentId] || 0) + 1 })
-    ;(maintenancePlans || []).forEach((m) => { if (toMs(m.createdAt) >= cutoff || toMs(m.plannedDate) >= cutoff) eventCountByEq[m.equipmentId] = (eventCountByEq[m.equipmentId] || 0) + 1 })
-    const highActivity = Object.values(eventCountByEq).filter((c) => c >= 2).length
-    return { dueSoon, overdue, highActivity }
-  }, [equipmentWithInspection, faults, maintenancePlans])
 
   const { highFailureCount, highFailureIdsSet, failureCountByEquipmentId, failureRateByEquipmentId } = useMemo(() => {
     const now = Date.now()
@@ -139,11 +159,10 @@ export default function LogFaultMaintenance() {
   }, [faults, maintenancePlans])
 
   const filteredEquipment = useMemo(() => {
-    let list = equipmentWithInspection
+    let list = equipmentWithLastCheck
     if (eqFilterHighFailure) list = list.filter((e) => highFailureIdsSet.has(e.id))
     if (eqFilterZone) list = list.filter((e) => (e.zone || '').toLowerCase() === eqFilterZone.toLowerCase())
     if (eqFilterStatus) list = list.filter((e) => e.status === eqFilterStatus)
-    if (eqFilterInspection) list = list.filter((e) => (eqFilterInspection === 'not_scheduled' ? e.inspectionStatus == null : (e.inspectionStatus || '') === eqFilterInspection))
     if (eqFilterSearch.trim()) {
       const q = eqFilterSearch.trim().toLowerCase()
       const zoneNames = Object.fromEntries(zonesList.map((z) => [z.id, (z.label || z.name || z.id).toLowerCase()]))
@@ -151,16 +170,16 @@ export default function LogFaultMaintenance() {
     }
     const dir = eqSortDir === 'asc' ? 1 : -1
     return [...list].sort((a, b) => {
-      let va = a[eqSortBy] ?? ''
-      let vb = b[eqSortBy] ?? ''
       if (eqSortBy === 'lastInspection') {
-        va = va ? new Date(va).getTime() : 0
-        vb = vb ? new Date(vb).getTime() : 0
+        const va = a.lastCheck ? new Date(a.lastCheck).getTime() : 0
+        const vb = b.lastCheck ? new Date(b.lastCheck).getTime() : 0
         return dir * (va - vb)
       }
+      let va = a[eqSortBy] ?? ''
+      let vb = b[eqSortBy] ?? ''
       return dir * String(va).localeCompare(String(vb))
     })
-  }, [equipmentWithInspection, eqFilterHighFailure, highFailureIdsSet, eqFilterZone, eqFilterStatus, eqFilterInspection, eqFilterSearch, eqSortBy, eqSortDir, zonesList])
+  }, [equipmentWithLastCheck, eqFilterHighFailure, highFailureIdsSet, eqFilterZone, eqFilterStatus, eqFilterSearch, eqSortBy, eqSortDir, zonesList])
 
   const zoneLabelByKey = useMemo(() => Object.fromEntries(zonesList.map((z) => [z.id, z.label || z.name || z.id])), [zonesList])
   const equipmentZoneLabel = (zone) => zoneLabelByKey[(zone || '').toLowerCase()] || zoneLabelByKey[zone] || zone || '—'
@@ -210,6 +229,7 @@ export default function LogFaultMaintenance() {
         resolvedAt: f.resolvedAt,
         resolutionNote: f.resolutionNote,
         resolutionSpareParts: f.resolutionSpareParts,
+        resolutionPhoto: f.resolutionPhoto,
       })
     })
     ;(maintenancePlans || []).forEach((m) => {
@@ -229,10 +249,66 @@ export default function LogFaultMaintenance() {
         resolvedAt: m.resolvedAt,
         resolutionNote: m.resolutionNote,
         resolutionSpareParts: m.resolutionSpareParts,
+        resolutionPhoto: m.resolutionPhoto,
       })
     })
     return list
   }, [faults, maintenancePlans])
+
+  function getWeekBounds() {
+    const d = new Date()
+    const day = d.getDay()
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+    const mon = new Date(d)
+    mon.setDate(diff)
+    const sun = new Date(mon)
+    sun.setDate(mon.getDate() + 6)
+    const toStr = (x) => x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0')
+    return { weekStart: toStr(mon), weekEnd: toStr(sun) }
+  }
+
+  const workloadSummary = useMemo(() => {
+    const active = unifiedTickets.filter((t) => t.status !== 'completed')
+    const fault = active.filter((t) => t.ticketType === 'fault').length
+    const maintenanceScheduled = active.filter((t) => t.ticketType !== 'fault').length
+    return { openTickets: active.length, fault, maintenanceScheduled }
+  }, [unifiedTickets])
+
+  /** Overdue: only maintenance tickets (faults are urgent, no due date / don't count as overdue) */
+  const overdueSummary = useMemo(() => {
+    const active = unifiedTickets.filter((t) => t.status !== 'completed')
+    const maintenanceOverdue = active.filter((t) => t.ticketType !== 'fault' && t.dueDate && t.dueDate < todayStr).length
+    return { total: maintenanceOverdue, maintenanceOverdue }
+  }, [unifiedTickets, todayStr])
+
+  const equipmentStatusSummary = useMemo(() => {
+    const norm = (s) => (s || '').toLowerCase()
+    const activeCount = equipment.filter((e) => norm(e.status) === EQUIPMENT_STATUS.ACTIVE).length
+    const underCount = equipment.filter((e) => norm(e.status) === EQUIPMENT_STATUS.UNDER_MAINTENANCE).length
+    const outCount = equipment.filter((e) => norm(e.status) === EQUIPMENT_STATUS.OUT_OF_SERVICE).length
+    const openTicketEqIds = new Set(unifiedTickets.filter((t) => t.status !== 'completed').map((t) => t.equipmentId))
+    return { active: activeCount, underMaintenance: underCount, outOfService: outCount, withOpenTickets: openTicketEqIds.size }
+  }, [equipment, unifiedTickets])
+
+  const thisWeekSummary = useMemo(() => {
+    const { weekStart, weekEnd } = getWeekBounds()
+    const active = unifiedTickets.filter((t) => t.status !== 'completed')
+    const completed = unifiedTickets.filter((t) => t.status === 'completed')
+    const toDateStr = (d) => (d ? String(d).slice(0, 10) : '')
+    const maintenanceActive = active.filter((t) => t.ticketType !== 'fault')
+    const scheduled = maintenanceActive.filter((t) => {
+      const due = toDateStr(t.dueDate)
+      if (!due) return false
+      return due >= weekStart && due <= weekEnd
+    }).length
+    const completedThisWeek = completed.filter((t) => {
+      const r = t.resolvedAt || t.createdAt
+      if (!r) return false
+      const dateStr = toDateStr(r)
+      return dateStr >= weekStart && dateStr <= weekEnd
+    }).length
+    return { scheduled, completed: completedThisWeek }
+  }, [unifiedTickets, todayStr])
 
   const SEVERITY_ORDER = { critical: 4, high: 3, medium: 2, low: 1 }
   const activeTickets = useMemo(() => {
@@ -256,6 +332,21 @@ export default function LogFaultMaintenance() {
     unifiedTickets.filter((t) => t.status === 'completed').sort((a, b) => (new Date(b.resolvedAt || b.createdAt).getTime()) - (new Date(a.resolvedAt || a.createdAt).getTime())),
   [unifiedTickets])
 
+  const weekBounds = useMemo(() => getWeekBounds(), [todayStr])
+  const next7DaysEnd = useMemo(() => {
+    const d = new Date(todayStr + 'T12:00:00')
+    d.setDate(d.getDate() + 7)
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+  }, [todayStr])
+
+  const activeTicketsDisplay = useMemo(() => {
+    let list = activeTickets
+    if (activeTicketsFilter === 'overdue') list = list.filter((t) => t.ticketType !== 'fault' && t.dueDate && t.dueDate < todayStr)
+    else if (activeTicketsFilter === 'this_week') list = list.filter((t) => t.ticketType !== 'fault' && t.dueDate && t.dueDate >= todayStr && t.dueDate <= next7DaysEnd)
+    if (eqFilterHighFailure) list = list.filter((t) => t.ticketType === 'fault' && highFailureIdsSet.has(t.equipmentId))
+    return list
+  }, [activeTickets, activeTicketsFilter, todayStr, next7DaysEnd, eqFilterHighFailure, highFailureIdsSet])
+
   const [completedFilterEquipment, setCompletedFilterEquipment] = useState('')
   const [completedFilterType, setCompletedFilterType] = useState('')
   const [completedFilterDateFrom, setCompletedFilterDateFrom] = useState('')
@@ -277,6 +368,20 @@ export default function LogFaultMaintenance() {
     }
     return list
   }, [completedTickets, completedFilterEquipment, completedFilterType, completedFilterDateFrom, completedFilterDateTo])
+
+  useEffect(() => {
+    const todayMs = new Date(todayStr + 'T12:00:00').getTime()
+    const active = unifiedTickets.filter((t) => t.status !== 'completed')
+    active.forEach((t) => {
+      if (t.ticketType === 'fault' || !t.dueDate) return
+      const dueMs = new Date(t.dueDate + 'T12:00:00').getTime()
+      const daysRemaining = Math.floor((dueMs - todayMs) / 86400000)
+      const isRed = daysRemaining < 0 || daysRemaining <= 2
+      if (!isRed) return
+      const eq = equipment.find((x) => x.id === t.equipmentId)
+      if (eq?.status === EQUIPMENT_STATUS.ACTIVE) updateEquipmentItem(t.equipmentId, { status: EQUIPMENT_STATUS.UNDER_MAINTENANCE })
+    })
+  }, [unifiedTickets, equipment, todayStr, updateEquipmentItem])
 
   useEffect(() => {
     if (!openActionsId) return
@@ -302,12 +407,6 @@ export default function LogFaultMaintenance() {
     return () => window.removeEventListener('keydown', onKey)
   }, [viewHistoryEquipment])
   useEffect(() => {
-    if (!selectedSummaryWidget) return
-    const onKey = (e) => { if (e.key === 'Escape') setSelectedSummaryWidget(null) }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [selectedSummaryWidget])
-  useEffect(() => {
     if (!selectedCompletedTicket) return
     const onKey = (e) => { if (e.key === 'Escape') setSelectedCompletedTicket(null) }
     window.addEventListener('keydown', onKey)
@@ -323,19 +422,58 @@ export default function LogFaultMaintenance() {
         if (isOverdue && (openPreventive.severity !== 'high' || openPreventive.description !== 'Inspection overdue')) updateFault(openPreventive.id, { severity: 'high', description: 'Inspection overdue' })
         return
       }
-      addFault({ id: `F-PMA-${e.id}-${Date.now()}`, equipmentId: e.id, equipmentName: e.name, type: FAULT_TYPE_PREVENTIVE_ALERT, category: 'other', severity: isOverdue ? 'high' : 'medium', status: FAULT_STATUS_OPEN, stopWork: false, description: isOverdue ? 'Inspection overdue' : 'Inspection due within 7 days', createdAt: new Date().toISOString(), auto_generated: true })
+      addFault({ id: nextFaultId(faults), equipmentId: e.id, equipmentName: e.name, type: FAULT_TYPE_PREVENTIVE_ALERT, category: 'other', severity: isOverdue ? 'high' : 'medium', status: FAULT_STATUS_OPEN, stopWork: false, description: isOverdue ? 'Inspection overdue' : 'Inspection due within 7 days', createdAt: new Date().toISOString(), auto_generated: true })
     })
   }, [equipmentWithInspection, faults, addFault, updateFault])
 
-  function exportEquipmentCSV() {
-    const headers = ['Equipment name', 'Assigned zone', 'Operational status', 'Last inspection']
-    const rows = filteredEquipment.map((e) => [e.name ?? '', equipmentZoneLabel(e.zone), EQUIPMENT_STATUS_LABELS[e.status] ?? e.status ?? '', e.lastInspection ?? ''])
-    const csv = [headers.join(','), ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))].join('\n')
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
-    a.download = `equipment-${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(a.href)
+  function escapeHtml(s) {
+    const div = document.createElement('div')
+    div.textContent = s
+    return div.innerHTML
+  }
+
+  function exportEquipmentPDF() {
+    const dateStr = new Date().toISOString().slice(0, 10)
+    const rows = filteredEquipment.map((e) => `
+      <tr>
+        <td>${escapeHtml(e.name ?? '')}</td>
+        <td>${escapeHtml(equipmentZoneLabel(e.zone))}</td>
+        <td>${escapeHtml(EQUIPMENT_STATUS_LABELS[e.status] ?? e.status ?? '')}</td>
+        <td>${escapeHtml(e.lastCheck ?? '—')}</td>
+        <td>${escapeHtml(e.lastTicketCreated ?? '—')}</td>
+      </tr>
+    `).join('')
+    const html = `<!DOCTYPE html>
+<html dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <title>Equipment – ${dateStr}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 20px; color: #1e293b; }
+    h1 { font-size: 1.5rem; margin: 0 0 1rem; }
+    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 1rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th, td { border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; }
+    th { background: #f1f5f9; font-weight: 600; }
+    tr:nth-child(even) { background: #f8fafc; }
+  </style>
+</head>
+<body>
+  <h1>Manage Equipment</h1>
+  <p class="meta">Generated ${new Date().toLocaleString()} · ${filteredEquipment.length} item(s)</p>
+  <table>
+    <thead><tr><th>Equipment name</th><th>Assigned zone</th><th>Operational status</th><th>Next Service</th><th>Last Service</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <p class="meta" style="margin-top:1rem;">Use the browser print dialog and choose &quot;Save as PDF&quot; to save as PDF.</p>
+</body>
+</html>`
+    const win = window.open('', '_blank')
+    if (!win) return
+    win.document.write(html)
+    win.document.close()
+    win.focus()
+    setTimeout(() => { win.print(); win.onafterprint = () => win.close(); }, 250)
   }
   function handleSaveEditEquipment(e) {
     e.preventDefault()
@@ -346,7 +484,7 @@ export default function LogFaultMaintenance() {
   function handleAddEquipment(e) {
     e.preventDefault()
     if (!newEquipment.name.trim()) return
-    addEquipmentItem({ id: `eq${Date.now()}`, name: newEquipment.name.trim(), zone: newEquipment.zone || undefined, status: newEquipment.status || EQUIPMENT_STATUS.ACTIVE, lastInspection: newEquipment.lastInspection || undefined, createdAt: new Date().toISOString() })
+    addEquipmentItem({ id: nextEquipmentId(equipment), name: newEquipment.name.trim(), zone: newEquipment.zone || undefined, status: newEquipment.status || EQUIPMENT_STATUS.ACTIVE, lastInspection: newEquipment.lastInspection || undefined, createdAt: new Date().toISOString() })
     setNewEquipment({ name: '', zone: '', status: EQUIPMENT_STATUS.ACTIVE, lastInspection: '' })
     setAddEquipmentOpen(false)
   }
@@ -386,7 +524,7 @@ export default function LogFaultMaintenance() {
   const [createTicketEquipment, setCreateTicketEquipment] = useState(null)
   const [ticketForm, setTicketForm] = useState(defaultTicketForm())
   const [resolveTicket, setResolveTicket] = useState(null)
-  const [resolveForm, setResolveForm] = useState({ completionNote: '', spareParts: '' })
+  const [resolveForm, setResolveForm] = useState({ completionNote: '', spareParts: '', resolutionPhoto: null })
   const [completedTicketsOpen, setCompletedTicketsOpen] = useState(false)
 
   function openCreateTicket(eq) {
@@ -405,7 +543,7 @@ export default function LogFaultMaintenance() {
     if (t.ticketType === 'fault') {
       if (!t.description.trim()) return
       addFault({
-        id: `F${Date.now()}`,
+      id: nextFaultId(faults),
         equipmentId,
         equipmentName,
         category: t.category,
@@ -415,7 +553,7 @@ export default function LogFaultMaintenance() {
         status: FAULT_STATUS_OPEN,
         createdAt: new Date().toISOString(),
       })
-      if (t.stopWork) updateEquipmentItem(equipmentId, { status: EQUIPMENT_STATUS.OUT_OF_SERVICE })
+      updateEquipmentItem(equipmentId, { status: t.stopWork ? EQUIPMENT_STATUS.OUT_OF_SERVICE : EQUIPMENT_STATUS.UNDER_MAINTENANCE })
     } else {
       let plannedDate = t.plannedDate
       let intervalDays = null
@@ -425,7 +563,7 @@ export default function LogFaultMaintenance() {
         }
       }
       addMaintenancePlan({
-        id: `MP${Date.now()}`,
+        id: nextMaintenancePlanId(maintenancePlans),
         equipmentId,
         equipmentName,
         plannedDate,
@@ -434,7 +572,7 @@ export default function LogFaultMaintenance() {
         priority: t.ticketType === 'corrective' ? t.priority : undefined,
         inspectionIntervalDays: intervalDays || undefined,
         status: 'scheduled',
-        createdAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
       })
     }
     setCreateTicketOpen(false)
@@ -447,15 +585,15 @@ export default function LogFaultMaintenance() {
     if (!resolveTicket || !resolveForm.completionNote.trim()) return
     const now = new Date().toISOString()
     if (resolveTicket.source === 'fault') {
-      updateFault(resolveTicket.id, { status: FAULT_STATUS_RESOLVED, resolutionNote: resolveForm.completionNote.trim(), resolvedAt: now, resolutionSpareParts: resolveForm.spareParts.trim() || undefined })
+      updateFault(resolveTicket.id, { status: FAULT_STATUS_RESOLVED, resolutionNote: resolveForm.completionNote.trim(), resolvedAt: now, resolutionSpareParts: resolveForm.spareParts.trim() || undefined, resolutionPhoto: resolveForm.resolutionPhoto || undefined })
     } else {
-      updateMaintenancePlan(resolveTicket.id, { status: 'completed', resolvedAt: now, resolutionNote: resolveForm.completionNote.trim(), resolutionSpareParts: resolveForm.spareParts.trim() || undefined })
+      updateMaintenancePlan(resolveTicket.id, { status: 'completed', resolvedAt: now, resolutionNote: resolveForm.completionNote.trim(), resolutionSpareParts: resolveForm.spareParts.trim() || undefined, resolutionPhoto: resolveForm.resolutionPhoto || undefined })
       if (resolveTicket.ticketType === 'inspection' && resolveTicket.intervalDays) {
         const eq = equipment.find((x) => x.id === resolveTicket.equipmentId)
         if (eq) {
           const nextDate = addDaysLocal(getTodayLocal(), resolveTicket.intervalDays)
           addMaintenancePlan({
-            id: `MP${Date.now()}`,
+      id: nextMaintenancePlanId(maintenancePlans),
             equipmentId: resolveTicket.equipmentId,
             equipmentName: resolveTicket.equipmentName,
             plannedDate: nextDate,
@@ -470,11 +608,21 @@ export default function LogFaultMaintenance() {
     }
     const openForEq = unifiedTickets.filter((t) => t.equipmentId === resolveTicket.equipmentId && t.status !== 'completed' && t.id !== resolveTicket.id)
     if (openForEq.length === 0) {
-      const eqItem = equipment.find((x) => x.id === resolveTicket.equipmentId)
-      if (eqItem?.status === EQUIPMENT_STATUS.OUT_OF_SERVICE) updateEquipmentItem(resolveTicket.equipmentId, { status: EQUIPMENT_STATUS.ACTIVE })
+      updateEquipmentItem(resolveTicket.equipmentId, { status: EQUIPMENT_STATUS.ACTIVE })
     }
     setResolveTicket(null)
-    setResolveForm({ completionNote: '', spareParts: '' })
+    setResolveForm({ completionNote: '', spareParts: '', resolutionPhoto: null })
+  }
+
+  function handleResolvePhotoChange(e) {
+    const file = e.target.files?.[0]
+    if (!file || !file.type.startsWith('image/')) {
+      setResolveForm((f) => ({ ...f, resolutionPhoto: null }))
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => setResolveForm((f) => ({ ...f, resolutionPhoto: reader.result }))
+    reader.readAsDataURL(file)
   }
 
   return (
@@ -482,90 +630,53 @@ export default function LogFaultMaintenance() {
       <section className={eqStyles.summarySection}>
         <h2 className={eqStyles.summaryTitle}><i className="fas fa-chart-pie fa-fw" /> Summary</h2>
         <div className={eqStyles.summaryCards}>
-          <button type="button" className={`${eqStyles.summaryCard} ${eqStyles.summaryCardEquipment}`} onClick={() => setSelectedSummaryWidget(selectedSummaryWidget === 'equipment' ? null : 'equipment')} aria-pressed={selectedSummaryWidget === 'equipment'}>
-            <span className={eqStyles.summaryCardLabel}>Equipment</span>
-            <span className={eqStyles.summaryCardStockRow}><em>Due soon:</em> {equipmentSummary.dueSoon + equipmentSummary.overdue}</span>
-            <span className={eqStyles.summaryCardStockRow}><em>High activity (90d):</em> {equipmentSummary.highActivity}</span>
-          </button>
           <button
             type="button"
-            className={`${eqStyles.summaryCard} ${highFailureCount > 0 ? eqStyles.summaryCardHighFailureDanger : eqStyles.summaryCardHighFailureOk}`}
-            onClick={() => { setEqFilterHighFailure(true); setEquipmentOpen(true) }}
+            className={`${eqStyles.summaryCard} ${eqStyles.summaryCardHighFailure} ${highFailureCount > 0 ? eqStyles.summaryCardHighFailureDanger : eqStyles.summaryCardHighFailureOk}`}
+            onClick={() => { setEqFilterHighFailure(true); setEquipmentOpen(true); setTimeout(() => activeTicketsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100) }}
           >
-            <span className={eqStyles.summaryCardLabel}>High Failure Equipment</span>
-            <span className={eqStyles.summaryCardValue}>{highFailureCount} Devices</span>
-            <span className={eqStyles.summaryCardSub}>Threshold: ≥{HIGH_FAILURE_RATE_THRESHOLD} per month (rate)</span>
-            {highFailureCount > 0 ? <i className={`fas fa-triangle-exclamation ${eqStyles.summaryCardIcon}`} aria-hidden /> : <i className={`fas fa-circle-check ${eqStyles.summaryCardIcon}`} aria-hidden />}
+            <span className={eqStyles.summaryCardLabel}>HIGH FAILURE EQUIPMENT</span>
+            <div className={eqStyles.summaryCardBody}>
+              <div className={eqStyles.summaryRow}><span>Devices</span><strong>{highFailureCount}</strong></div>
+              <div className={eqStyles.summaryRowSub}>Threshold: ≥{HIGH_FAILURE_RATE_THRESHOLD} per week (twice per week)</div>
+            </div>
+          </button>
+
+          <button type="button" className={`${eqStyles.summaryCard} ${eqStyles.summaryCardWorkload}`} onClick={() => scrollToTickets('all')}>
+            <span className={eqStyles.summaryCardLabel}>WORKLOAD</span>
+            <div className={eqStyles.summaryCardBody}>
+              <div className={eqStyles.summaryRow}><span>Open Tickets</span><strong>{workloadSummary.openTickets}</strong></div>
+              <div className={eqStyles.summaryRow}><span>Fault</span><strong>{workloadSummary.fault}</strong></div>
+              <div className={eqStyles.summaryRow}><span>Maintenance (Scheduled)</span><strong>{workloadSummary.maintenanceScheduled}</strong></div>
+            </div>
+          </button>
+
+          <button type="button" className={`${eqStyles.summaryCard} ${eqStyles.summaryCardEquipmentStatus}`} onClick={() => scrollToEquipment()}>
+            <span className={eqStyles.summaryCardLabel}>EQUIPMENT STATUS</span>
+            <div className={eqStyles.summaryCardBody}>
+              <div className={eqStyles.summaryRow}><span>Active</span><strong>{equipmentStatusSummary.active}</strong></div>
+              <div className={eqStyles.summaryRow}><span>Under Maintenance</span><strong>{equipmentStatusSummary.underMaintenance}</strong></div>
+              <div className={eqStyles.summaryRow}><span>Out of Service</span><strong>{equipmentStatusSummary.outOfService}</strong></div>
+              <div className={eqStyles.summaryRowSub}>Equipment with open tickets: {equipmentStatusSummary.withOpenTickets}</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            className={`${eqStyles.summaryCard} ${eqStyles.summaryCardOverdueThisWeek} ${overdueSummary.total > 0 ? eqStyles.summaryCardOverdueDanger : eqStyles.summaryCardOverdueThisWeekOk}`}
+            onClick={() => scrollToTickets(overdueSummary.total > 0 ? 'overdue' : 'this_week')}
+          >
+            <span className={eqStyles.summaryCardLabel}>DUE & THIS WEEK</span>
+            <div className={eqStyles.summaryCardBody}>
+              <div className={eqStyles.summaryRow}><span>Overdue</span><strong>{overdueSummary.total}</strong></div>
+              <div className={eqStyles.summaryRow}><span>Scheduled this week</span><strong>{thisWeekSummary.scheduled}</strong></div>
+              <div className={eqStyles.summaryRow}><span>Completed this week</span><strong>{thisWeekSummary.completed}</strong></div>
+            </div>
           </button>
         </div>
       </section>
 
-      {selectedSummaryWidget === 'equipment' && (
-        <div className={eqStyles.modalOverlay} onClick={() => setSelectedSummaryWidget(null)}>
-          <div className={eqStyles.summaryPopupModal} onClick={(e) => e.stopPropagation()}>
-            <div className={eqStyles.widgetListHeader}>
-              <h3 className={eqStyles.modalTitle}>Equipment – Due soon &amp; High activity (90d)</h3>
-              <button type="button" className={eqStyles.widgetListClose} onClick={() => setSelectedSummaryWidget(null)} aria-label="Close">×</button>
-            </div>
-            <div className={eqStyles.widgetListContent}>
-              {(() => {
-                const dueSoonList = equipmentWithInspection.filter((e) => e.inspectionStatus === 'due_soon' || e.inspectionStatus === 'overdue')
-                const now = Date.now()
-                const ms90 = 90 * 24 * 60 * 60 * 1000
-                const cutoff = now - ms90
-                const toMs = (d) => (d ? new Date(d).getTime() : 0)
-                const eventCountByEq = {}
-                ;(faults || []).forEach((f) => { if (toMs(f.createdAt) >= cutoff) eventCountByEq[f.equipmentId] = (eventCountByEq[f.equipmentId] || 0) + 1 })
-                ;(maintenancePlans || []).forEach((m) => { if (toMs(m.createdAt) >= cutoff || toMs(m.plannedDate) >= cutoff) eventCountByEq[m.equipmentId] = (eventCountByEq[m.equipmentId] || 0) + 1 })
-                const highActivityIds = Object.entries(eventCountByEq).filter(([, c]) => c >= 2).map(([id]) => id)
-                const highActivityList = equipmentWithInspection.filter((e) => highActivityIds.includes(e.id))
-                return (
-                  <>
-                    {dueSoonList.length > 0 && (
-                      <>
-                        <h4 className={eqStyles.widgetSubTitle}>Due soon / Overdue</h4>
-                        <table className={eqStyles.table}>
-                          <thead><tr><th>Equipment</th><th>Zone</th><th>Next inspection</th><th>Status</th></tr></thead>
-                          <tbody>
-                            {dueSoonList.map((e) => (
-                              <tr key={e.id}>
-                                <td>{e.name}</td>
-                                <td>{equipmentZoneLabel(e.zone)}</td>
-                                <td>{e.nextInspection}</td>
-                                <td>{e.inspectionStatus === 'overdue' ? <span className={eqStyles.inspectionBadgeOverdue}>Overdue</span> : <span className={eqStyles.inspectionBadgeDueSoon}>Due Soon</span>}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </>
-                    )}
-                    {highActivityList.length > 0 && (
-                      <>
-                        <h4 className={eqStyles.widgetSubTitle}>High activity (2+ events in 90 days)</h4>
-                        <table className={eqStyles.table}>
-                          <thead><tr><th>Equipment</th><th>Zone</th><th>Events (90d)</th></tr></thead>
-                          <tbody>
-                            {highActivityList.map((e) => (
-                              <tr key={e.id}>
-                                <td>{e.name}</td>
-                                <td>{equipmentZoneLabel(e.zone)}</td>
-                                <td>{eventCountByEq[e.id] || 0}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </>
-                    )}
-                    {dueSoonList.length === 0 && highActivityList.length === 0 && <p className={eqStyles.widgetListEmpty}>No equipment due soon or with high activity.</p>}
-                  </>
-                )
-              })()}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <section className={eqStyles.section}>
+      <section ref={equipmentSectionRef} className={eqStyles.section}>
         <button type="button" className={eqStyles.sectionHeader} onClick={() => setEquipmentOpen((o) => !o)}>
           <h2 className={eqStyles.sectionTitle}><i className="fas fa-wrench fa-fw" /> Manage Equipment</h2>
           <span className={eqStyles.expandLabel}>{equipmentOpen ? 'Collapse' : 'Expand'}</span>
@@ -593,16 +704,6 @@ export default function LogFaultMaintenance() {
                 </select>
               </div>
               <div className={eqStyles.filtersRow}>
-                <span className={eqStyles.filterLabel}>Next Inspection</span>
-                <select value={eqFilterInspection} onChange={(e) => setEqFilterInspection(e.target.value)} className={eqStyles.filterSelect} title="Filter by next inspection status">
-                  <option value="">All</option>
-                  <option value="ok">On track</option>
-                  <option value="due_soon">Due Soon</option>
-                  <option value="overdue">Overdue</option>
-                  <option value="not_scheduled">Not scheduled</option>
-                </select>
-              </div>
-              <div className={eqStyles.filtersRow}>
                 <span className={eqStyles.filterLabel}>Search</span>
                 <input type="search" value={eqFilterSearch} onChange={(e) => setEqFilterSearch(e.target.value)} placeholder="Name, zone…" className={eqStyles.filterInput} />
               </div>
@@ -612,21 +713,25 @@ export default function LogFaultMaintenance() {
                   <button type="button" className={eqStyles.filterChipClear} onClick={() => setEqFilterHighFailure(false)} aria-label="Clear High Failure filter">×</button>
                 </div>
               )}
-              <button type="button" className={eqStyles.btnSecondary} onClick={exportEquipmentCSV} disabled={filteredEquipment.length === 0}>
-                <i className="fas fa-file-csv fa-fw" /> Export CSV
-              </button>
-              <button type="button" className={eqStyles.btnPrimary} onClick={() => openCreateTicket(null)}>
-                <i className="fas fa-plus fa-fw" /> Create Ticket
-              </button>
-              <button type="button" className={eqStyles.btnPrimary} onClick={() => setAddEquipmentOpen(true)}>
-                <i className="fas fa-plus fa-fw" /> Add Equipment
-              </button>
+              <div className={eqStyles.filtersBarActions}>
+                <button type="button" className={eqStyles.btnPrimary} onClick={() => openCreateTicket(null)}>
+                  <i className="fas fa-plus fa-fw" /> Create Ticket
+                </button>
+                <button type="button" className={eqStyles.btnPrimary} onClick={() => setAddEquipmentOpen(true)}>
+                  <i className="fas fa-plus fa-fw" /> Add Equipment
+                </button>
+              </div>
+              <div className={eqStyles.filtersBarExport}>
+                <button type="button" className={eqStyles.btnSecondary} onClick={exportEquipmentPDF} disabled={filteredEquipment.length === 0}>
+                  <i className="fas fa-file-pdf fa-fw" /> Export PDF
+                </button>
+              </div>
             </div>
             {(inspectionDueSoonCount > 0 || inspectionOverdueCount > 0) && (
               <div className={eqStyles.inspectionCounters}>
                 {inspectionDueSoonCount > 0 && <span className={eqStyles.inspectionCounterDueSoon}>Inspections Due Soon: {inspectionDueSoonCount}</span>}
                 {inspectionOverdueCount > 0 && <span className={eqStyles.inspectionCounterOverdue}>Overdue Inspections: {inspectionOverdueCount}</span>}
-              </div>
+          </div>
             )}
             <div className={eqStyles.tableWrap}>
               <table className={eqStyles.table}>
@@ -635,8 +740,8 @@ export default function LogFaultMaintenance() {
                     <th><button type="button" className={eqStyles.thSort} onClick={() => toggleEqSort('name')}>Equipment name {eqSortBy === 'name' ? (eqSortDir === 'asc' ? '↑' : '↓') : ''}</button></th>
                     <th><button type="button" className={eqStyles.thSort} onClick={() => toggleEqSort('zone')}>Assigned zone {eqSortBy === 'zone' ? (eqSortDir === 'asc' ? '↑' : '↓') : ''}</button></th>
                     <th>Operational status</th>
-                    <th><button type="button" className={eqStyles.thSort} onClick={() => toggleEqSort('lastInspection')}>Last inspection {eqSortBy === 'lastInspection' ? (eqSortDir === 'asc' ? '↑' : '↓') : ''}</button></th>
-                    <th>Service Cycle</th>
+                    <th><button type="button" className={eqStyles.thSort} onClick={() => toggleEqSort('lastInspection')}>Next Service {eqSortBy === 'lastInspection' ? (eqSortDir === 'asc' ? '↑' : '↓') : ''}</button></th>
+                    <th>Last Service</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -651,25 +756,8 @@ export default function LogFaultMaintenance() {
                       </td>
                       <td>{equipmentZoneLabel(e.zone)}</td>
                       <td><span className={eqStyles.eqBadge} data-status={e.status}>{EQUIPMENT_STATUS_LABELS[e.status]}</span></td>
-                      <td>{e.lastInspection}</td>
-                      <td className={eqStyles.cellServiceCycle}>
-                        {e.nextInspection == null ? (
-                          <div className={eqStyles.serviceCycleUnscheduled}>
-                            <span className={eqStyles.inspectionBadgeNone}>Not scheduled</span>
-                            {e.ageYears != null && <span className={eqStyles.serviceCycleAge}>Age: {e.ageYears.toFixed(1)}y</span>}
-                          </div>
-                        ) : (
-                          <div className={eqStyles.serviceCycleWrap}>
-                            <span className={e.remainingDays > 7 ? eqStyles.serviceCycleDaysOk : e.remainingDays >= 0 ? eqStyles.serviceCycleDaysSoon : eqStyles.serviceCycleDaysOverdue}>
-                              {e.remainingDays >= 0 ? `${e.remainingDays} days` : `-${Math.abs(e.remainingDays)} days`}
-                            </span>
-                            <div className={eqStyles.progressBarTrack}>
-                              <div className={(e.cycleProgress ?? 0) < 70 ? eqStyles.progressBarFillGreen : (e.cycleProgress ?? 0) < 100 ? eqStyles.progressBarFillYellow : eqStyles.progressBarFillRed} style={{ width: `${Math.min(100, e.cycleProgress ?? 0)}%` }} />
-                            </div>
-                            {e.ageYears != null && <span className={eqStyles.serviceCycleAge}>Age: {e.ageYears.toFixed(1)}y</span>}
-                          </div>
-                        )}
-                      </td>
+                      <td>{e.lastCheck ?? '—'}</td>
+                      <td className={eqStyles.cellServiceCycle}>{e.lastTicketCreated ?? '—'}</td>
                       <td className={eqStyles.cellActions}>
                         <div className={eqStyles.actionsWrap} data-actions-wrap>
                           <button
@@ -690,10 +778,10 @@ export default function LogFaultMaintenance() {
                           >
                             Actions <span className={eqStyles.actionsCaret}>{openActionsId === e.id ? '▲' : '▼'}</span>
                           </button>
-                        </div>
+                  </div>
                       </td>
                     </tr>
-                  ))}
+              ))}
                 </tbody>
               </table>
             </div>
@@ -701,19 +789,35 @@ export default function LogFaultMaintenance() {
         )}
       </section>
 
-      <section className={`${styles.section} ${styles.ticketsSection}`}>
+      <section ref={activeTicketsSectionRef} className={`${styles.section} ${styles.ticketsSection}`}>
         <h2 className={styles.sectionTitle}><i className="fas fa-ticket fa-fw" /> Equipment Tickets</h2>
-        <h3 className={styles.subTitle}>Active Tickets</h3>
-        {activeTickets.length === 0 ? (
-          <p className={styles.hint}>No active tickets. Use &quot;Create Ticket&quot; to add a fault, maintenance, or inspection.</p>
+        <h3 className={styles.subTitle}>
+          Active Tickets
+          {activeTicketsFilter !== 'all' && (
+            <span className={styles.filterBadge}>
+              {activeTicketsFilter === 'overdue' ? 'Overdue only' : 'This week only'}
+              <button type="button" className={styles.filterBadgeClear} onClick={() => setActiveTicketsFilter('all')} aria-label="Show all">×</button>
+            </span>
+          )}
+          {eqFilterHighFailure && (
+            <span className={styles.filterBadge}>
+              Fault tickets only
+            </span>
+          )}
+        </h3>
+        {activeTicketsDisplay.length === 0 ? (
+          <p className={styles.hint}>
+            {activeTickets.length === 0 ? 'No active tickets. Use &quot;Create Ticket&quot; to add a fault, maintenance, or inspection.' : eqFilterHighFailure ? 'No fault tickets for high-failure equipment.' : `No tickets match the current filter (${activeTicketsFilter === 'overdue' ? 'overdue' : 'this week'}).`}
+          </p>
         ) : (
           <div className={styles.ticketCards}>
-            {activeTickets.map((t) => {
+            {activeTicketsDisplay.map((t) => {
               const dueMs = t.dueDate ? new Date(t.dueDate + 'T12:00:00').getTime() : null
               const todayMs = new Date(todayStr + 'T12:00:00').getTime()
               const daysRemaining = dueMs != null ? Math.floor((dueMs - todayMs) / 86400000) : null
               const isOverdue = daysRemaining != null && daysRemaining < 0
               const urgencyClass = t.status === 'completed' ? styles.ticketCardCompleted
+                : t.ticketType === 'fault' ? styles.ticketCardUrgencyFault
                 : isOverdue ? styles.ticketCardUrgencyOverdue
                 : daysRemaining != null && daysRemaining <= 2 ? styles.ticketCardUrgencyRed
                 : daysRemaining != null && daysRemaining <= 7 ? styles.ticketCardUrgencyYellow
@@ -729,7 +833,7 @@ export default function LogFaultMaintenance() {
                   <div className={styles.ticketCardMeta}>Created: {new Date(t.createdAt).toLocaleDateString()}</div>
                   {t.severity && <div className={styles.ticketCardMeta}>Severity: {SEVERITY_OPTIONS.find((s) => s.id === t.severity)?.label ?? t.severity}</div>}
                   <div className={styles.ticketCardActions}>
-                    <button type="button" className={eqStyles.btnPrimary} onClick={() => { setResolveTicket(t); setResolveForm({ completionNote: '', spareParts: '' }); }}>Resolve</button>
+                    <button type="button" className={eqStyles.btnPrimary} onClick={() => { setResolveTicket(t); setResolveForm({ completionNote: '', spareParts: '', resolutionPhoto: null }); }}>Resolve</button>
                   </div>
                 </div>
               )
@@ -763,7 +867,7 @@ export default function LogFaultMaintenance() {
                   <input type="date" value={completedFilterDateFrom} onChange={(e) => setCompletedFilterDateFrom(e.target.value)} className={styles.completedFilterInput} />
                   <span className={styles.completedFilterLabel}>to</span>
                   <input type="date" value={completedFilterDateTo} onChange={(e) => setCompletedFilterDateTo(e.target.value)} className={styles.completedFilterInput} />
-                </div>
+        </div>
                 <div className={styles.ticketCards}>
                   {completedTicketsFiltered.length === 0 ? (
                     <p className={styles.hint}>No completed tickets match the current filters.</p>
@@ -779,10 +883,10 @@ export default function LogFaultMaintenance() {
                         <span className={`${styles.ticketCardType} ${t.ticketType === 'fault' ? styles.ticketCardTypeFault : t.ticketType === 'preventive' ? styles.ticketCardTypePreventive : t.ticketType === 'corrective' ? styles.ticketCardTypeCorrective : styles.ticketCardTypeInspection}`}>{t.ticketType === 'fault' ? 'Fault' : t.ticketType === 'preventive' ? 'Preventive' : t.ticketType === 'corrective' ? 'Corrective' : 'Inspection'}</span>
                         <div className={styles.ticketCardMeta}>Resolved: {(t.resolvedAt || t.createdAt) ? new Date(t.resolvedAt || t.createdAt).toLocaleDateString() : '—'}</div>
                         <span className={styles.ticketCardViewHint}>Click to view details</span>
-                      </button>
+          </button>
                     ))
                   )}
-                </div>
+        </div>
               </>
             )}
           </>
@@ -896,10 +1000,10 @@ export default function LogFaultMaintenance() {
                   <div className={eqStyles.formRow}>
                     <label>Stop Work?</label>
                     <select value={ticketForm.stopWork ? 'yes' : 'no'} onChange={(e) => setTicketForm((f) => ({ ...f, stopWork: e.target.value === 'yes' }))} className={eqStyles.input}>
-                      <option value="no">No</option>
-                      <option value="yes">Yes</option>
-                    </select>
-                  </div>
+                  <option value="no">No</option>
+                  <option value="yes">Yes</option>
+                </select>
+              </div>
                   <div className={eqStyles.formRow}>
                     <label>Description <span className={eqStyles.required}>*</span></label>
                     <textarea value={ticketForm.description} onChange={(e) => setTicketForm((f) => ({ ...f, description: e.target.value }))} required rows={3} className={eqStyles.input} placeholder="Describe the fault..." />
@@ -951,12 +1055,12 @@ export default function LogFaultMaintenance() {
                     <div className={eqStyles.formRow}>
                       <label>First Planned Date <span className={eqStyles.required}>*</span></label>
                       <input type="date" value={ticketForm.plannedDate} onChange={(e) => setTicketForm((f) => ({ ...f, plannedDate: e.target.value }))} required className={eqStyles.input} />
-                    </div>
+              </div>
                   )}
                   <div className={eqStyles.formRow}>
                     <label>Notes</label>
                     <input type="text" value={ticketForm.notes} onChange={(e) => setTicketForm((f) => ({ ...f, notes: e.target.value }))} className={eqStyles.input} placeholder="Optional" />
-                  </div>
+              </div>
                 </>
               )}
               <div className={eqStyles.modalActions}>
@@ -1014,7 +1118,13 @@ export default function LogFaultMaintenance() {
                     </>
                   )}
                   <dt>Photos</dt>
-                  <dd className={styles.detailMuted}>No photos attached</dd>
+                  <dd>
+                    {selectedCompletedTicket.resolutionPhoto ? (
+                      <img src={selectedCompletedTicket.resolutionPhoto} alt="Resolution" className={styles.resolutionPhoto} />
+                    ) : (
+                      <span className={styles.detailMuted}>No photos attached</span>
+                    )}
+                  </dd>
                 </dl>
               </section>
               <div className={eqStyles.modalActions}>
@@ -1027,7 +1137,7 @@ export default function LogFaultMaintenance() {
 
       {/* Resolve Ticket modal */}
       {resolveTicket && (
-        <div className={eqStyles.modalOverlay} onClick={() => { setResolveTicket(null); setResolveForm({ completionNote: '', spareParts: '' }); }}>
+        <div className={eqStyles.modalOverlay} onClick={() => { setResolveTicket(null); setResolveForm({ completionNote: '', spareParts: '', resolutionPhoto: null }); }}>
           <div className={eqStyles.modal} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
             <h3 className={eqStyles.modalTitle}>Resolve Ticket – {resolveTicket.equipmentName}</h3>
             <form onSubmit={submitResolve} className={eqStyles.modalForm}>
@@ -1041,10 +1151,11 @@ export default function LogFaultMaintenance() {
               </div>
               <div className={eqStyles.formRow}>
                 <label>Upload Photo (optional)</label>
-                <input type="file" accept="image/*" className={eqStyles.input} />
+                <input type="file" accept="image/*" onChange={handleResolvePhotoChange} className={eqStyles.input} />
+                {resolveForm.resolutionPhoto && <img src={resolveForm.resolutionPhoto} alt="Attached" className={styles.resolvePhotoPreview} />}
               </div>
               <div className={eqStyles.modalActions}>
-                <button type="button" className={eqStyles.btnSecondary} onClick={() => { setResolveTicket(null); setResolveForm({ completionNote: '', spareParts: '' }); }}>Cancel</button>
+                <button type="button" className={eqStyles.btnSecondary} onClick={() => { setResolveTicket(null); setResolveForm({ completionNote: '', spareParts: '', resolutionPhoto: null }); }}>Cancel</button>
                 <button type="submit" className={eqStyles.btnPrimary}>Save &amp; Complete</button>
               </div>
             </form>
@@ -1104,8 +1215,8 @@ export default function LogFaultMaintenance() {
               )}
             </div>
           </div>
-        </div>
-      )}
+            </div>
+          )}
 
       {/* Add equipment modal */}
       {addEquipmentOpen && (

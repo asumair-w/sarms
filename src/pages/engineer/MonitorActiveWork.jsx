@@ -1,5 +1,7 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import html2canvas from 'html2canvas'
+import { jsPDF } from 'jspdf'
 import { useNavigate } from 'react-router-dom'
 import {
   getSessionStatus,
@@ -7,9 +9,11 @@ import {
   SESSION_STATUS,
   SESSION_STATUS_LABELS,
 } from '../../data/monitorActive'
-import { getTasksForDepartment, getTaskById, getInitialZones } from '../../data/workerFlow'
+import { getTasksForDepartment, getTaskById, getInitialZones, getDepartment } from '../../data/workerFlow'
 import { DEPARTMENT_OPTIONS, getQRCodeUrl } from '../../data/engineerWorkers'
+import { TASK_STATUS } from '../../data/assignTask'
 import { useAppStore } from '../../context/AppStoreContext'
+import { nextRecordId } from '../../utils/idGenerators'
 import { useLanguage } from '../../context/LanguageContext'
 import {
   Chart as ChartJS,
@@ -24,6 +28,7 @@ import {
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
 import styles from './MonitorActiveWork.module.css'
+import opsLogStyles from './RecordProduction.module.css'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler)
 
@@ -62,15 +67,25 @@ function formatDuration(minutes) {
   return m ? `${h}h ${m}m` : `${h}h`
 }
 
+/** Normalize task status: consider any "in progress" variant as IN_PROGRESS. */
+function isTaskInProgress(status) {
+  if (status == null || status === '') return false
+  const s = String(status).toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_').trim()
+  return s === TASK_STATUS.IN_PROGRESS
+}
+
 export default function MonitorActiveWork() {
   const navigate = useNavigate()
   const { lang } = useLanguage()
-  const { sessions, updateSession, addRecord, zones: storeZones, workers } = useAppStore()
+  const { sessions, updateSession, addSession, addRecord, updateTaskStatus, records, zones: storeZones, workers, tasks } = useAppStore()
   const zonesList = (storeZones && storeZones.length > 0) ? storeZones : getInitialZones()
+  const ZONE_LABELS = useMemo(() => Object.fromEntries(zonesList.map((z) => [z.id, z.label])), [zonesList])
   const [filterDept, setFilterDept] = useState('')
   const [filterTaskId, setFilterTaskId] = useState('')
   const [filterZone, setFilterZone] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
   const [searchWorker, setSearchWorker] = useState('')
+  const activeWorkersTableRef = useRef(null)
   const [clickedCard, setClickedCard] = useState(null)
   const [viewSession, setViewSession] = useState(null)
   const [noteSession, setNoteSession] = useState(null)
@@ -82,6 +97,227 @@ export default function MonitorActiveWork() {
   const [openActionsSessionId, setOpenActionsSessionId] = useState(null)
   const [dropdownAnchor, setDropdownAnchor] = useState(null) // { top, left } for portal menu
   const [riskModalOpen, setRiskModalOpen] = useState(false)
+  const [opsFilterZone, setOpsFilterZone] = useState('')
+  const [opsFilterWorker, setOpsFilterWorker] = useState('')
+  const [opsFilterPeriod, setOpsFilterPeriod] = useState('all')
+  const [opsFilterDateFrom, setOpsFilterDateFrom] = useState('')
+  const [opsFilterDateTo, setOpsFilterDateTo] = useState('')
+  const [opsFilterSearch, setOpsFilterSearch] = useState('')
+  const [viewImageUrl, setViewImageUrl] = useState(null)
+
+  /** Operations log: production records (excluding harvest form), same as Record Production. */
+  const recentProductionRecords = useMemo(() => {
+    const list = (records || []).filter((r) => r.recordType === 'production' && r.source !== 'harvest_form')
+    return [...list].sort((a, b) => {
+      const ta = new Date(a.dateTime || a.createdAt || 0).getTime()
+      const tb = new Date(b.dateTime || b.createdAt || 0).getTime()
+      return tb - ta
+    })
+  }, [records])
+
+  const opsLogWorkers = useMemo(() => {
+    const set = new Set()
+    recentProductionRecords.forEach((r) => { if (r.worker?.trim()) set.add(r.worker.trim()) })
+    return [...set].sort()
+  }, [recentProductionRecords])
+
+  const filteredOpsLog = useMemo(() => {
+    let list = recentProductionRecords
+    if (opsFilterZone) {
+      const zoneLabel = ZONE_LABELS[opsFilterZone] || opsFilterZone
+      list = list.filter((r) => (r.zoneId || '') === opsFilterZone || (r.zone || '') === zoneLabel)
+    }
+    if (opsFilterWorker) list = list.filter((r) => (r.worker || '').trim() === opsFilterWorker)
+    const toDate = (d) => (d ? new Date(d).getTime() : 0)
+    const now = Date.now()
+    if (opsFilterPeriod === '7d') {
+      const from = now - 7 * 24 * 60 * 60 * 1000
+      list = list.filter((r) => toDate(r.dateTime || r.createdAt) >= from)
+    } else if (opsFilterPeriod === '30d') {
+      const from = now - 30 * 24 * 60 * 60 * 1000
+      list = list.filter((r) => toDate(r.dateTime || r.createdAt) >= from)
+    } else if (opsFilterPeriod === 'custom') {
+      if (opsFilterDateFrom) {
+        const from = new Date(opsFilterDateFrom).getTime()
+        list = list.filter((r) => toDate(r.dateTime || r.createdAt) >= from)
+      }
+      if (opsFilterDateTo) {
+        const to = new Date(opsFilterDateTo + 'T23:59:59').getTime()
+        list = list.filter((r) => toDate(r.dateTime || r.createdAt) <= to)
+      }
+    }
+    if (opsFilterSearch.trim()) {
+      const q = opsFilterSearch.trim().toLowerCase()
+      list = list.filter(
+        (r) =>
+          (r.worker || '').toLowerCase().includes(q) ||
+          (r.zone || '').toLowerCase().includes(q) ||
+          (r.linesArea || r.lines || '').toLowerCase().includes(q) ||
+          (r.notes || '').toLowerCase().includes(q) ||
+          (r.engineerNotes || '').toLowerCase().includes(q)
+      )
+    }
+    return list
+  }, [recentProductionRecords, opsFilterZone, opsFilterWorker, opsFilterPeriod, opsFilterDateFrom, opsFilterDateTo, opsFilterSearch])
+
+  /** Previous period (same length) for % change. */
+  const previousPeriodRecords = useMemo(() => {
+    const toDate = (d) => (d ? new Date(d).getTime() : 0)
+    const now = Date.now()
+    let from = 0
+    let to = now
+    if (opsFilterPeriod === '7d') {
+      to = now - 7 * 24 * 60 * 60 * 1000
+      from = now - 14 * 24 * 60 * 60 * 1000
+    } else if (opsFilterPeriod === '30d') {
+      to = now - 30 * 24 * 60 * 60 * 1000
+      from = now - 60 * 24 * 60 * 60 * 1000
+    } else if (opsFilterPeriod === 'custom' && opsFilterDateFrom && opsFilterDateTo) {
+      const currFrom = new Date(opsFilterDateFrom).getTime()
+      const currTo = new Date(opsFilterDateTo + 'T23:59:59').getTime()
+      const len = currTo - currFrom
+      to = currFrom - 1
+      from = currFrom - len
+    } else if (opsFilterPeriod === 'all') {
+      to = now - 30 * 24 * 60 * 60 * 1000
+      from = now - 60 * 24 * 60 * 60 * 1000
+    } else {
+      return []
+    }
+    let list = recentProductionRecords.filter((r) => {
+      const t = toDate(r.dateTime || r.createdAt)
+      return t >= from && t <= to
+    })
+    if (opsFilterZone) {
+      const zoneLabel = ZONE_LABELS[opsFilterZone] || opsFilterZone
+      list = list.filter((r) => (r.zoneId || '') === opsFilterZone || (r.zone || '') === zoneLabel)
+    }
+    if (opsFilterWorker) list = list.filter((r) => (r.worker || '').trim() === opsFilterWorker)
+    if (opsFilterSearch.trim()) {
+      const q = opsFilterSearch.trim().toLowerCase()
+      list = list.filter(
+        (r) =>
+          (r.worker || '').toLowerCase().includes(q) ||
+          (r.zone || '').toLowerCase().includes(q) ||
+          (r.linesArea || r.lines || '').toLowerCase().includes(q) ||
+          (r.notes || '').toLowerCase().includes(q) ||
+          (r.engineerNotes || '').toLowerCase().includes(q)
+      )
+    }
+    return list
+  }, [recentProductionRecords, opsFilterZone, opsFilterWorker, opsFilterPeriod, opsFilterDateFrom, opsFilterDateTo, opsFilterSearch])
+
+  const EXPECTED_AVG_MINUTES = 60
+  const YELLOW_AVG_MINUTES = 120
+
+  const kpiTotalRecords = useMemo(() => {
+    const total = filteredOpsLog.length
+    const previous = previousPeriodRecords.length
+    let pctChange = null
+    if (opsFilterPeriod !== 'all' && previous !== 0) {
+      const raw = Math.round(((total - previous) / previous) * 100)
+      pctChange = Math.max(-99, Math.min(999, raw))
+    }
+    let status = 'ok'
+    if (pctChange != null) {
+      if (pctChange >= 0) status = 'ok'
+      else if (pctChange < -20) status = 'high'
+      else status = 'warn'
+    }
+    return { total, pctChange, status }
+  }, [filteredOpsLog.length, previousPeriodRecords.length, opsFilterPeriod])
+
+  const kpiTotalLoggedTime = useMemo(() => {
+    const withDuration = filteredOpsLog.filter((r) => r.duration != null)
+    const totalMinutes = withDuration.reduce((s, r) => s + (Number(r.duration) || 0), 0)
+    const uniqueWorkers = new Set(filteredOpsLog.map((r) => (r.worker || '').trim()).filter(Boolean)).size
+    const avgPerWorkerMinutes = uniqueWorkers > 0 ? totalMinutes / uniqueWorkers : 0
+    return { totalMinutes, avgPerWorkerMinutes, uniqueWorkers }
+  }, [filteredOpsLog])
+
+  const kpiAvgDuration = useMemo(() => {
+    const withDuration = filteredOpsLog.filter((r) => r.duration != null)
+    if (withDuration.length === 0) return { avgMinutes: 0, status: 'none' }
+    const totalMinutes = withDuration.reduce((s, r) => s + (Number(r.duration) || 0), 0)
+    const avgMinutes = totalMinutes / withDuration.length
+    const status = avgMinutes <= EXPECTED_AVG_MINUTES ? 'ok' : avgMinutes <= YELLOW_AVG_MINUTES ? 'warn' : 'high'
+    return { avgMinutes, status }
+  }, [filteredOpsLog])
+
+  const kpiTopZone = useMemo(() => {
+    const byZone = {}
+    filteredOpsLog.forEach((r) => {
+      if (r.duration == null) return
+      const key = r.zoneId || r.zone || '—'
+      if (!byZone[key]) byZone[key] = { zoneId: r.zoneId, zone: r.zone || key, totalMinutes: 0 }
+      byZone[key].totalMinutes += Number(r.duration) || 0
+    })
+    const totalMinutes = Object.values(byZone).reduce((s, x) => s + x.totalMinutes, 0)
+    if (totalMinutes === 0) return null
+    const top = Object.values(byZone).sort((a, b) => b.totalMinutes - a.totalMinutes)[0]
+    const pct = Math.round((top.totalMinutes / totalMinutes) * 100)
+    const zoneIdForFilter = top.zoneId || (zonesList.find((z) => z.label === top.zone)?.id ?? '')
+    return { ...top, pct, zoneIdForFilter }
+  }, [filteredOpsLog, zonesList])
+
+  function formatMinutesToHoursMinutes(mins) {
+    if (mins == null || Number.isNaN(mins)) return '0h 0m'
+    const m = Math.round(Number(mins))
+    const h = Math.floor(m / 60)
+    const rem = m % 60
+    return `${h}h ${rem}m`
+  }
+
+  function printOpsLog() {
+    const prevTitle = document.title
+    document.title = `Operations log – ${new Date().toISOString().slice(0, 10)}`
+    window.print()
+    document.title = prevTitle
+  }
+
+  function exportOpsLogPDF() {
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+    const margin = 18
+    const lineHeight = 6
+    let y = margin
+    const maxY = 277
+
+    const addLine = (text, fontSize = 10, isBold = false) => {
+      if (y > maxY) { pdf.addPage(); y = margin }
+      pdf.setFontSize(fontSize)
+      pdf.setFont('helvetica', isBold ? 'bold' : 'normal')
+      const lines = pdf.splitTextToSize(text, 180)
+      lines.forEach((line) => {
+        if (y > maxY) { pdf.addPage(); y = margin }
+        pdf.text(line, margin, y)
+        y += lineHeight
+      })
+    }
+
+    addLine('Operations log', 16, true)
+    addLine(`Generated: ${new Date().toLocaleString()}`, 9)
+    y += 4
+
+    addLine('Filters applied', 11, true)
+    addLine(`Zone: ${opsFilterZone ? (ZONE_LABELS[opsFilterZone] || opsFilterZone) : 'All'}`)
+    addLine(`Worker: ${opsFilterWorker || 'All'}`)
+    addLine(`Period: ${opsFilterPeriod === '7d' ? 'Last 7 days' : opsFilterPeriod === '30d' ? 'Last 30 days' : opsFilterPeriod === 'custom' ? `${opsFilterDateFrom || '—'} to ${opsFilterDateTo || '—'}` : 'All time'}`)
+    if (opsFilterSearch.trim()) addLine(`Search: ${opsFilterSearch.trim()}`)
+    y += 4
+
+    addLine(`Records: ${filteredOpsLog.length}`, 11, true)
+    y += 4
+
+    filteredOpsLog.forEach((r, i) => {
+      addLine(`${i + 1}. ${r.worker || '—'} · ${r.zone || r.zoneId || '—'} · ${r.linesArea || r.lines || '—'}`, 10)
+      const dt = r.dateTime || r.createdAt
+      addLine(`   Date: ${dt ? new Date(dt).toLocaleString() : '—'} | Duration: ${r.duration != null ? `${r.duration} min` : '—'} | Qty: ${r.quantity != null ? r.quantity : '—'} ${r.unit || ''}`, 9)
+      if ((r.notes || '').trim()) addLine(`   Notes: ${String(r.notes).substring(0, 80)}${String(r.notes).length > 80 ? '…' : ''}`, 9)
+      y += 2
+    })
+
+    pdf.save(`Operations-log-${new Date().toISOString().slice(0, 10)}.pdf`)
+  }
 
   useEffect(() => {
     const ms = 60 * 1000
@@ -101,7 +337,67 @@ export default function MonitorActiveWork() {
   }, [openActionsSessionId])
 
   const now = Date.now()
-  const activeSessionsOnly = useMemo(() => sessions.filter((s) => !s.completedAt), [sessions])
+
+  /** Sessions from store that are not completed. */
+  const realActiveSessions = useMemo(() => sessions.filter((s) => !s.completedAt), [sessions])
+  /** Task IDs that already have at least one *active* session – only exclude from virtual if there's an active session for that task. */
+  const taskIdsWithActiveSession = useMemo(
+    () => new Set(realActiveSessions.map((s) => String(s.taskId)).filter(Boolean)),
+    [realActiveSessions]
+  )
+  /** Virtual sessions: every IN_PROGRESS task that does NOT have an active session (so completed-only sessions don't hide it). */
+  const virtualSessionsFromTasks = useMemo(() => {
+    const list = []
+    ;(tasks || []).forEach((task) => {
+      if (!isTaskInProgress(task.status)) return
+      if (task.id != null && taskIdsWithActiveSession.has(String(task.id))) return
+      const dept = getDepartment(task.departmentId)
+      const deptId = task.departmentId || task.taskType
+      const taskLabel = getTasksForDepartment(deptId)?.find((t) => t.id === task.taskId)
+      const zoneIdNorm = task.zoneId != null ? String(task.zoneId).toLowerCase() : ''
+      const zoneLabel = ZONE_LABELS[zoneIdNorm] ?? (zoneIdNorm === 'inventory' ? 'Inventory' : zoneIdNorm ? `Zone ${zoneIdNorm.toUpperCase()}` : '—')
+      const workerIds = Array.isArray(task.workerIds) ? task.workerIds : []
+      const departmentIdNorm = (task.departmentId || task.taskType || '').toLowerCase()
+      const baseSession = {
+        taskId: task.id,
+        departmentId: departmentIdNorm || task.departmentId,
+        department: dept?.labelEn ?? task.departmentId ?? '—',
+        taskTypeId: departmentIdNorm || task.departmentId,
+        task: taskLabel?.labelEn ?? task.taskId ?? '—',
+        zoneId: zoneIdNorm || task.zoneId,
+        zone: zoneLabel,
+        linesArea: task.linesArea || '—',
+        startTime: task.createdAt || new Date().toISOString(),
+        expectedMinutes: task.estimatedMinutes || 60,
+        assignedByEngineer: true,
+      }
+      if (workerIds.length === 0) {
+        list.push({
+          id: `task-${task.id}`,
+          workerId: '',
+          workerName: '—',
+          ...baseSession,
+        })
+      } else {
+        workerIds.forEach((wId) => {
+          const worker = (workers || []).find((w) => String(w.id) === String(wId))
+          list.push({
+            id: `task-${task.id}-${wId}`,
+            workerId: String(wId),
+            workerName: worker?.fullName ?? String(wId),
+            ...baseSession,
+          })
+        })
+      }
+    })
+    return list
+  }, [tasks, taskIdsWithActiveSession, workers, ZONE_LABELS])
+
+  /** Active work = real sessions + virtual sessions from IN_PROGRESS tasks without a session. */
+  const activeSessionsOnly = useMemo(
+    () => [...realActiveSessions, ...virtualSessionsFromTasks],
+    [realActiveSessions, virtualSessionsFromTasks]
+  )
   const completedSessionsOnly = useMemo(() => sessions.filter((s) => s.completedAt), [sessions])
   const completedCount = useMemo(() => completedSessionsOnly.length, [completedSessionsOnly])
   const sessionsWithStatus = useMemo(
@@ -137,7 +433,7 @@ export default function MonitorActiveWork() {
   const tasksForFilter = useMemo(() => getTasksForDepartment(filterDept), [filterDept])
 
   const filtered = useMemo(() => {
-    let list = clickedCard === 'completed' ? completedSessionsWithStatus : sessionsWithStatus
+    let list = sessionsWithStatus
     if (clickedCard === 'on_time') list = list.filter((s) => s.status === SESSION_STATUS.ON_TIME)
     else if (clickedCard === 'delayed') list = list.filter((s) => s.status === SESSION_STATUS.DELAYED)
     else if (clickedCard === 'flagged') list = list.filter((s) => s.status === SESSION_STATUS.FLAGGED)
@@ -154,6 +450,7 @@ export default function MonitorActiveWork() {
       )
     }
     if (filterZone) list = list.filter((s) => (s.zoneId || (s.zone && s.zone.toLowerCase())) === filterZone)
+    if (filterStatus) list = list.filter((s) => (s.status || '') === filterStatus)
     if (searchWorker.trim()) {
       const q = searchWorker.trim().toLowerCase()
       list = list.filter(
@@ -163,7 +460,7 @@ export default function MonitorActiveWork() {
       )
     }
     return list
-  }, [sessionsWithStatus, completedSessionsWithStatus, clickedCard, filterDept, filterTaskId, filterZone, searchWorker])
+  }, [sessionsWithStatus, clickedCard, filterDept, filterTaskId, filterZone, filterStatus, searchWorker])
 
   const sortedFiltered = useMemo(() => {
     const list = [...filtered]
@@ -276,10 +573,41 @@ export default function MonitorActiveWork() {
     return { zone, department: dept }
   }, [sessionsWithStatus])
 
-  function toggleFlag(sessionId) {
-    const s = sessions.find((x) => x.id === sessionId)
-    if (s) updateSession(sessionId, { flagged: !s.flagged })
-    if (viewSession?.id === sessionId) setViewSession((v) => (v ? { ...v, flagged: !v.flagged } : null))
+  function toggleFlag(sessionId, sessionData) {
+    const s = (sessions || []).find((x) => x.id === sessionId)
+    if (s) {
+      updateSession(sessionId, { flagged: !s.flagged })
+      if (viewSession?.id === sessionId) setViewSession((v) => (v ? { ...v, flagged: !v.flagged } : null))
+      return
+    }
+    /* Virtual session (from IN_PROGRESS task): add a real session so Flag/Unflag works */
+    if (sessionData && String(sessionId).startsWith('task-')) {
+      const newId = `s-assign-${sessionData.taskId || sessionId}-${sessionData.workerId || '0'}`
+      const existing = (sessions || []).find((x) => x.id === newId)
+      if (existing) {
+        updateSession(newId, { flagged: !existing.flagged })
+        if (viewSession?.id === newId) setViewSession((v) => (v ? { ...v, flagged: !v.flagged } : null))
+      } else {
+        addSession({
+          id: newId,
+          taskId: sessionData.taskId,
+          workerId: sessionData.workerId ?? '',
+          workerName: sessionData.workerName ?? '—',
+          departmentId: sessionData.departmentId,
+          department: sessionData.department,
+          taskTypeId: sessionData.taskTypeId,
+          task: sessionData.task,
+          zoneId: sessionData.zoneId,
+          zone: sessionData.zone,
+          linesArea: sessionData.linesArea,
+          startTime: sessionData.startTime,
+          expectedMinutes: sessionData.expectedMinutes ?? 60,
+          flagged: true,
+          notes: sessionData.notes ?? [],
+          assignedByEngineer: sessionData.assignedByEngineer ?? true,
+        })
+      }
+    }
   }
 
   function addNote(sessionId, text) {
@@ -290,37 +618,69 @@ export default function MonitorActiveWork() {
     setNoteText('')
   }
 
-  function markCompleted(sessionId) {
-    const s = sessions.find((x) => x.id === sessionId)
-    if (!s) return
+  function markCompleted(sessionId, sessionData) {
+    const s = (sessions || []).find((x) => x.id === sessionId)
     const completedAt = new Date().toISOString()
-    updateSession(sessionId, { completedAt })
-    if (viewSession?.id === sessionId) setViewSession(null)
-    if (noteSession?.id === sessionId) setNoteSession(null)
-    const startMs = new Date(s.startTime).getTime()
-    const durationMinutes = Math.round((Date.now() - startMs) / 60000)
-    const engineerNotesStr = (s.notes?.length)
-      ? s.notes.map((n) => `${new Date(n.at).toLocaleString()}: ${n.text}`).join('\n')
-      : undefined
-    const record = {
-      id: `R-${Date.now()}`,
-      recordType: 'production',
-      worker: s.workerName ?? '',
-      department: s.department ?? '',
-      task: s.task ?? '',
-      zone: s.zone ?? '',
-      zoneId: s.zoneId,
-      linesArea: s.linesArea ?? '',
-      lines: s.linesArea ?? '',
-      dateTime: completedAt,
-      createdAt: completedAt,
-      duration: durationMinutes,
-      startTime: s.startTime,
-      notes: undefined,
-      engineerNotes: engineerNotesStr,
-      imageData: s.imageData,
+
+    if (s) {
+      updateSession(sessionId, { completedAt })
+      if (viewSession?.id === sessionId) setViewSession(null)
+      if (noteSession?.id === sessionId) setNoteSession(null)
+      const startMs = new Date(s.startTime).getTime()
+      const durationMinutes = Math.round((Date.now() - startMs) / 60000)
+      const engineerNotesStr = (s.notes?.length)
+        ? s.notes.map((n) => `${new Date(n.at).toLocaleString()}: ${n.text}`).join('\n')
+        : undefined
+      addRecord({
+        id: nextRecordId(records),
+        recordType: 'production',
+        worker: s.workerName ?? '',
+        department: s.department ?? '',
+        task: s.task ?? '',
+        zone: s.zone ?? '',
+        zoneId: s.zoneId,
+        linesArea: s.linesArea ?? '',
+        lines: s.linesArea ?? '',
+        dateTime: completedAt,
+        createdAt: completedAt,
+        duration: durationMinutes,
+        startTime: s.startTime,
+        notes: undefined,
+        engineerNotes: engineerNotesStr,
+        imageData: s.imageData,
+      })
+      return
     }
-    addRecord(record)
+
+    /* Virtual session (from IN_PROGRESS task): mark task completed and add production record */
+    if (sessionData && String(sessionId).startsWith('task-') && sessionData.taskId) {
+      updateTaskStatus(sessionData.taskId, TASK_STATUS.COMPLETED)
+      if (viewSession?.id === sessionId) setViewSession(null)
+      if (noteSession?.id === sessionId) setNoteSession(null)
+      const startMs = sessionData.startTime ? new Date(sessionData.startTime).getTime() : Date.now()
+      const durationMinutes = Math.round((Date.now() - startMs) / 60000)
+      const engineerNotesStr = (sessionData.notes?.length)
+        ? sessionData.notes.map((n) => `${new Date(n.at).toLocaleString()}: ${n.text}`).join('\n')
+        : undefined
+      addRecord({
+        id: nextRecordId(records),
+        recordType: 'production',
+        worker: sessionData.workerName ?? '',
+        department: sessionData.department ?? '',
+        task: sessionData.task ?? '',
+        zone: sessionData.zone ?? '',
+        zoneId: sessionData.zoneId,
+        linesArea: sessionData.linesArea ?? '',
+        lines: sessionData.linesArea ?? '',
+        dateTime: completedAt,
+        createdAt: completedAt,
+        duration: durationMinutes,
+        startTime: sessionData.startTime,
+        notes: undefined,
+        engineerNotes: engineerNotesStr,
+        imageData: sessionData.imageData,
+      })
+    }
   }
 
   function handleSort(key) {
@@ -331,35 +691,36 @@ export default function MonitorActiveWork() {
     }
   }
 
-  function exportToCSV() {
-    const headers = ['Worker Name', 'ID', 'Department', 'Task', 'Zone', 'Lines/Area', 'Start Time', 'Duration', 'Source', 'Status']
-    const rows = sortedFiltered.map((s) => [
-      s.workerName ?? '',
-      s.employeeId ?? s.workerId ?? '',
-      s.department ?? '',
-      s.task ?? '',
-      s.zone ?? '',
-      s.linesArea ?? '',
-      s.startTime ? new Date(s.startTime).toLocaleString() : '',
-      formatDuration(s.elapsedMinutes ?? 0),
-      s.assignedByEngineer ? 'Assigned' : 'Self-started',
-      s.status === 'completed' ? 'Completed' : (SESSION_STATUS_LABELS[s.status] ?? s.status),
-    ])
-    const csv = [headers.join(','), ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))].join('\n')
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `monitor-sessions-${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  function printTable() {
-    const prevTitle = document.title
-    document.title = `Monitor Active Work – ${new Date().toLocaleString()}`
-    window.print()
-    document.title = prevTitle
+  function exportActiveWorkersPDF() {
+    const el = activeWorkersTableRef.current
+    if (!el) return
+    html2canvas(el, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+    }).then((canvas) => {
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF({
+        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      })
+      const pdfW = pdf.internal.pageSize.getWidth()
+      const pdfH = pdf.internal.pageSize.getHeight()
+      const margin = 10
+      const w = pdfW - margin * 2
+      const h = (canvas.height * w) / canvas.width
+      pdf.setFontSize(14)
+      pdf.text('Active Workers', margin, 12)
+      pdf.setFontSize(9)
+      pdf.text(new Date().toLocaleString(), margin, 18)
+      const imgH = Math.min(h, pdfH - 28)
+      const imgW = (canvas.width * imgH) / canvas.height
+      const imgX = margin + (w - imgW) / 2
+      pdf.addImage(imgData, 'PNG', imgX, 22, imgW, imgH)
+      pdf.save(`Active-Workers-${new Date().toISOString().slice(0, 10)}.pdf`)
+    }).catch(() => {})
   }
 
   return (
@@ -367,38 +728,33 @@ export default function MonitorActiveWork() {
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}><i className="fas fa-chart-pie fa-fw" /> Summary</h2>
         <div className={styles.cards}>
-          <button
-            type="button"
-            className={`${styles.card} ${clickedCard === 'tasks' ? styles.cardActive : ''}`}
-            onClick={() => setClickedCard(clickedCard === 'tasks' ? null : 'tasks')}
-          >
-            <span className={styles.cardLabel}>Active Tasks</span>
-            <span className={styles.cardValue}>{summary.activeTasks}</span>
-          </button>
-          <button
-            type="button"
-            className={`${styles.card} ${styles.cardDelayed} ${clickedCard === 'delayed' ? styles.cardActive : ''}`}
-            onClick={() => setClickedCard(clickedCard === 'delayed' ? null : 'delayed')}
-          >
-            <span className={styles.cardLabel}>Delayed Tasks</span>
-            <span className={styles.cardValue}>{summary.delayedTasks}</span>
-          </button>
-          <button
-            type="button"
-            className={`${styles.card} ${styles.cardFlagged} ${clickedCard === 'flagged' ? styles.cardActive : ''}`}
-            onClick={() => setClickedCard(clickedCard === 'flagged' ? null : 'flagged')}
-          >
-            <span className={styles.cardLabel}>Flagged Issues</span>
-            <span className={styles.cardValue}>{summary.flaggedIssues}</span>
-          </button>
-          <button
-            type="button"
-            className={`${styles.card} ${styles.cardCompleted} ${clickedCard === 'completed' ? styles.cardActive : ''}`}
-            onClick={() => setClickedCard(clickedCard === 'completed' ? null : 'completed')}
-          >
-            <span className={styles.cardLabel}>Completed</span>
-            <span className={styles.cardValue}>{summary.completedTasks}</span>
-          </button>
+          <div className={styles.cardCombined}>
+            <span className={styles.cardCombinedTitle}>Session Status</span>
+            <button
+              type="button"
+              className={`${styles.cardCombinedRow} ${clickedCard === 'tasks' ? styles.cardCombinedRowActive : ''}`}
+              onClick={() => setClickedCard(clickedCard === 'tasks' ? null : 'tasks')}
+            >
+              <span className={styles.cardCombinedLabel}>Active Tasks</span>
+              <span className={styles.cardCombinedValue}>{summary.activeTasks}</span>
+            </button>
+            <button
+              type="button"
+              className={`${styles.cardCombinedRow} ${styles.cardCombinedRowDelayed} ${clickedCard === 'delayed' ? styles.cardCombinedRowActive : ''}`}
+              onClick={() => setClickedCard(clickedCard === 'delayed' ? null : 'delayed')}
+            >
+              <span className={styles.cardCombinedLabel}>Delayed</span>
+              <span className={styles.cardCombinedValue}>{summary.delayedTasks}</span>
+            </button>
+            <button
+              type="button"
+              className={`${styles.cardCombinedRow} ${styles.cardCombinedRowFlagged} ${clickedCard === 'flagged' ? styles.cardCombinedRowActive : ''}`}
+              onClick={() => setClickedCard(clickedCard === 'flagged' ? null : 'flagged')}
+            >
+              <span className={styles.cardCombinedLabel}>Flagged</span>
+              <span className={styles.cardCombinedValue}>{summary.flaggedIssues}</span>
+            </button>
+          </div>
           <button
             type="button"
             className={`${styles.card} ${styles.cardRisk} ${styles[`cardRisk${performanceRisk.riskColor.charAt(0).toUpperCase() + performanceRisk.riskColor.slice(1)}`]}`}
@@ -411,20 +767,58 @@ export default function MonitorActiveWork() {
               {performanceRisk.trendDirection === 'up' ? '↑' : '↓'} {performanceRisk.trendDirection === 'up' ? '+' : ''}{performanceRisk.trendPercent}% vs last week
             </span>
           </button>
+          <div className={`${styles.mergedKpiCard} ${styles.mergedKpiCardRecords}`}>
+            <span className={styles.mergedKpiCardTitle}>Records & Zone</span>
+            <div className={styles.mergedKpiBlock}>
+              <span className={styles.mergedKpiLabel}>Total Records</span>
+              <span className={styles.mergedKpiValue}>{kpiTotalRecords.total}</span>
+              {kpiTotalRecords.pctChange != null && (
+                <span className={styles.mergedKpiSub}>
+                  {kpiTotalRecords.pctChange >= 0 ? '↑' : '↓'} {kpiTotalRecords.pctChange >= 0 ? '+' : ''}{kpiTotalRecords.pctChange}% vs previous period
+                </span>
+              )}
+            </div>
+            <div className={styles.mergedKpiBlock}>
+              <span className={styles.mergedKpiLabel}>Most Time-Consuming Zone</span>
+              {kpiTopZone ? (
+                <button type="button" className={styles.mergedKpiZoneBtn} onClick={() => setOpsFilterZone(kpiTopZone.zoneIdForFilter)} title="Filter by this zone">
+                  <span className={styles.mergedKpiValue}>{kpiTopZone.zone}</span>
+                  <span className={styles.mergedKpiSub}>{formatMinutesToHoursMinutes(kpiTopZone.totalMinutes)} ({kpiTopZone.pct}% of total)</span>
+                </button>
+              ) : (
+                <>
+                  <span className={styles.mergedKpiValue}>—</span>
+                  <span className={styles.mergedKpiSub}>No duration data</span>
+                </>
+              )}
+            </div>
+          </div>
+          <div className={`${styles.mergedKpiCard} ${styles.mergedKpiCardTime} ${kpiAvgDuration.status === 'ok' ? styles.mergedKpiCardOk : kpiAvgDuration.status === 'warn' ? styles.mergedKpiCardWarn : kpiAvgDuration.status === 'high' ? styles.mergedKpiCardHigh : ''}`}>
+            <span className={styles.mergedKpiCardTitle}>Time & Duration</span>
+            <div className={styles.mergedKpiBlock}>
+              <span className={styles.mergedKpiLabel}>Total Logged Time</span>
+              <span className={styles.mergedKpiValue}>{formatMinutesToHoursMinutes(kpiTotalLoggedTime.totalMinutes)}</span>
+              <span className={styles.mergedKpiSub}>Avg per Worker: {formatMinutesToHoursMinutes(kpiTotalLoggedTime.avgPerWorkerMinutes)}</span>
+            </div>
+            <div className={styles.mergedKpiBlock}>
+              <span className={styles.mergedKpiLabel}>Avg Duration</span>
+              <span className={styles.mergedKpiValue}>{formatMinutesToHoursMinutes(kpiAvgDuration.avgMinutes)}</span>
+              <span className={styles.mergedKpiSub}>
+                {kpiAvgDuration.status === 'ok' ? 'Within expected' : kpiAvgDuration.status === 'warn' ? 'Slightly above expected' : kpiAvgDuration.status === 'high' ? 'Above expected' : '—'}
+              </span>
+            </div>
+          </div>
         </div>
       </section>
 
       <section className={`${styles.section} ${styles.tableSection}`}>
         <div className={styles.filtersRow}>
           <h2 className={styles.sectionTitle}>
-            {clickedCard === 'completed' ? 'Completed Tasks' : clickedCard === 'delayed' ? 'Delayed Tasks' : clickedCard === 'flagged' ? 'Flagged Issues' : clickedCard === 'on_time' ? 'On Time Tasks' : 'Active Workers'}
+            {clickedCard === 'delayed' ? 'Delayed Tasks' : clickedCard === 'flagged' ? 'Flagged Issues' : clickedCard === 'on_time' ? 'On Time Tasks' : 'Active Workers'}
           </h2>
           <div className={styles.filtersActions}>
-            <button type="button" className={styles.exportBtn} onClick={exportToCSV}>
-              <i className="fas fa-file-csv fa-fw" /> Export CSV
-            </button>
-            <button type="button" className={styles.exportBtn} onClick={printTable}>
-              <i className="fas fa-print fa-fw" /> Print
+            <button type="button" className={styles.exportBtn} onClick={exportActiveWorkersPDF} disabled={sortedFiltered.length === 0}>
+              <i className="fas fa-file-pdf fa-fw" /> Export PDF
             </button>
           </div>
         </div>
@@ -468,6 +862,15 @@ export default function MonitorActiveWork() {
             </select>
           </div>
           <div className={styles.filterGroup}>
+            <label>Status</label>
+            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+              <option value="">All</option>
+              <option value={SESSION_STATUS.ON_TIME}>{SESSION_STATUS_LABELS[SESSION_STATUS.ON_TIME]}</option>
+              <option value={SESSION_STATUS.DELAYED}>{SESSION_STATUS_LABELS[SESSION_STATUS.DELAYED]}</option>
+              <option value={SESSION_STATUS.FLAGGED}>{SESSION_STATUS_LABELS[SESSION_STATUS.FLAGGED]}</option>
+            </select>
+          </div>
+          <div className={styles.filterGroup}>
             <label>Worker (name or ID)</label>
             <input
               type="search"
@@ -477,7 +880,7 @@ export default function MonitorActiveWork() {
             />
           </div>
         </div>
-        <div className={styles.tableWrap}>
+        <div className={styles.tableWrap} ref={activeWorkersTableRef}>
           <table className={styles.table}>
             <thead>
               <tr>
@@ -575,16 +978,175 @@ export default function MonitorActiveWork() {
             {openSession.status !== 'completed' && (
               <>
                 <button type="button" className={styles.actionsItem} onClick={() => { setNoteSession(openSession); setNoteText(''); closeMenu(); }}>Note</button>
-                <button type="button" className={styles.actionsItem} onClick={() => { toggleFlag(openSession.id); closeMenu(); }}>
+                <button type="button" className={styles.actionsItem} onClick={() => { toggleFlag(openSession.id, openSession); closeMenu(); }}>
                   {openSession.flagged ? 'Unflag' : 'Flag'}
                 </button>
-                <button type="button" className={`${styles.actionsItem} ${styles.actionsItemComplete}`} onClick={() => { markCompleted(openSession.id); closeMenu(); }}>Complete</button>
+                <button type="button" className={`${styles.actionsItem} ${styles.actionsItemComplete}`} onClick={() => { markCompleted(openSession.id, openSession); closeMenu(); }}>Complete</button>
               </>
             )}
           </div>,
           document.body
         )
       })()}
+
+      {/* Operations log (moved from Record Production) */}
+      <section className={opsLogStyles.operationsLogSection}>
+        <div className={opsLogStyles.opsLogHeader}>
+          <h2 className={opsLogStyles.sectionTitle}><i className="fas fa-list-check fa-fw" /> Operations log</h2>
+          <div className={opsLogStyles.opsLogHeaderActions}>
+            <button type="button" className={opsLogStyles.opsPrintBtn} onClick={exportOpsLogPDF} disabled={filteredOpsLog.length === 0} title="Download as PDF">
+              <i className="fas fa-file-pdf fa-fw" /> Export PDF
+            </button>
+            <button type="button" className={opsLogStyles.opsPrintBtn} onClick={printOpsLog} disabled={filteredOpsLog.length === 0} title="Print">
+              <i className="fas fa-print fa-fw" /> Print
+            </button>
+          </div>
+        </div>
+
+        <div className={opsLogStyles.opsFilters}>
+          <select
+            value={opsFilterZone}
+            onChange={(e) => setOpsFilterZone(e.target.value)}
+            className={opsLogStyles.opsFilterSelect}
+            title="Zone"
+          >
+            <option value="">All zones</option>
+            {zonesList.map((z) => (
+              <option key={z.id} value={z.id}>{z.label}</option>
+            ))}
+          </select>
+          <select
+            value={opsFilterWorker}
+            onChange={(e) => setOpsFilterWorker(e.target.value)}
+            className={opsLogStyles.opsFilterSelect}
+            title="Worker"
+          >
+            <option value="">All workers</option>
+            {opsLogWorkers.map((w) => (
+              <option key={w} value={w}>{w}</option>
+            ))}
+          </select>
+          <select
+            value={opsFilterPeriod}
+            onChange={(e) => setOpsFilterPeriod(e.target.value)}
+            className={opsLogStyles.opsFilterSelect}
+            title="Time period"
+          >
+            <option value="all">All time</option>
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+            <option value="custom">Custom range</option>
+          </select>
+          {opsFilterPeriod === 'custom' && (
+            <>
+              <input
+                type="date"
+                value={opsFilterDateFrom}
+                onChange={(e) => setOpsFilterDateFrom(e.target.value)}
+                className={opsLogStyles.opsFilterDate}
+                title="From"
+              />
+              <input
+                type="date"
+                value={opsFilterDateTo}
+                onChange={(e) => setOpsFilterDateTo(e.target.value)}
+                className={opsLogStyles.opsFilterDate}
+                title="To"
+              />
+            </>
+          )}
+          <input
+            type="text"
+            value={opsFilterSearch}
+            onChange={(e) => setOpsFilterSearch(e.target.value)}
+            placeholder="Search worker, zone, lines, comments…"
+            className={opsLogStyles.opsFilterSearch}
+          />
+        </div>
+        {recentProductionRecords.length === 0 ? (
+          <p className={opsLogStyles.operationsLogEmpty}>No production records yet.</p>
+        ) : filteredOpsLog.length === 0 ? (
+          <p className={opsLogStyles.operationsLogEmpty}>No records match the filter.</p>
+        ) : (
+          <div className={opsLogStyles.operationsLogList}>
+            {filteredOpsLog.map((r) => (
+              <div key={r.id} className={opsLogStyles.opsCard}>
+                {r.worker && (
+                  <div className={opsLogStyles.opsRow}>
+                    <span className={opsLogStyles.opsLabel}>Worker</span>
+                    <span className={opsLogStyles.opsValue}>{r.worker}</span>
+                  </div>
+                )}
+                <div className={opsLogStyles.opsRow}>
+                  <span className={opsLogStyles.opsLabel}>Zone</span>
+                  <span className={opsLogStyles.opsValue}>{r.zone || r.zoneId || '—'}</span>
+                </div>
+                <div className={opsLogStyles.opsRow}>
+                  <span className={opsLogStyles.opsLabel}>Lines</span>
+                  <span className={opsLogStyles.opsValue}>{r.linesArea || r.lines || '—'}</span>
+                </div>
+                <div className={opsLogStyles.opsRow}>
+                  <span className={opsLogStyles.opsLabel}>Date / time</span>
+                  <span className={opsLogStyles.opsValue}>{r.dateTime ? new Date(r.dateTime).toLocaleString() : (r.createdAt ? new Date(r.createdAt).toLocaleString() : '—')}</span>
+                </div>
+                {r.duration != null && (
+                  <div className={opsLogStyles.opsRow}>
+                    <span className={opsLogStyles.opsLabel}>Duration</span>
+                    <span className={opsLogStyles.opsValue}>{r.duration} min</span>
+                  </div>
+                )}
+                {r.quantity != null && (
+                  <div className={opsLogStyles.opsRow}>
+                    <span className={opsLogStyles.opsLabel}>Quantity</span>
+                    <span className={opsLogStyles.opsValue}>{`${r.quantity} ${r.unit || ''}`.trim()}</span>
+                  </div>
+                )}
+                {r.notes && (
+                  <div className={opsLogStyles.opsRow}>
+                    <span className={opsLogStyles.opsLabel}>Comment (worker)</span>
+                    <span className={opsLogStyles.opsValue}>{r.notes}</span>
+                  </div>
+                )}
+                {r.engineerNotes && (
+                  <div className={opsLogStyles.opsRow}>
+                    <span className={opsLogStyles.opsLabel}>Engineer notes</span>
+                    <span className={opsLogStyles.opsValue}>{r.engineerNotes}</span>
+                  </div>
+                )}
+                {r.imageData && (
+                  <div className={opsLogStyles.opsRow}>
+                    <span className={opsLogStyles.opsLabel}>Photo</span>
+                    <span className={opsLogStyles.opsValue}>
+                      <button type="button" className={opsLogStyles.opsPhotoThumb} onClick={() => setViewImageUrl(r.imageData)}>
+                        <img src={r.imageData} alt="" />
+                      </button>
+                    </span>
+                  </div>
+                )}
+                <div className={opsLogStyles.opsRow}>
+                  <span className={opsLogStyles.opsLabel} />
+                  <span className={opsLogStyles.opsValue}>
+                    <button
+                      type="button"
+                      className={opsLogStyles.opsActionLink}
+                      onClick={() => setProfileWorker((workers || []).find((w) => (r.workerId != null && String(w.id) === String(r.workerId)) || (w.fullName || '').trim() === (r.worker || '').trim()) || null)}
+                    >
+                      View Profile
+                    </button>
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {viewImageUrl && (
+        <div className={opsLogStyles.imageOverlay} onClick={() => setViewImageUrl(null)} role="dialog" aria-modal="true">
+          <img src={viewImageUrl} alt="" className={opsLogStyles.imageOverlayImg} onClick={(e) => e.stopPropagation()} />
+          <button type="button" className={opsLogStyles.imageOverlayClose} onClick={() => setViewImageUrl(null)} aria-label="Close">×</button>
+        </div>
+      )}
 
       {/* View session modal – use latest from store so notes/flag updates show */}
       {viewSession && (() => {
@@ -692,8 +1254,8 @@ export default function MonitorActiveWork() {
                       {
                         label: 'Delayed count',
                         data: riskTrendByDay.map((d) => d.count),
-                        borderColor: 'rgb(184, 83, 9)',
-                        backgroundColor: 'rgba(184, 83, 9, 0.1)',
+                        borderColor: '#fb923c',
+                        backgroundColor: '#fb923c20',
                         fill: true,
                         tension: 0.3,
                       },

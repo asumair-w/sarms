@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, useCallback, useEffect } from 'react'
+import { createContext, useContext, useReducer, useCallback, useEffect, useRef } from 'react'
 import { getInitialTasks, getInitialRecords } from '../data/assignTask'
 import { getInitialInventory, getInitialEquipment } from '../data/inventory'
 import { getInitialFaults, getInitialMaintenancePlans } from '../data/faults'
@@ -6,6 +6,7 @@ import { getInitialSessions } from '../data/monitorActive'
 import { getInitialZones } from '../data/workerFlow'
 import { TASK_STATUS } from '../data/assignTask'
 import { SEED_WORKERS } from '../data/engineerWorkers'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 const RECORDS_STORAGE_KEY = 'sarms-records'
 const SESSIONS_STORAGE_KEY = 'sarms-sessions'
@@ -14,6 +15,40 @@ const TASKS_STORAGE_KEY = 'sarms-tasks'
 const BATCHES_BY_ZONE_STORAGE_KEY = 'sarms-batches-by-zone'
 const DEFAULT_BATCH_BY_ZONE_STORAGE_KEY = 'sarms-default-batch-by-zone'
 const WORKERS_STORAGE_KEY = 'sarms-workers'
+const INVENTORY_STORAGE_KEY = 'sarms-inventory'
+const INVENTORY_MOVEMENTS_STORAGE_KEY = 'sarms-inventory-movements'
+const EQUIPMENT_STORAGE_KEY = 'sarms-equipment'
+const FAULTS_STORAGE_KEY = 'sarms-faults'
+const MAINTENANCE_PLANS_STORAGE_KEY = 'sarms-maintenance-plans'
+
+const SARMS_DATA_KEYS = [
+  RECORDS_STORAGE_KEY,
+  SESSIONS_STORAGE_KEY,
+  ZONES_STORAGE_KEY,
+  TASKS_STORAGE_KEY,
+  BATCHES_BY_ZONE_STORAGE_KEY,
+  DEFAULT_BATCH_BY_ZONE_STORAGE_KEY,
+  WORKERS_STORAGE_KEY,
+  INVENTORY_STORAGE_KEY,
+  INVENTORY_MOVEMENTS_STORAGE_KEY,
+  EQUIPMENT_STORAGE_KEY,
+  FAULTS_STORAGE_KEY,
+  MAINTENANCE_PLANS_STORAGE_KEY,
+]
+const WORKER_SESSION_PREFIX = 'sarms-worker-session-'
+
+/** Clears all SARMS data from localStorage (and worker session keys) so next load uses seed data. */
+export function clearAllSarmsDataStorage() {
+  try {
+    SARMS_DATA_KEYS.forEach((key) => localStorage.removeItem(key))
+    const keysToRemove = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith(WORKER_SESSION_PREFIX)) keysToRemove.push(key)
+    }
+    keysToRemove.forEach((key) => localStorage.removeItem(key))
+  } catch (_) {}
+}
 
 function loadRecords() {
   try {
@@ -107,6 +142,61 @@ function loadWorkers() {
   return SEED_WORKERS.map((w) => ({ ...w, skills: Array.isArray(w.skills) ? w.skills : [] }))
 }
 
+function loadInventory() {
+  try {
+    const raw = localStorage.getItem(INVENTORY_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+    }
+  } catch (_) {}
+  return getInitialInventory()
+}
+
+function loadInventoryMovements() {
+  try {
+    const raw = localStorage.getItem(INVENTORY_MOVEMENTS_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) return parsed
+    }
+  } catch (_) {}
+  return []
+}
+
+function loadEquipment() {
+  try {
+    const raw = localStorage.getItem(EQUIPMENT_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) return parsed
+    }
+  } catch (_) {}
+  return getInitialEquipment()
+}
+
+function loadFaults() {
+  try {
+    const raw = localStorage.getItem(FAULTS_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) return parsed
+    }
+  } catch (_) {}
+  return getInitialFaults()
+}
+
+function loadMaintenancePlans() {
+  try {
+    const raw = localStorage.getItem(MAINTENANCE_PLANS_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) return parsed
+    }
+  } catch (_) {}
+  return getInitialMaintenancePlans()
+}
+
 /** Build full initial state (used on every provider mount so persisted data is never lost on remount/HMR). */
 function getInitialState() {
   return {
@@ -117,10 +207,77 @@ function getInitialState() {
     batchesByZone: loadBatchesByZone(),
     defaultBatchByZone: loadDefaultBatchByZone(),
     workers: loadWorkers(),
-    inventory: getInitialInventory(),
-    equipment: getInitialEquipment(),
-    faults: getInitialFaults(),
-    maintenancePlans: getInitialMaintenancePlans(),
+    inventory: loadInventory(),
+    inventoryMovements: loadInventoryMovements(),
+    equipment: loadEquipment(),
+    faults: loadFaults(),
+    maintenancePlans: loadMaintenancePlans(),
+    hydrateDone: false,
+  }
+}
+
+/** Fetch all SARMS data from Supabase and return state shape. */
+async function fetchSupabaseState() {
+  if (!supabase) return null
+  const tables = [
+    'workers', 'zones', 'tasks', 'records', 'sessions',
+    'inventory', 'inventory_movements', 'equipment', 'faults', 'maintenance_plans', 'settings'
+  ]
+  const out = {}
+  try {
+    for (const table of tables) {
+      if (table === 'settings') {
+        const { data, error } = await supabase.from('settings').select('key, value')
+        if (error) {
+          if (error.code === '42P01') continue
+          console.warn('Supabase settings:', error.message)
+          continue
+        }
+        const rows = data || []
+        const batchesRow = rows.find((r) => r.key === BATCHES_BY_ZONE_STORAGE_KEY)
+        const defaultRow = rows.find((r) => r.key === DEFAULT_BATCH_BY_ZONE_STORAGE_KEY)
+        out.batchesByZone = batchesRow && typeof batchesRow.value === 'object' ? batchesRow.value : {}
+        out.defaultBatchByZone = defaultRow && typeof defaultRow.value === 'object' ? defaultRow.value : {}
+        continue
+      }
+      const { data, error } = await supabase.from(table).select('id, data')
+      if (error) {
+        if (error.code === '42P01') continue
+        console.warn(`Supabase ${table}:`, error.message)
+        continue
+      }
+      const list = (data || []).map((row) => (row.data && typeof row.data === 'object' ? { ...row.data, id: row.id } : { id: row.id }))
+      const key = table === 'inventory_movements' ? 'inventoryMovements' : table.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
+      out[key] = list
+    }
+    return out
+  } catch (e) {
+    console.warn('fetchSupabaseState:', e)
+    return null
+  }
+}
+
+/** Persist a list to Supabase (replace table). */
+async function persistTable(tableName, list) {
+  if (!supabase || !Array.isArray(list)) return
+  try {
+    await supabase.from(tableName).delete().neq('id', '')
+    if (list.length > 0) {
+      const rows = list.map((item) => ({ id: item.id, data: item }))
+      await supabase.from(tableName).insert(rows)
+    }
+  } catch (e) {
+    console.warn(`Supabase persist ${tableName}:`, e)
+  }
+}
+
+/** Persist settings key. */
+async function persistSetting(key, value) {
+  if (!supabase) return
+  try {
+    await supabase.from('settings').upsert({ key, value: value || {} }, { onConflict: 'key' })
+  } catch (e) {
+    console.warn('Supabase persist settings:', e)
   }
 }
 
@@ -150,6 +307,17 @@ function storeReducer(state, action) {
     }
     case 'ADD_RECORD':
       return { ...state, records: [action.payload, ...state.records] }
+    case 'UPDATE_RECORD': {
+      const { recordId, updates } = action.payload
+      return {
+        ...state,
+        records: state.records.map((r) =>
+          r.id === recordId ? { ...r, ...updates } : r
+        ),
+      }
+    }
+    case 'REMOVE_RECORD':
+      return { ...state, records: state.records.filter((r) => r.id !== action.payload) }
     case 'SET_SESSIONS':
       return { ...state, sessions: action.payload }
     case 'ADD_SESSION':
@@ -185,6 +353,8 @@ function storeReducer(state, action) {
       const itemId = action.payload
       return { ...state, inventory: state.inventory.filter((i) => i.id !== itemId) }
     }
+    case 'ADD_INVENTORY_MOVEMENT':
+      return { ...state, inventoryMovements: [action.payload, ...state.inventoryMovements] }
     case 'SET_EQUIPMENT':
       return { ...state, equipment: action.payload }
     case 'ADD_EQUIPMENT':
@@ -254,6 +424,12 @@ function storeReducer(state, action) {
         ),
       }
     }
+    case 'RESET_TO_SEED':
+      return getInitialState()
+    case 'HYDRATE':
+      return { ...state, ...action.payload, hydrateDone: true }
+    case 'HYDRATE_DONE':
+      return { ...state, hydrateDone: true }
     default:
       return state
   }
@@ -263,48 +439,112 @@ const AppStoreContext = createContext(null)
 
 export function AppStoreProvider({ children }) {
   const [state, dispatch] = useReducer(storeReducer, undefined, getInitialState)
+  const supabaseHydrateDone = useRef(false)
+
+  // Hydrate from Supabase once on mount (if configured). When done, HYDRATE_DONE triggers persist effects so initial/seed data is pushed to Supabase.
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      supabaseHydrateDone.current = true
+      dispatch({ type: 'HYDRATE_DONE' })
+      return
+    }
+    let cancelled = false
+    fetchSupabaseState().then((payload) => {
+      supabaseHydrateDone.current = true
+      if (cancelled) {
+        dispatch({ type: 'HYDRATE_DONE' })
+        return
+      }
+      const hasAny = payload && Object.values(payload).some((v) => Array.isArray(v) ? v.length > 0 : typeof v === 'object' && v !== null && Object.keys(v).length > 0)
+      if (hasAny) dispatch({ type: 'HYDRATE', payload })
+      else dispatch({ type: 'HYDRATE_DONE' })
+    }).catch(() => {
+      supabaseHydrateDone.current = true
+      dispatch({ type: 'HYDRATE_DONE' })
+    })
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(state.records))
-    } catch (_) {}
-  }, [state.records])
+    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
+    if (isSupabaseConfigured) {
+      persistTable('records', state.records)
+    } else {
+      try { localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(state.records)) } catch (_) {}
+    }
+  }, [state.records, state.hydrateDone])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(state.sessions))
-    } catch (_) {}
-  }, [state.sessions])
+    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
+    if (isSupabaseConfigured) persistTable('sessions', state.sessions)
+    else try { localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(state.sessions)) } catch (_) {}
+  }, [state.sessions, state.hydrateDone])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(ZONES_STORAGE_KEY, JSON.stringify(state.zones))
-    } catch (_) {}
-  }, [state.zones])
+    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
+    if (isSupabaseConfigured) persistTable('zones', state.zones)
+    else try { localStorage.setItem(ZONES_STORAGE_KEY, JSON.stringify(state.zones)) } catch (_) {}
+  }, [state.zones, state.hydrateDone])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(state.tasks))
-    } catch (_) {}
-  }, [state.tasks])
+    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
+    if (isSupabaseConfigured) persistTable('tasks', state.tasks)
+    else try { localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(state.tasks)) } catch (_) {}
+  }, [state.tasks, state.hydrateDone])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(BATCHES_BY_ZONE_STORAGE_KEY, JSON.stringify(state.batchesByZone))
-    } catch (_) {}
-  }, [state.batchesByZone])
+    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
+    if (isSupabaseConfigured) {
+      persistSetting(BATCHES_BY_ZONE_STORAGE_KEY, state.batchesByZone)
+    } else {
+      try { localStorage.setItem(BATCHES_BY_ZONE_STORAGE_KEY, JSON.stringify(state.batchesByZone)) } catch (_) {}
+    }
+  }, [state.batchesByZone, state.hydrateDone])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(DEFAULT_BATCH_BY_ZONE_STORAGE_KEY, JSON.stringify(state.defaultBatchByZone))
-    } catch (_) {}
-  }, [state.defaultBatchByZone])
+    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
+    if (isSupabaseConfigured) {
+      persistSetting(DEFAULT_BATCH_BY_ZONE_STORAGE_KEY, state.defaultBatchByZone)
+    } else {
+      try { localStorage.setItem(DEFAULT_BATCH_BY_ZONE_STORAGE_KEY, JSON.stringify(state.defaultBatchByZone)) } catch (_) {}
+    }
+  }, [state.defaultBatchByZone, state.hydrateDone])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(WORKERS_STORAGE_KEY, JSON.stringify(state.workers))
-    } catch (_) {}
-  }, [state.workers])
+    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
+    if (isSupabaseConfigured) persistTable('workers', state.workers)
+    try { localStorage.setItem(WORKERS_STORAGE_KEY, JSON.stringify(state.workers)) } catch (_) {}
+  }, [state.workers, state.hydrateDone])
+
+  useEffect(() => {
+    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
+    if (isSupabaseConfigured) persistTable('inventory', state.inventory)
+    else try { localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(state.inventory)) } catch (_) {}
+  }, [state.inventory, state.hydrateDone])
+
+  useEffect(() => {
+    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
+    if (isSupabaseConfigured) persistTable('inventory_movements', state.inventoryMovements)
+    else try { localStorage.setItem(INVENTORY_MOVEMENTS_STORAGE_KEY, JSON.stringify(state.inventoryMovements)) } catch (_) {}
+  }, [state.inventoryMovements, state.hydrateDone])
+
+  useEffect(() => {
+    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
+    if (isSupabaseConfigured) persistTable('equipment', state.equipment)
+    else try { localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(state.equipment)) } catch (_) {}
+  }, [state.equipment, state.hydrateDone])
+
+  useEffect(() => {
+    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
+    if (isSupabaseConfigured) persistTable('faults', state.faults)
+    else try { localStorage.setItem(FAULTS_STORAGE_KEY, JSON.stringify(state.faults)) } catch (_) {}
+  }, [state.faults, state.hydrateDone])
+
+  useEffect(() => {
+    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
+    if (isSupabaseConfigured) persistTable('maintenance_plans', state.maintenancePlans)
+    else try { localStorage.setItem(MAINTENANCE_PLANS_STORAGE_KEY, JSON.stringify(state.maintenancePlans)) } catch (_) {}
+  }, [state.maintenancePlans, state.hydrateDone])
 
   const addTask = useCallback((task) => dispatch({ type: 'ADD_TASK', payload: task }), [])
   const updateTaskStatus = useCallback((taskId, status) =>
@@ -313,6 +553,9 @@ export function AppStoreProvider({ children }) {
     dispatch({ type: 'UPDATE_TASK', payload: { taskId, updates } }), [])
 
   const addRecord = useCallback((record) => dispatch({ type: 'ADD_RECORD', payload: record }), [])
+  const updateRecord = useCallback((recordId, updates) =>
+    dispatch({ type: 'UPDATE_RECORD', payload: { recordId, updates } }), [])
+  const removeRecord = useCallback((recordId) => dispatch({ type: 'REMOVE_RECORD', payload: recordId }), [])
   const addSession = useCallback((session) => dispatch({ type: 'ADD_SESSION', payload: session }), [])
   const removeSession = useCallback((sessionId) => dispatch({ type: 'REMOVE_SESSION', payload: sessionId }), [])
   const updateSession = useCallback((sessionId, updates) =>
@@ -323,6 +566,8 @@ export function AppStoreProvider({ children }) {
     dispatch({ type: 'UPDATE_INVENTORY_ITEM', payload: { itemId, updates } }), [])
   const addInventoryItem = useCallback((item) => dispatch({ type: 'ADD_INVENTORY_ITEM', payload: item }), [])
   const removeInventoryItem = useCallback((itemId) => dispatch({ type: 'REMOVE_INVENTORY_ITEM', payload: itemId }), [])
+  const addInventoryMovement = useCallback((movement) =>
+    dispatch({ type: 'ADD_INVENTORY_MOVEMENT', payload: movement }), [])
 
   const updateEquipmentItem = useCallback((equipmentId, updates) =>
     dispatch({ type: 'UPDATE_EQUIPMENT_ITEM', payload: { equipmentId, updates } }), [])
@@ -344,12 +589,19 @@ export function AppStoreProvider({ children }) {
   const updateWorker = useCallback((workerId, updates) =>
     dispatch({ type: 'UPDATE_WORKER', payload: { workerId, updates } }), [])
 
+  const resetToSeed = useCallback(() => {
+    clearAllSarmsDataStorage()
+    dispatch({ type: 'RESET_TO_SEED' })
+  }, [])
+
   const value = {
     ...state,
     addTask,
     updateTaskStatus,
     updateTask,
     addRecord,
+    updateRecord,
+    removeRecord,
     addSession,
     removeSession,
     updateSession,
@@ -357,6 +609,7 @@ export function AppStoreProvider({ children }) {
     updateInventoryItem,
     addInventoryItem,
     removeInventoryItem,
+    addInventoryMovement,
     updateEquipmentItem,
     addEquipmentItem,
     removeEquipmentItem,
@@ -370,6 +623,7 @@ export function AppStoreProvider({ children }) {
     setDefaultBatch,
     setWorkers,
     updateWorker,
+    resetToSeed,
   }
 
   return (

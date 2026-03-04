@@ -13,7 +13,6 @@ import InventoryEquipment from './pages/engineer/InventoryEquipment'
 import LogFaultMaintenance from './pages/engineer/LogFaultMaintenance'
 import ReportsAnalytics from './pages/engineer/ReportsAnalytics'
 import AdminLayout from './layouts/AdminLayout'
-import AdminDashboard from './pages/AdminDashboard'
 import AdminSettings from './pages/AdminSettings'
 import EngineerSettings from './pages/engineer/EngineerSettings'
 
@@ -46,9 +45,10 @@ function App() {
         </Route>
       </Route>
       <Route path="/admin" element={<AdminLayout />}>
-        <Route index element={<AdminDashboard />} />
+        <Route index element={<Navigate to="/admin/reports" replace />} />
         <Route path="register" element={<RegisterManageWorkers />} />
         <Route path="register/worker/:id" element={<WorkerProfile />} />
+        <Route path="reports" element={<ReportsAnalytics />} />
         <Route path="settings" element={<AdminSettings />} />
       </Route>
       <Route path="/" element={<Login />} />

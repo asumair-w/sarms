@@ -45,11 +45,11 @@ export const FAULT_TYPE_PREVENTIVE_ALERT = 'preventive_maintenance_alert'
 export const FAULT_STATUS_OPEN = 'open'
 export const FAULT_STATUS_RESOLVED = 'resolved'
 
-/** Rolling window (days) for failure count = 1 month */
-export const FAILURE_WINDOW_DAYS = 30
-/** Rate expressed as "per this many days" (30 = failures per month) */
-export const FAILURE_RATE_PER_DAYS = 30
-/** High Failure = ≥ this many failures per month (e.g. 2 = twice a month) */
+/** Rolling window (days) for failure count = 1 week */
+export const FAILURE_WINDOW_DAYS = 7
+/** Rate expressed as "per this many days" (7 = failures per week) */
+export const FAILURE_RATE_PER_DAYS = 7
+/** High Failure = ≥ this many failures per week (2 = twice per week) */
 export const HIGH_FAILURE_RATE_THRESHOLD = 2
 
 export function getInitialFaults() {

@@ -60,6 +60,15 @@ export function getInitialEquipment() {
   ]
 }
 
+/** Movement reasons for audit trail */
+export const INVENTORY_MOVEMENT_REASON = {
+  ITEM_ADDED: 'Item Added',
+  MANUAL_UPDATE: 'Manual Update',
+  RESTOCK: 'Restock',
+  MAINTENANCE_USAGE: 'Maintenance Usage',
+  ADJUSTMENT: 'Adjustment',
+}
+
 /** Compute status from quantity vs thresholds. */
 export function getInventoryStatus(item) {
   if (item.quantity <= (item.minQty ?? 0)) return INVENTORY_STATUS.CRITICAL

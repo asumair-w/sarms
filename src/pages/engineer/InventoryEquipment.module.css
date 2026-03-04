@@ -1,63 +1,134 @@
-/* Inventory & Equipment – professional card layout (light grey, olive accent) */
+/* Inventory & Equipment – same dimensions/standards as Assign Task, Monitor, Record Production */
+
+.page :global(.fa-fw) {
+  margin-right: 0.35em;
+}
 
 .page {
-  max-width: 1000px;
+  max-width: 1400px;
   margin: 0 auto;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  width: 100%;
+  transition: all 0.3s ease;
 }
 
-/* Summary row (widget-style cards like Monitor) */
+@media (min-width: 768px) {
+  .page {
+    gap: 1.5rem;
+  }
+}
+
+/* Summary row – shared big white box spec */
 .summarySection {
-  background: var(--sarms-card, #e8e8e8);
-  border-radius: 12px;
-  padding: 1rem 1.25rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  border: 1px solid var(--sarms-border, #d4d4d4);
+  width: 100%;
+  box-sizing: border-box;
+  background: #fff;
+  border-radius: 16px;
+  padding: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e2e8f0;
 }
 
 .summaryTitle {
   margin: 0 0 1rem;
   font-size: 1.25rem;
   font-weight: 700;
-  color: var(--sarms-text, #333);
+  color: #0f172a;
   letter-spacing: -0.02em;
 }
 
+/* Summary grid – same gap as reference (1rem throughout) */
 .summaryCards {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.75rem;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
 }
 
-@media (min-width: 640px) {
+@media (min-width: 768px) {
   .summaryCards {
-    grid-template-columns: repeat(2, 1fr);
     gap: 1rem;
   }
 }
 
-@media (min-width: 900px) {
+@media (min-width: 1024px) {
   .summaryCards {
     grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
   }
 }
 
+/* Card: min-height 72px, padding 0.75rem, border 2px, border-radius 12px (Monitor spec) */
 .summaryCard {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0;
   min-height: 72px;
-  padding: 1rem;
+  padding: 0;
   border-radius: 12px;
   border: 2px solid var(--sarms-border, #d4d4d4);
-  background: #f8fafc;
+  background: #fff;
   text-align: left;
   cursor: pointer;
   font: inherit;
-  transition: background 0.2s, border-color 0.2s;
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
   -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+/* Title strip: padding 0.5rem 0.75rem 0.35rem, font 0.85rem 700, radius 10px 10px 0 0 */
+.summaryCardLabel {
+  padding: 0.5rem 0.75rem 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  flex-shrink: 0;
+  border-radius: 10px 10px 0 0;
+}
+.summaryCardBody {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.75rem;
+}
+.summaryRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--sarms-text, #334155);
+}
+.summaryRow strong { font-weight: 700; color: #1e293b; }
+.summaryRowBtn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  font-size: 0.875rem;
+  color: var(--sarms-text, #334155);
+  background: none;
+  border: none;
+  padding: 0.4rem 0;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background 0.15s;
+}
+.summaryRowBtn:hover { background: rgba(0, 0, 0, 0.05); }
+.summaryRowBtn strong { font-weight: 700; color: #1e293b; }
+.summaryRowSub {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 0.15rem;
 }
 
 .summaryCard:hover {
@@ -65,15 +136,11 @@
   border-color: #cbd5e1;
 }
 
-.summaryCard[aria-pressed="true"] {
+.summaryCard[aria-pressed="true"],
+.summaryCardActive {
   box-shadow: 0 0 0 2px var(--sarms-primary, #5c7b5c);
 }
 
-.summaryCardLabel {
-  font-size: 0.85rem;
-  color: #64748b;
-  font-weight: 600;
-}
 
 .summaryCardValue {
   font-size: 1.5rem;
@@ -119,13 +186,82 @@
   border-color: #10b981;
 }
 
-.summaryCardHarvest .summaryCardValue,
-.summaryCardHarvest .summaryCardLabel {
-  color: #047857;
+.summaryCardHarvest .summaryCardLabel { background: #ecfdf5; color: #047857; }
+.summaryCardHarvest .summaryCardBody { color: #065f46; }
+.summaryCardHarvest .summaryRow strong { color: #047857; }
+.summaryCardHarvest .summaryRowSub { color: #059669; }
+
+.summaryCardTotal {
+  border-color: #cbd5e1;
+  background: #f8fafc;
 }
-.summaryCardHarvest .summaryCardSub {
-  color: #065f46;
+.summaryCardTotal .summaryCardValue { font-size: 1.25rem; }
+
+.summaryCardUpdated {
+  border-color: #bae6fd;
+  background: #f0f9ff;
 }
+.summaryCardUpdated:hover { background: #e0f2fe; border-color: #7dd3fc; }
+.summaryCardUpdated .summaryCardValue { font-size: 1.25rem; }
+
+.summaryCardTotalUpdated {
+  border-color: #bae6fd;
+  background: #fff;
+  cursor: default;
+}
+.summaryCardTotalUpdated .summaryCardLabel { background: #f0f9ff; color: #0369a1; }
+.summaryCardTotalUpdated:hover { border-color: #7dd3fc; }
+.summaryCardActiveUpdated {
+  box-shadow: 0 0 0 2px var(--sarms-primary, #5c7b5c);
+}
+
+.summaryCardCategory {
+  cursor: default;
+}
+.summaryCardCategory:hover { border-color: #cbd5e1; }
+.summaryCardCategory .summaryCardLabel { background: #f8fafc; }
+.summaryCategoryGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+}
+.summaryCategoryChip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.8rem;
+  color: var(--sarms-text, #334155);
+  background: #f1f5f9;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+}
+.summaryCategoryChip:hover {
+  background: #e2e8f0;
+  color: var(--sarms-primary, #5c7b5c);
+}
+.summaryCategoryName { font-weight: 500; }
+.summaryCategoryCount { font-weight: 700; color: #1e293b; }
+
+/* Stock Movement – distinct color (emerald) vs By Category (grey) */
+.summaryCardMovement {
+  cursor: default;
+  border-color: #6ee7b7;
+  background: #fff;
+}
+.summaryCardMovement:hover { border-color: #34d399; }
+.summaryCardMovement .summaryCardLabel { background: #ecfdf5; color: #047857; }
+.summaryRowAdded span { color: #15803d; }
+.summaryRowAdded strong { color: #15803d; }
+.summaryRowUpdated span { color: #0369a1; }
+.summaryRowUpdated strong { color: #0369a1; }
+.summaryRowDecreased span { color: #b91c1c; }
+.summaryRowDecreased strong { color: #b91c1c; }
 
 /* Equipment: technical / maintenance – clear blue */
 .summaryCardEquipment {
@@ -149,43 +285,48 @@
   color: #1e3a8a;
 }
 
-/* High Failure Equipment: danger (red) when count > 0 */
+/* High Failure Equipment – Monitor spec: min-height 72px, padding 0.75rem, border 2px, radius 12px, title strip 0.5rem 0.75rem 0.35rem */
 .summaryCardHighFailureDanger {
-  border-color: #f87171;
-  background: #fef2f2;
+  min-height: 72px;
+  padding: 0;
+  border: 2px solid #f87171;
+  border-radius: 12px;
+  background: #fff;
 }
-
-.summaryCardHighFailureDanger:hover {
-  background: #fee2e2;
-  border-color: #ef4444;
-}
-
-.summaryCardHighFailureDanger .summaryCardValue,
 .summaryCardHighFailureDanger .summaryCardLabel {
-  color: #b91c1c;
-}
-.summaryCardHighFailureDanger .summaryCardSub {
-  color: #991b1b;
-}
-
-/* High Failure Equipment: red theme when 0 devices (same red theme as danger) */
-.summaryCardHighFailureOk {
-  border-color: #fca5a5;
+  padding: 0.5rem 0.75rem 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: 10px 10px 0 0;
+  border-bottom: 1px solid #fecaca;
   background: #fef2f2;
-}
-
-.summaryCardHighFailureOk:hover {
-  background: #fee2e2;
-  border-color: #f87171;
-}
-
-.summaryCardHighFailureOk .summaryCardValue,
-.summaryCardHighFailureOk .summaryCardLabel {
-  color: #b91c1c;
-}
-.summaryCardHighFailureOk .summaryCardSub {
   color: #991b1b;
 }
+.summaryCardHighFailureDanger .summaryCardBody { background: #fff; padding: 0.75rem; }
+.summaryCardHighFailureDanger:hover { border-color: #ef4444; }
+.summaryCardHighFailureDanger .summaryCardValue { color: #b91c1c; }
+.summaryCardHighFailureDanger .summaryCardSub { color: #991b1b; }
+
+.summaryCardHighFailureOk {
+  min-height: 72px;
+  padding: 0;
+  border: 2px solid #fca5a5;
+  border-radius: 12px;
+  background: #fff;
+}
+.summaryCardHighFailureOk .summaryCardLabel {
+  padding: 0.5rem 0.75rem 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: 10px 10px 0 0;
+  border-bottom: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+.summaryCardHighFailureOk .summaryCardBody { background: #fff; padding: 0.75rem; }
+.summaryCardHighFailureOk:hover { border-color: #f87171; }
+.summaryCardHighFailureOk .summaryCardValue { color: #b91c1c; }
+.summaryCardHighFailureOk .summaryCardSub { color: #991b1b; }
 
 .summaryCardIcon {
   position: absolute;
@@ -205,6 +346,180 @@
 .summaryCard {
   position: relative;
 }
+
+.summaryCardIconLeft {
+  font-size: 1rem;
+  margin-bottom: 0.15rem;
+}
+
+/* Overdue – Monitor spec */
+.summaryCardOverdueDanger {
+  min-height: 72px;
+  padding: 0;
+  border: 2px solid #f87171;
+  border-radius: 12px;
+  background: #fff;
+}
+.summaryCardOverdueDanger .summaryCardLabel {
+  padding: 0.5rem 0.75rem 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: 10px 10px 0 0;
+  border-bottom: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+.summaryCardOverdueDanger .summaryCardBody { background: #fff; padding: 0.75rem; }
+.summaryCardOverdueDanger:hover { border-color: #ef4444; }
+.summaryCardOverdueDanger .summaryCardValue { color: #b91c1c; }
+
+.summaryCardOverdueOk {
+  min-height: 72px;
+  padding: 0;
+  border: 2px solid #86efac;
+  border-radius: 12px;
+  background: #fff;
+}
+.summaryCardOverdueOk .summaryCardLabel {
+  padding: 0.5rem 0.75rem 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: 10px 10px 0 0;
+  border-bottom: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+.summaryCardOverdueOk .summaryCardBody { background: #fff; padding: 0.75rem; }
+.summaryCardOverdueOk:hover { border-color: #22c55e; }
+.summaryCardOverdueOk .summaryCardValue { color: #15803d; }
+
+.summaryCardOverdue .summaryCardStockRow { font-size: 0.8rem; color: #475569; }
+.summaryCardOverdue .summaryCardStockRow em { color: #64748b; }
+
+/* Workload – Monitor spec */
+.summaryCardWorkload {
+  min-height: 72px;
+  padding: 0;
+  border: 2px solid #60a5fa;
+  border-radius: 12px;
+  background: #fff;
+}
+.summaryCardWorkload .summaryCardLabel {
+  padding: 0.5rem 0.75rem 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: 10px 10px 0 0;
+  border-bottom: 1px solid #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.summaryCardWorkload .summaryCardBody { background: #fff; padding: 0.75rem; }
+.summaryCardWorkload:hover { border-color: #3b82f6; }
+.summaryCardWorkload .summaryCardStockRow { color: #1e40af; font-size: 0.8rem; }
+.summaryCardWorkload .summaryCardStockRow em { color: #1e3a8a; }
+
+/* Equipment Status – Monitor spec */
+.summaryCardEquipmentStatus {
+  min-height: 72px;
+  padding: 0;
+  border: 2px solid #a78bfa;
+  border-radius: 12px;
+  background: #fff;
+}
+.summaryCardEquipmentStatus .summaryCardLabel {
+  padding: 0.5rem 0.75rem 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: 10px 10px 0 0;
+  border-bottom: 1px solid #c4b5fd;
+  background: #f5f3ff;
+  color: #5b21b6;
+}
+.summaryCardEquipmentStatus .summaryCardBody { background: #fff; padding: 0.75rem; }
+.summaryCardEquipmentStatus:hover { border-color: #8b5cf6; }
+.summaryCardEquipmentStatus .summaryCardStockRow { color: #6d28d9; font-size: 0.8rem; }
+.summaryCardEquipmentStatus .summaryCardStockRow em { color: #5b21b6; }
+.summaryCardEquipmentStatus .summaryCardSub { font-size: 0.75rem; color: #7c3aed; }
+
+/* DUE & THIS WEEK – Monitor spec */
+.summaryCardThisWeek {
+  min-height: 72px;
+  padding: 0;
+  border: 2px solid #34d399;
+  border-radius: 12px;
+  background: #fff;
+}
+.summaryCardThisWeek .summaryCardLabel {
+  padding: 0.5rem 0.75rem 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: 10px 10px 0 0;
+  border-bottom: 1px solid #6ee7b7;
+  background: #ecfdf5;
+  color: #047857;
+}
+.summaryCardThisWeek .summaryCardBody { background: #fff; padding: 0.75rem; }
+.summaryCardThisWeek:hover { border-color: #10b981; }
+.summaryCardThisWeek .summaryCardStockRow { color: #059669; font-size: 0.8rem; }
+.summaryCardThisWeek .summaryCardStockRow em { color: #047857; }
+
+.summaryCardOverdueThisWeek {
+  min-height: 72px;
+  padding: 0;
+  border: 2px solid #34d399;
+  border-radius: 12px;
+  background: #fff;
+}
+.summaryCardOverdueThisWeek .summaryCardLabel {
+  padding: 0.5rem 0.75rem 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: 10px 10px 0 0;
+  border-bottom: 1px solid #6ee7b7;
+  background: #ecfdf5;
+  color: #047857;
+}
+.summaryCardOverdueThisWeek .summaryCardBody { background: #fff; padding: 0.75rem; }
+.summaryCardOverdueThisWeek:hover { border-color: #10b981; }
+.summaryCardOverdueThisWeek .summaryCardStockRow { color: #059669; font-size: 0.8rem; }
+.summaryCardOverdueThisWeek .summaryCardStockRow em { color: #047857; }
+
+.summaryCardStockRowSub { font-size: 0.85em; color: #64748b; }
+
+.summaryCardOverdueThisWeek.summaryCardOverdueDanger {
+  border-color: #f87171;
+  background: #fff;
+}
+.summaryCardOverdueThisWeek.summaryCardOverdueDanger .summaryCardLabel {
+  background: #fef2f2;
+  color: #991b1b;
+  border-bottom-color: #fecaca;
+}
+.summaryCardOverdueThisWeek.summaryCardOverdueDanger:hover { border-color: #ef4444; }
+.summaryCardOverdueThisWeek.summaryCardOverdueDanger .summaryCardLabel,
+.summaryCardOverdueThisWeek.summaryCardOverdueDanger .summaryCardStockRow em { color: #b91c1c; }
+.summaryCardOverdueThisWeek.summaryCardOverdueDanger .summaryCardStockRow { color: #991b1b; }
+
+.summaryCardOverdueThisWeekOk {
+  min-height: 72px;
+  padding: 0;
+  border: 2px solid #86efac;
+  border-radius: 12px;
+  background: #fff;
+}
+.summaryCardOverdueThisWeekOk .summaryCardLabel {
+  padding: 0.5rem 0.75rem 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: 10px 10px 0 0;
+  border-bottom: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+.summaryCardOverdueThisWeekOk .summaryCardBody { background: #fff; padding: 0.75rem; }
+.summaryCardOverdueThisWeekOk:hover { border-color: #22c55e; }
+.summaryCardOverdueThisWeekOk .summaryCardStockRow,
+.summaryCardOverdueThisWeekOk .summaryCardStockRow em { color: #047857; }
 
 .highFailureIcon {
   display: inline;
@@ -248,39 +563,42 @@
 
 /* Stock: inventory / supplies – warm amber tone */
 .summaryCardStock {
-  border-color: #d4a574;
-  background: #fffbeb;
+  border-color: #fcd34d;
+  background: #fff;
 }
-.summaryCardStock:hover {
-  background: #fef3c7;
-  border-color: #d97706;
-}
-.summaryCardStock .summaryCardStockRow {
-  font-size: 0.8rem;
-  color: var(--sarms-text, #333);
-}
-.summaryCardStock .summaryCardStockRow em {
-  color: #92400e;
-  font-style: normal;
-  margin-right: 0.25rem;
-}
-.summaryCardStock .summaryCardValue,
-.summaryCardStock .summaryCardLabel {
-  color: #78350f;
-}
-.summaryCardStock .summaryCardStockRow {
-  color: #78350f;
-}
-.summaryCardHarvestFilter {
-  margin: 0.25rem 0;
+.summaryCardStock .summaryCardLabel { background: #fffbeb; color: #92400e; }
+.summaryCardStock:hover { border-color: #d97706; }
+.stockCritical { color: #b91c1c; }
+.stockLow { color: #b45309; }
+.stockRefill { color: #64748b; }
+.summaryHarvestHead {
+  margin-bottom: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
 }
 .summaryHarvestSelect {
-  font-size: 0.75rem;
-  padding: 0.2rem 0.4rem;
-  border-radius: 4px;
+  font-size: 0.8rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
   border: 1px solid var(--sarms-border, #d4d4d4);
   background: #fff;
+  width: 100%;
+  max-width: 100%;
   cursor: pointer;
+}
+.summaryHarvestMonthInput {
+  font-size: 0.8rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--sarms-border, #d4d4d4);
+  background: #fff;
+  width: 100%;
+  cursor: pointer;
+}
+.summaryHarvestMonthInput:focus {
+  outline: none;
+  border-color: var(--sarms-primary, #5c7b5c);
 }
 .summaryCardSub {
   font-size: 0.75rem;
@@ -386,11 +704,13 @@
 }
 
 .section {
-  background: var(--sarms-card, #e8e8e8);
-  border-radius: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  background: #fff;
+  border-radius: 16px;
   padding: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  border: 1px solid var(--sarms-border, #d4d4d4);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e2e8f0;
   overflow: hidden;
 }
 
@@ -399,7 +719,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
   padding: 1rem 1.25rem;
   background: transparent;
   border: none;
@@ -414,10 +736,10 @@
 }
 
 .sectionTitle {
-  margin: 0;
-  font-size: 1.2rem;
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
   font-weight: 700;
-  color: var(--sarms-text, #333);
+  color: #0f172a;
   letter-spacing: -0.02em;
 }
 
@@ -454,9 +776,19 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem;
   padding: 0 1.25rem 1rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.filtersBarActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.filtersBarExport {
+  margin-left: auto;
 }
 
 .filtersRow {
@@ -477,17 +809,18 @@
 .filterLabel {
   font-size: 0.9rem;
   font-weight: 600;
-  color: #475569;
+  color: #334155;
 }
 
 .btnPrimary {
-  padding: 0.5rem 1rem;
-  font-size: 0.9rem;
+  min-height: 44px;
+  padding: 0.6rem 1.25rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: #fff;
   background: var(--sarms-primary, #5c7b5c);
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   transition: background 0.2s, transform 0.1s;
 }
@@ -498,19 +831,20 @@
 }
 
 .btnSecondary {
-  padding: 0.5rem 1rem;
-  font-size: 0.9rem;
+  min-height: 44px;
+  padding: 0.6rem 1.25rem;
+  font-size: 0.95rem;
   font-weight: 600;
-  color: var(--sarms-text, #333);
-  background: #e0e0e0;
-  border: 1px solid var(--sarms-border, #d4d4d4);
-  border-radius: 8px;
+  color: #334155;
+  background: #e8e8e8;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
   cursor: pointer;
   transition: background 0.2s;
 }
 
 .btnSecondary:hover {
-  background: #d0d0d0;
+  background: #d8d8d8;
 }
 
 .tableWrap {
@@ -528,13 +862,13 @@
 .table td {
   padding: 0.6rem 0.75rem;
   text-align: left;
-  border-bottom: 1px solid var(--sarms-border, #d4d4d4);
+  border-bottom: 1px solid #e2e8f0;
 }
 
 .table th {
   font-weight: 600;
-  color: var(--sarms-text-muted, #555);
-  background: rgba(255, 255, 255, 0.6);
+  color: #475569;
+  background: #f8fafc;
 }
 
 .thSort {
@@ -875,36 +1209,36 @@
 
 .modal {
   background: #fff;
-  border-radius: 12px;
+  border-radius: 16px;
   padding: 1.5rem;
-  max-width: 420px;
+  max-width: 480px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  border: 1px solid var(--sarms-border, #d4d4d4);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+  border: 1px solid #e2e8f0;
 }
 
 /* View History modal – wider, scrollable */
 .historyModal {
   background: #fff;
-  border-radius: 12px;
+  border-radius: 16px;
   padding: 0;
   max-width: 560px;
   width: 100%;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  border: 1px solid var(--sarms-border, #d4d4d4);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+  border: 1px solid #e2e8f0;
 }
 .historyModalHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.75rem;
   padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--sarms-border, #d4d4d4);
+  border-bottom: 1px solid #e2e8f0;
   flex-shrink: 0;
 }
 .historyModalHeader .modalTitle {
@@ -1004,10 +1338,10 @@
 }
 
 .modalTitle {
-  margin: 0 0 1rem;
-  font-size: 1.2rem;
+  margin: 0 0 1.25rem;
+  font-size: 1.25rem;
   font-weight: 700;
-  color: var(--sarms-text, #333);
+  color: #0f172a;
 }
 
 .modalHint {
@@ -1016,16 +1350,56 @@
   color: #64748b;
 }
 
+.quickAddWrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.quickAddLabel {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-right: 0.25rem;
+}
+
+.quickAddBtn {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #475569;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.quickAddBtn:hover {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.historyTableWrap {
+  max-height: 320px;
+  overflow: auto;
+  margin-bottom: 1rem;
+}
+
+.historyTableWrap .table {
+  margin: 0;
+}
+
 .modalForm {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 1rem;
 }
 
 .modalForm label {
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   font-weight: 600;
-  color: #475569;
+  color: #334155;
 }
 
 .formRow {
