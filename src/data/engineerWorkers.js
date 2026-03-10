@@ -4,7 +4,6 @@
 
 export const ROLE_OPTIONS = [
   { value: 'worker', label: 'Worker' },
-  { value: 'technician', label: 'Technician' },
   { value: 'engineer', label: 'Engineer' },
   { value: 'admin', label: 'Admin' },
 ]
@@ -31,6 +30,35 @@ export const SKILL_OPTIONS = [
   'Quality Check',
 ]
 
+/**
+ * Minimal seed: 15 workers + 1 engineer + 1 admin.
+ * Used when storage is empty (e.g. after "Clear all data") so you can test and add data yourself.
+ */
+const MINIMAL_SEED_WORKERS_RAW = [
+  { id: '1', employeeId: 'w1', fullName: 'عامل ١', phone: '+966 50 111 2222', email: 'worker1@sarms.local', nationality: 'Saudi', role: 'worker', department: 'farming', status: 'active', tempPassword: 'w1', createdAt: new Date().toISOString(), skills: [] },
+  { id: '2', employeeId: 'w2', fullName: 'عامل ٢', phone: '+966 54 777 8888', email: 'worker2@sarms.local', nationality: 'Saudi', role: 'worker', department: 'farming', status: 'active', tempPassword: 'w2', createdAt: new Date().toISOString(), skills: [] },
+  { id: '3', employeeId: 'w3', fullName: 'عامل ٣', phone: '+966 55 999 0000', email: 'worker3@sarms.local', nationality: 'Saudi', role: 'worker', department: 'farming', status: 'active', tempPassword: 'w3', createdAt: new Date().toISOString(), skills: [] },
+  { id: '4', employeeId: 'w4', fullName: 'عامل ٤', phone: '+966 56 111 3333', email: 'worker4@sarms.local', nationality: 'Saudi', role: 'worker', department: 'maintenance', status: 'active', tempPassword: 'w4', createdAt: new Date().toISOString(), skills: [] },
+  { id: '5', employeeId: 'w5', fullName: 'عامل ٥', phone: '+966 57 444 5555', email: 'worker5@sarms.local', nationality: 'Saudi', role: 'worker', department: 'maintenance', status: 'active', tempPassword: 'w5', createdAt: new Date().toISOString(), skills: [] },
+  { id: '6', employeeId: 'w6', fullName: 'عامل ٦', phone: '+966 53 111 4444', email: 'worker6@sarms.local', nationality: 'Saudi', role: 'worker', department: 'inventory', status: 'active', tempPassword: 'w6', createdAt: new Date().toISOString(), skills: [] },
+  { id: '7', employeeId: 'w7', fullName: 'عامل ٧', phone: '+966 55 333 6666', email: 'worker7@sarms.local', nationality: 'Saudi', role: 'worker', department: 'farming', status: 'active', tempPassword: 'w7', createdAt: new Date().toISOString(), skills: [] },
+  { id: '8', employeeId: 'w8', fullName: 'عامل ٨', phone: '+966 56 444 7777', email: 'worker8@sarms.local', nationality: 'Saudi', role: 'worker', department: 'farming', status: 'active', tempPassword: 'w8', createdAt: new Date().toISOString(), skills: [] },
+  { id: '9', employeeId: 'w9', fullName: 'عامل ٩', phone: '+966 57 555 8888', email: 'worker9@sarms.local', nationality: 'Saudi', role: 'worker', department: 'inventory', status: 'active', tempPassword: 'w9', createdAt: new Date().toISOString(), skills: [] },
+  { id: '10', employeeId: 'w10', fullName: 'عامل ١٠', phone: '+966 58 666 9999', email: 'worker10@sarms.local', nationality: 'Saudi', role: 'worker', department: 'maintenance', status: 'active', tempPassword: 'w10', createdAt: new Date().toISOString(), skills: [] },
+  { id: '11', employeeId: 'w11', fullName: 'عامل ١١', phone: '+966 50 222 3333', email: 'worker11@sarms.local', nationality: 'Saudi', role: 'worker', department: 'farming', status: 'active', tempPassword: 'w11', createdAt: new Date().toISOString(), skills: [] },
+  { id: '12', employeeId: 'w12', fullName: 'عامل ١٢', phone: '+966 51 333 4444', email: 'worker12@sarms.local', nationality: 'Saudi', role: 'worker', department: 'maintenance', status: 'active', tempPassword: 'w12', createdAt: new Date().toISOString(), skills: [] },
+  { id: '13', employeeId: 'w13', fullName: 'عامل ١٣', phone: '+966 52 444 5555', email: 'worker13@sarms.local', nationality: 'Saudi', role: 'worker', department: 'inventory', status: 'active', tempPassword: 'w13', createdAt: new Date().toISOString(), skills: [] },
+  { id: '14', employeeId: 'w14', fullName: 'عامل ١٤', phone: '+966 53 555 6666', email: 'worker14@sarms.local', nationality: 'Saudi', role: 'worker', department: 'farming', status: 'active', tempPassword: 'w14', createdAt: new Date().toISOString(), skills: [] },
+  { id: '15', employeeId: 'w15', fullName: 'عامل ١٥', phone: '+966 54 666 7777', email: 'worker15@sarms.local', nationality: 'Saudi', role: 'worker', department: 'maintenance', status: 'active', tempPassword: 'w15', createdAt: new Date().toISOString(), skills: [] },
+  { id: '16', employeeId: 'e1', fullName: 'المهندس', phone: '+966 50 333 4444', email: 'engineer1@sarms.local', nationality: 'Saudi', role: 'engineer', department: 'maintenance', status: 'active', tempPassword: 'e1', createdAt: new Date().toISOString(), skills: [] },
+  { id: '17', employeeId: 'a1', fullName: 'المدير', phone: '+966 50 555 6666', email: 'admin1@sarms.local', nationality: 'Saudi', role: 'admin', department: 'farming', status: 'active', tempPassword: 'a1', createdAt: new Date().toISOString(), skills: [] },
+]
+
+/** Returns 15 workers + 1 engineer + 1 admin for empty storage (clean start for testing). */
+export function getMinimalWorkers() {
+  return MINIMAL_SEED_WORKERS_RAW.map((w) => ({ ...w, skills: Array.isArray(w.skills) ? w.skills : [] }))
+}
+
 /** Seed workers with optional skills array (default empty). */
 const SEED_WORKERS_RAW = [
   { id: '1', employeeId: 'w1', fullName: 'Worker One', phone: '+966 50 111 2222', email: 'worker1@sarms.local', nationality: 'Saudi', role: 'worker', department: 'farming', status: 'active', tempPassword: 'w1', createdAt: new Date().toISOString(), skills: ['Harvesting', 'Irrigation', 'Monitoring'] },
@@ -53,23 +81,13 @@ const SEED_WORKERS_RAW = [
   { id: '18', employeeId: 'e8', fullName: 'Bilal Ahmed', phone: '+966 56 333 4444', email: 'bilal@sarms.local', nationality: 'Egyptian', role: 'engineer', department: 'farming', status: 'active', tempPassword: 'e8', createdAt: new Date().toISOString(), skills: ['Monitoring'] },
   { id: '19', employeeId: 'e9', fullName: 'Reem Al-Ghamdi', phone: '+966 57 555 6666', email: 'reem@sarms.local', nationality: 'Saudi', role: 'engineer', department: 'maintenance', status: 'active', tempPassword: 'e9', createdAt: new Date().toISOString(), skills: ['Preventive Maintenance', 'Testing'] },
   { id: '20', employeeId: 'e10', fullName: 'Waleed Omar', phone: '+966 58 777 8888', email: 'waleed@sarms.local', nationality: 'Jordanian', role: 'engineer', department: 'inventory', status: 'active', tempPassword: 'e10', createdAt: new Date().toISOString(), skills: ['Storage', 'Quality Check'] },
-  { id: '21', employeeId: 't1', fullName: 'Youssef Ahmed', phone: '+966 54 222 5555', email: 'youssef@sarms.local', nationality: 'Egyptian', role: 'technician', department: 'maintenance', status: 'active', tempPassword: 't1', createdAt: new Date().toISOString(), skills: ['Machine Repair', 'Testing'] },
-  { id: '22', employeeId: 't2', fullName: 'Dina Khalil', phone: '+966 55 333 6666', email: 'dina@sarms.local', nationality: 'Egyptian', role: 'technician', department: 'farming', status: 'active', tempPassword: 't2', createdAt: new Date().toISOString(), skills: ['Harvesting', 'Irrigation'] },
-  { id: '23', employeeId: 't3', fullName: 'Hassan Farouk', phone: '+966 56 444 7777', email: 'hassanf@sarms.local', nationality: 'Jordanian', role: 'technician', department: 'maintenance', status: 'active', tempPassword: 't3', createdAt: new Date().toISOString(), skills: ['Inspection', 'Machine Repair'] },
-  { id: '24', employeeId: 't4', fullName: 'Mona Said', phone: '+966 57 555 8888', email: 'mona@sarms.local', nationality: 'Egyptian', role: 'technician', department: 'inventory', status: 'active', tempPassword: 't4', createdAt: new Date().toISOString(), skills: ['Packing', 'Storage'] },
-  { id: '25', employeeId: 't5', fullName: 'Adel Nasser', phone: '+966 58 666 9999', email: 'adel@sarms.local', nationality: 'Saudi', role: 'technician', department: 'farming', status: 'active', tempPassword: 't5', createdAt: new Date().toISOString(), skills: ['Plant Care', 'Spraying / Treatment'] },
-  { id: '26', employeeId: 't6', fullName: 'Rania Mahmoud', phone: '+966 59 777 0000', email: 'rania@sarms.local', nationality: 'Egyptian', role: 'technician', department: 'maintenance', status: 'inactive', tempPassword: 't6', createdAt: new Date().toISOString(), skills: ['Preventive Maintenance'] },
-  { id: '27', employeeId: 't7', fullName: 'Samir Jawad', phone: '+966 50 888 1111', email: 'samir@sarms.local', nationality: 'Jordanian', role: 'technician', department: 'inventory', status: 'active', tempPassword: 't7', createdAt: new Date().toISOString(), skills: ['Storage', 'Quality Check'] },
-  { id: '28', employeeId: 't8', fullName: 'Lina Fawzy', phone: '+966 51 999 2222', email: 'lina@sarms.local', nationality: 'Egyptian', role: 'technician', department: 'farming', status: 'active', tempPassword: 't8', createdAt: new Date().toISOString(), skills: ['Harvesting', 'Monitoring'] },
-  { id: '29', employeeId: 't9', fullName: 'Omar Badr', phone: '+966 52 000 3333', email: 'omarb@sarms.local', nationality: 'Saudi', role: 'technician', department: 'maintenance', status: 'active', tempPassword: 't9', createdAt: new Date().toISOString(), skills: ['Machine Repair'] },
-  { id: '30', employeeId: 't10', fullName: 'Sanaa Ibrahim', phone: '+966 53 111 4444', email: 'sanaa@sarms.local', nationality: 'Jordanian', role: 'technician', department: 'inventory', status: 'active', tempPassword: 't10', createdAt: new Date().toISOString(), skills: ['Packing', 'Quality Check'] },
-  { id: '31', employeeId: 'a1', fullName: 'Admin One', phone: '+966 50 555 6666', email: 'admin1@sarms.local', nationality: 'Saudi', role: 'admin', department: 'farming', status: 'active', tempPassword: 'a1', createdAt: new Date().toISOString(), skills: [] },
+  { id: '21', employeeId: 'a1', fullName: 'Admin One', phone: '+966 50 555 6666', email: 'admin1@sarms.local', nationality: 'Saudi', role: 'admin', department: 'farming', status: 'active', tempPassword: 'a1', createdAt: new Date().toISOString(), skills: [] },
   { id: '32', employeeId: 'a2', fullName: 'Admin Two', phone: '+966 59 888 9999', email: 'admin2@sarms.local', nationality: 'Saudi', role: 'admin', department: 'farming', status: 'active', tempPassword: 'a2', createdAt: new Date().toISOString(), skills: [] },
 ]
 
 export const SEED_WORKERS = SEED_WORKERS_RAW.map((w) => ({ ...w, skills: Array.isArray(w.skills) ? w.skills : [] }))
 
-const ROLE_PREFIX = { worker: 'W', technician: 'T', engineer: 'E', admin: 'A' }
+const ROLE_PREFIX = { worker: 'W', engineer: 'E', admin: 'A' }
 
 /** Generate next employee ID by role (e.g. w11, e11, t11). */
 export function generateEmployeeId(role, existingWorkers) {

@@ -9,9 +9,7 @@ import {
   Legend,
 } from 'chart.js'
 import { Radar } from 'react-chartjs-2'
-import { CHART_RED } from './analyticsColors'
-
-ChartJS.register(RadialLinearScale, PointElement, LineElement, Filler, Title, Tooltip, Legend)
+import { SOFT_RED, SOFT_RED_HOVER } from './analyticsColors'
 
 const LABELS = [
   'Delayed tasks %',
@@ -20,8 +18,9 @@ const LABELS = [
   'Low worker efficiency %',
   'Overdue maintenance %',
 ]
-const COLOR_RISK = CHART_RED
-const COLOR_FILL = CHART_RED + '30'
+const COLOR_RISK = SOFT_RED
+const COLOR_FILL = 'rgba(184,92,92,0.2)'
+const COLOR_POINTS = SOFT_RED_HOVER
 
 const options = {
   responsive: true,
@@ -51,7 +50,8 @@ export default function RiskRadarChart({ data, onSegmentClick }) {
         data: values,
         borderColor: COLOR_RISK,
         backgroundColor: COLOR_FILL,
-        pointBackgroundColor: COLOR_RISK,
+        pointBackgroundColor: COLOR_POINTS,
+        pointHoverBackgroundColor: SOFT_RED_HOVER,
       },
     ],
   }

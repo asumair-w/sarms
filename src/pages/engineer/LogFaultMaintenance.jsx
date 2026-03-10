@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { jsPDF } from 'jspdf'
+import html2canvas from 'html2canvas'
 import { EQUIPMENT_STATUS, EQUIPMENT_STATUS_LABELS } from '../../data/inventory'
 import {
   FAULT_CATEGORIES,
@@ -17,6 +19,8 @@ import {
 } from '../../data/faults'
 import { getInitialZones } from '../../data/workerFlow'
 import { useAppStore } from '../../context/AppStoreContext'
+import { useLanguage } from '../../context/LanguageContext'
+import { getTranslation } from '../../i18n/translations'
 import { nextFaultId, nextMaintenancePlanId, nextEquipmentId } from '../../utils/idGenerators'
 import styles from './LogFaultMaintenance.module.css'
 import eqStyles from './InventoryEquipment.module.css'
@@ -53,6 +57,8 @@ function ageYears(createdAt) {
 export default function LogFaultMaintenance() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { lang } = useLanguage()
+  const t = (key) => getTranslation(lang, 'engineer', key)
   const { equipment, faults, maintenancePlans, addFault, addMaintenancePlan, updateMaintenancePlan, updateEquipmentItem, addEquipmentItem, removeEquipmentItem, updateFault, zones: storeZones } = useAppStore()
   const zonesList = (storeZones && storeZones.length > 0) ? storeZones : getInitialZones()
 
@@ -72,6 +78,7 @@ export default function LogFaultMaintenance() {
   const [activeTicketsFilter, setActiveTicketsFilter] = useState('all') // 'all' | 'overdue' | 'this_week'
   const activeTicketsSectionRef = useRef(null)
   const equipmentSectionRef = useRef(null)
+  const equipmentTableRef = useRef(null)
 
   function scrollToTickets(filter) {
     setActiveTicketsFilter(filter)
@@ -316,15 +323,23 @@ export default function LogFaultMaintenance() {
     const active = unifiedTickets.filter((t) => t.status !== 'completed')
     const todayMs = new Date(todayStr + 'T12:00:00').getTime()
     return [...active].sort((a, b) => {
-      const aDue = a.dueDate ? new Date(a.dueDate + 'T12:00:00').getTime() : todayMs - 1
-      const bDue = b.dueDate ? new Date(b.dueDate + 'T12:00:00').getTime() : todayMs - 1
-      if (aDue < todayMs && bDue >= todayMs) return -1
-      if (aDue >= todayMs && bDue < todayMs) return 1
-      if (aDue !== bDue) return aDue - bDue
-      const sevA = SEVERITY_ORDER[a.severity] || 0
-      const sevB = SEVERITY_ORDER[b.severity] || 0
-      if (sevB !== sevA) return sevB - sevA
-      return toMs(b.createdAt) - toMs(a.createdAt)
+      const aFault = a.ticketType === 'fault'
+      const bFault = b.ticketType === 'fault'
+      if (aFault && !bFault) return -1
+      if (!aFault && bFault) return 1
+      if (aFault && bFault) {
+        const sevA = SEVERITY_ORDER[a.severity] || 0
+        const sevB = SEVERITY_ORDER[b.severity] || 0
+        if (sevB !== sevA) return sevB - sevA
+        return toMs(b.createdAt) - toMs(a.createdAt)
+      }
+      const aDue = a.dueDate ? new Date(a.dueDate + 'T12:00:00').getTime() : Infinity
+      const bDue = b.dueDate ? new Date(b.dueDate + 'T12:00:00').getTime() : Infinity
+      const aOverdue = a.dueDate && aDue < todayMs
+      const bOverdue = b.dueDate && bDue < todayMs
+      if (aOverdue && !bOverdue) return -1
+      if (!aOverdue && bOverdue) return 1
+      return aDue - bDue
     })
   }, [unifiedTickets, todayStr])
 
@@ -426,54 +441,66 @@ export default function LogFaultMaintenance() {
     })
   }, [equipmentWithInspection, faults, addFault, updateFault])
 
-  function escapeHtml(s) {
-    const div = document.createElement('div')
-    div.textContent = s
-    return div.innerHTML
-  }
-
   function exportEquipmentPDF() {
-    const dateStr = new Date().toISOString().slice(0, 10)
-    const rows = filteredEquipment.map((e) => `
-      <tr>
-        <td>${escapeHtml(e.name ?? '')}</td>
-        <td>${escapeHtml(equipmentZoneLabel(e.zone))}</td>
-        <td>${escapeHtml(EQUIPMENT_STATUS_LABELS[e.status] ?? e.status ?? '')}</td>
-        <td>${escapeHtml(e.lastCheck ?? '—')}</td>
-        <td>${escapeHtml(e.lastTicketCreated ?? '—')}</td>
-      </tr>
-    `).join('')
-    const html = `<!DOCTYPE html>
-<html dir="ltr">
-<head>
-  <meta charset="utf-8">
-  <title>Equipment – ${dateStr}</title>
-  <style>
-    body { font-family: system-ui, sans-serif; padding: 20px; color: #1e293b; }
-    h1 { font-size: 1.5rem; margin: 0 0 1rem; }
-    .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 1rem; }
-    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-    th, td { border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; }
-    th { background: #f1f5f9; font-weight: 600; }
-    tr:nth-child(even) { background: #f8fafc; }
-  </style>
-</head>
-<body>
-  <h1>Manage Equipment</h1>
-  <p class="meta">Generated ${new Date().toLocaleString()} · ${filteredEquipment.length} item(s)</p>
-  <table>
-    <thead><tr><th>Equipment name</th><th>Assigned zone</th><th>Operational status</th><th>Next Service</th><th>Last Service</th></tr></thead>
-    <tbody>${rows}</tbody>
-  </table>
-  <p class="meta" style="margin-top:1rem;">Use the browser print dialog and choose &quot;Save as PDF&quot; to save as PDF.</p>
-</body>
-</html>`
-    const win = window.open('', '_blank')
-    if (!win) return
-    win.document.write(html)
-    win.document.close()
-    win.focus()
-    setTimeout(() => { win.print(); win.onafterprint = () => win.close(); }, 250)
+    const el = equipmentTableRef.current
+    if (!el) return
+    html2canvas(el, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+    }).then((canvas) => {
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF({
+        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      })
+      const pdfW = pdf.internal.pageSize.getWidth()
+      const pdfH = pdf.internal.pageSize.getHeight()
+      const margin = 10
+      const w = pdfW - margin * 2
+      const h = (canvas.height * w) / canvas.width
+
+      pdf.setFontSize(14)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('Manage Equipment', margin, 12)
+      pdf.setFontSize(9)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text(new Date().toLocaleString(), margin, 18)
+
+      let y = 24
+      pdf.setFontSize(10)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('Filters applied:', margin, y)
+      y += 5
+      const zoneLabelVal = eqFilterZone ? (equipmentZoneLabel(eqFilterZone) || eqFilterZone) : 'All'
+      const statusLabelVal = eqFilterStatus ? (EQUIPMENT_STATUS_LABELS[eqFilterStatus] || eqFilterStatus) : 'All'
+      const searchValue = eqFilterSearch.trim() || '—'
+      const sortColLabel = eqSortBy === 'name' ? t('equipmentName') : eqSortBy === 'zone' ? t('assignedZone') : eqSortBy === 'lastInspection' ? t('nextInspection') : eqSortBy
+      const sortLabel = `${sortColLabel} (${eqSortDir === 'asc' ? 'asc' : 'desc'})`
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(9)
+      const filterLine1 = `Zone: ${zoneLabelVal}   ·   Status: ${statusLabelVal}   ·   High failure only: ${eqFilterHighFailure ? 'Yes' : 'No'}`
+      const filterLine2 = `Search: ${searchValue}`
+      const filterLine3 = `Sort: ${sortLabel}   ·   Rows: ${filteredEquipment.length}`
+      const lineH = 5
+      const split1 = pdf.splitTextToSize(filterLine1, w)
+      split1.forEach((line) => { pdf.text(line, margin, y); y += lineH })
+      pdf.text(filterLine2, margin, y); y += lineH
+      const split3 = pdf.splitTextToSize(filterLine3, w)
+      split3.forEach((line) => { pdf.text(line, margin, y); y += lineH })
+      y += 3
+      pdf.setDrawColor(220, 220, 220)
+      pdf.line(margin, y, margin + w, y)
+      y += 4
+      const headerH = y
+      const imgH = Math.min(h, pdfH - headerH - 4)
+      const imgW = (canvas.width * imgH) / canvas.height
+      const imgX = margin + (w - imgW) / 2
+      pdf.addImage(imgData, 'PNG', imgX, headerH, imgW, imgH)
+      pdf.save(`Manage-Equipment-${new Date().toISOString().slice(0, 10)}.pdf`)
+    }).catch(() => {})
   }
   function handleSaveEditEquipment(e) {
     e.preventDefault()
@@ -705,7 +732,7 @@ export default function LogFaultMaintenance() {
               </div>
               <div className={eqStyles.filtersRow}>
                 <span className={eqStyles.filterLabel}>Search</span>
-                <input type="search" value={eqFilterSearch} onChange={(e) => setEqFilterSearch(e.target.value)} placeholder="Name, zone…" className={eqStyles.filterInput} />
+                <input type="search" value={eqFilterSearch} onChange={(e) => setEqFilterSearch(e.target.value)} placeholder={t('nameZonePlaceholder')} className={eqStyles.filterInput} />
               </div>
               {eqFilterHighFailure && (
                 <div className={eqStyles.filterChipWrap}>
@@ -733,13 +760,13 @@ export default function LogFaultMaintenance() {
                 {inspectionOverdueCount > 0 && <span className={eqStyles.inspectionCounterOverdue}>Overdue Inspections: {inspectionOverdueCount}</span>}
           </div>
             )}
-            <div className={eqStyles.tableWrap}>
+            <div className={eqStyles.tableWrap} ref={equipmentTableRef}>
               <table className={eqStyles.table}>
                 <thead>
                   <tr>
-                    <th><button type="button" className={eqStyles.thSort} onClick={() => toggleEqSort('name')}>Equipment name {eqSortBy === 'name' ? (eqSortDir === 'asc' ? '↑' : '↓') : ''}</button></th>
-                    <th><button type="button" className={eqStyles.thSort} onClick={() => toggleEqSort('zone')}>Assigned zone {eqSortBy === 'zone' ? (eqSortDir === 'asc' ? '↑' : '↓') : ''}</button></th>
-                    <th>Operational status</th>
+                    <th><button type="button" className={eqStyles.thSort} onClick={() => toggleEqSort('name')}>{t('equipmentName')} {eqSortBy === 'name' ? (eqSortDir === 'asc' ? '↑' : '↓') : ''}</button></th>
+                    <th><button type="button" className={eqStyles.thSort} onClick={() => toggleEqSort('zone')}>{t('assignedZone')} {eqSortBy === 'zone' ? (eqSortDir === 'asc' ? '↑' : '↓') : ''}</button></th>
+                    <th>{t('operationalStatus')}</th>
                     <th><button type="button" className={eqStyles.thSort} onClick={() => toggleEqSort('lastInspection')}>Next Service {eqSortBy === 'lastInspection' ? (eqSortDir === 'asc' ? '↑' : '↓') : ''}</button></th>
                     <th>Last Service</th>
                     <th>Actions</th>
@@ -924,18 +951,18 @@ export default function LogFaultMaintenance() {
             <h3 className={eqStyles.modalTitle}>Edit equipment – {editEquipment.name}</h3>
             <form onSubmit={handleSaveEditEquipment} className={eqStyles.modalForm}>
               <div className={eqStyles.formRow}>
-                <label>Equipment name</label>
+                <label>{t('equipmentName')}</label>
                 <input type="text" value={editEquipment.name} onChange={(e) => setEditEquipment((p) => ({ ...p, name: e.target.value }))} required className={eqStyles.input} />
               </div>
               <div className={eqStyles.formRow}>
-                <label>Assigned zone</label>
+                <label>{t('assignedZone')}</label>
                 <select value={editEquipment.zone || ''} onChange={(e) => setEditEquipment((p) => ({ ...p, zone: e.target.value }))} className={eqStyles.input}>
                   <option value="">—</option>
                   {zonesList.map((z) => (<option key={z.id} value={z.id}>{z.label || z.name || z.id}</option>))}
                 </select>
               </div>
               <div className={eqStyles.formRow}>
-                <label>Operational status</label>
+                <label>{t('operationalStatus')}</label>
                 <select value={editEquipment.status || EQUIPMENT_STATUS.ACTIVE} onChange={(e) => setEditEquipment((p) => ({ ...p, status: e.target.value }))} className={eqStyles.input}>
                   <option value={EQUIPMENT_STATUS.ACTIVE}>Active</option>
                   <option value={EQUIPMENT_STATUS.UNDER_MAINTENANCE}>Under Maintenance</option>
@@ -1006,7 +1033,7 @@ export default function LogFaultMaintenance() {
               </div>
                   <div className={eqStyles.formRow}>
                     <label>Description <span className={eqStyles.required}>*</span></label>
-                    <textarea value={ticketForm.description} onChange={(e) => setTicketForm((f) => ({ ...f, description: e.target.value }))} required rows={3} className={eqStyles.input} placeholder="Describe the fault..." />
+                    <textarea value={ticketForm.description} onChange={(e) => setTicketForm((f) => ({ ...f, description: e.target.value }))} required rows={3} className={eqStyles.input} placeholder={t('describeFault')} />
                   </div>
                 </>
               )}
@@ -1026,7 +1053,7 @@ export default function LogFaultMaintenance() {
                   )}
                   <div className={eqStyles.formRow}>
                     <label>Notes</label>
-                    <textarea value={ticketForm.notes} onChange={(e) => setTicketForm((f) => ({ ...f, notes: e.target.value }))} rows={2} className={eqStyles.input} placeholder="Optional notes..." />
+                    <textarea value={ticketForm.notes} onChange={(e) => setTicketForm((f) => ({ ...f, notes: e.target.value }))} rows={2} className={eqStyles.input} placeholder={t('optionalNotes')} />
                   </div>
                 </>
               )}
@@ -1175,8 +1202,8 @@ export default function LogFaultMaintenance() {
               <section className={eqStyles.historySection}>
                 <h4 className={eqStyles.historySectionTitle}>Equipment</h4>
                 <dl className={eqStyles.historyMeta}>
-                  <dt>Assigned zone</dt><dd>{equipmentZoneLabel(viewHistoryEquipment.zone)}</dd>
-                  <dt>Operational status</dt><dd><span className={eqStyles.eqBadge} data-status={viewHistoryEquipment.status}>{EQUIPMENT_STATUS_LABELS[viewHistoryEquipment.status]}</span></dd>
+                  <dt>{t('assignedZone')}</dt><dd>{equipmentZoneLabel(viewHistoryEquipment.zone)}</dd>
+                  <dt>{t('operationalStatus')}</dt><dd><span className={eqStyles.eqBadge} data-status={viewHistoryEquipment.status}>{EQUIPMENT_STATUS_LABELS[viewHistoryEquipment.status]}</span></dd>
                   <dt>Next inspection</dt>
                   <dd>
                     {viewHistoryEquipment.inspectionStatus == null ? <span className={eqStyles.inspectionBadgeNone}>Not scheduled</span> : viewHistoryEquipment.inspectionStatus === 'ok' ? <span className={eqStyles.inspectionBadgeOk}>On track</span> : viewHistoryEquipment.inspectionStatus === 'due_soon' ? <span className={eqStyles.inspectionBadgeDueSoon}>Due Soon</span> : <span className={eqStyles.inspectionBadgeOverdue}>Overdue</span>}
@@ -1222,21 +1249,21 @@ export default function LogFaultMaintenance() {
       {addEquipmentOpen && (
         <div className={eqStyles.modalOverlay} onClick={() => setAddEquipmentOpen(false)}>
           <div className={eqStyles.modal} onClick={(e) => e.stopPropagation()}>
-            <h3 className={eqStyles.modalTitle}>Add equipment</h3>
+            <h3 className={eqStyles.modalTitle}>{t('addEquipment')}</h3>
             <form onSubmit={handleAddEquipment} className={eqStyles.modalForm}>
               <div className={eqStyles.formRow}>
-                <label>Equipment name</label>
-                <input type="text" value={newEquipment.name} onChange={(e) => setNewEquipment((p) => ({ ...p, name: e.target.value }))} required placeholder="e.g. Harvester C" className={eqStyles.input} />
+                <label>{t('equipmentName')}</label>
+                <input type="text" value={newEquipment.name} onChange={(e) => setNewEquipment((p) => ({ ...p, name: e.target.value }))} required placeholder={t('equipmentNamePlaceholder')} className={eqStyles.input} />
               </div>
               <div className={eqStyles.formRow}>
-                <label>Assigned zone</label>
+                <label>{t('assignedZone')}</label>
                 <select value={newEquipment.zone} onChange={(e) => setNewEquipment((p) => ({ ...p, zone: e.target.value }))} className={eqStyles.input}>
                   <option value="">—</option>
                   {zonesList.map((z) => (<option key={z.id} value={z.id}>{z.label || z.name || z.id}</option>))}
                 </select>
               </div>
               <div className={eqStyles.formRow}>
-                <label>Operational status</label>
+                <label>{t('operationalStatus')}</label>
                 <select value={newEquipment.status} onChange={(e) => setNewEquipment((p) => ({ ...p, status: e.target.value }))} className={eqStyles.input}>
                   <option value={EQUIPMENT_STATUS.ACTIVE}>Active</option>
                   <option value={EQUIPMENT_STATUS.UNDER_MAINTENANCE}>Under Maintenance</option>

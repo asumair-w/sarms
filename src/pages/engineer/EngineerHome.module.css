@@ -22,9 +22,14 @@
   }
 }
 
-/* Page header – same as Reports */
+/* Page header – title left, system health right */
 .pageHeader {
   margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .pageTitle {
@@ -41,18 +46,18 @@
   color: #64748b;
 }
 
-/* KPI row – summary cards style (Reports/Inventory) */
+/* KPI row – 3 كروت تملأ العرض */
 .kpiRow {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: 1fr;
   gap: 0.75rem;
   width: 100%;
   box-sizing: border-box;
 }
 
-@media (min-width: 640px) {
+@media (min-width: 480px) {
   .kpiRow {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 1rem;
   }
 }
@@ -60,20 +65,22 @@
 .kpiCard {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 0.35rem;
-  min-height: 88px;
-  padding: 1rem;
-  border-radius: 12px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 100px;
+  padding: 1.25rem 1rem;
+  border-radius: 14px;
   border: 2px solid #e2e8f0;
   background: #fff;
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   font: inherit;
   transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.15s;
   -webkit-tap-highlight-color: transparent;
   overflow: hidden;
   box-sizing: border-box;
+  flex: 1;
 }
 
 .kpiCard:hover {
@@ -87,12 +94,12 @@
 }
 
 .kpiIcon {
-  font-size: 1rem;
+  font-size: 1.25rem;
   color: #64748b;
 }
 
 .kpiCount {
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   font-weight: 800;
   color: #0f172a;
   line-height: 1.2;
@@ -106,23 +113,38 @@
   letter-spacing: 0.03em;
 }
 
-.kpiCard_warning .kpiIcon { color: #d97706; }
-.kpiCard_warning .kpiCount { color: #b45309; }
-.kpiCard_warning:hover { border-color: #d97706; }
+@media (min-width: 640px) {
+  .kpiCard {
+    min-height: 110px;
+    padding: 1.5rem 1.25rem;
+  }
+  .kpiCount {
+    font-size: 2rem;
+  }
+}
 
-.kpiCard_danger .kpiIcon { color: #dc2626; }
-.kpiCard_danger .kpiCount { color: #b91c1c; }
-.kpiCard_danger:hover { border-color: #dc2626; }
+/* KPI variants – SARMS olive palette (muted orange, soft red, soft blue, primary olive) */
+.kpiCard_warning .kpiIcon,
+.kpiCard_warning .kpiCount,
+.kpiCard_warning .kpiLabel { color: #c7924a; }
+.kpiCard_warning:hover { border-color: #c7924a; }
 
-.kpiCard_info .kpiIcon { color: #0284c7; }
-.kpiCard_info .kpiCount { color: #0369a1; }
-.kpiCard_info:hover { border-color: #0284c7; }
+.kpiCard_danger .kpiIcon,
+.kpiCard_danger .kpiCount,
+.kpiCard_danger .kpiLabel { color: #b85c5c; }
+.kpiCard_danger:hover { border-color: #b85c5c; }
 
-.kpiCard_success .kpiIcon { color: #16a34a; }
-.kpiCard_success .kpiCount { color: #15803d; }
-.kpiCard_success:hover { border-color: #16a34a; }
+.kpiCard_info .kpiIcon,
+.kpiCard_info .kpiCount,
+.kpiCard_info .kpiLabel { color: #4f7c8a; }
+.kpiCard_info:hover { border-color: #4f7c8a; }
 
-/* Pending review banner */
+.kpiCard_success .kpiIcon,
+.kpiCard_success .kpiCount,
+.kpiCard_success .kpiLabel { color: #5c7b5c; }
+.kpiCard_success:hover { border-color: #5c7b5c; }
+
+/* Pending review banner – neutral grey to match SARMS theme */
 .reviewBanner {
   display: flex;
   align-items: center;
@@ -130,11 +152,11 @@
   flex-wrap: wrap;
   gap: 0.75rem;
   padding: 1rem 1.25rem;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
+  background: #e4e9e4;
+  border: 1px solid #c5cdc8;
   border-radius: 12px;
   font-size: 0.95rem;
-  color: #166534;
+  color: #374151;
 }
 
 .reviewNowBtn {
@@ -186,14 +208,14 @@
 
 @media (min-width: 640px) {
   .actionGrid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 1rem;
   }
 }
 
 @media (min-width: 1024px) {
   .actionGrid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 1.25rem;
   }
 }
@@ -247,12 +269,16 @@
   -webkit-box-orient: vertical;
 }
 
-/* Charts row */
+/* Charts row – responsive grid, equal-width cards */
 .chartsRow {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 1rem;
+  gap: 1.25rem;
   margin-bottom: 1rem;
+}
+
+.chartsRow > * {
+  min-width: 0;
 }
 
 @media (min-width: 640px) {
@@ -264,43 +290,116 @@
 @media (min-width: 1024px) {
   .chartsRow {
     grid-template-columns: repeat(4, 1fr);
-    gap: 1.25rem;
+    gap: 1.5rem;
   }
 }
 
-.chartWrap {
-  min-height: 200px;
-  padding: 1rem;
+/* Card: ChartContainer (flex-grow) + TitleText (simple text, no footer/separator) */
+.chartCard {
+  display: flex;
+  flex-direction: column;
+  min-height: 320px;
   background: #f8fafc;
   border-radius: 12px;
   border: 1px solid #e2e8f0;
   box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
-.widgetTitle {
-  margin: 0 0 0.5rem;
+/* Chart container – flex-grow: 1, centered, minimal padding so chart uses most space */
+.chartCardBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 0.75rem 0.5rem;
+}
+
+/* ECharts wrapper – fill available space, scale with card */
+.chartEchartsWrap {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 220px;
+  max-height: 100%;
+  overflow: visible;
+}
+
+/* Wrapper for chart + caption stacked vertically (e.g. Weekly Progress) */
+.chartCardBodyCol {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+}
+
+.chartCardBodyCol .chartEchartsWrap {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Caption inside card (e.g. explains "10 / 22" in Weekly Progress) */
+.chartCardCaption {
+  flex-shrink: 0;
+  margin: 0.35rem 0 0;
+  padding: 0 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #64748b;
+  text-align: center;
+  line-height: 1.3;
+}
+
+/* Title: simple text under the chart, no border or separator */
+.chartCardTitle {
+  flex-shrink: 0;
+  margin-top: 0.5rem;
+  padding: 0 1rem 1rem;
   font-size: 0.9rem;
-  font-weight: 700;
-  color: #0f172a;
+  font-weight: 600;
+  color: #334155;
+  text-align: center;
+  line-height: 1.3;
 }
 
-.weeklyProgressWrap {
+.weeklyProgressPct {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--sarms-primary, #4a6b4a);
+  letter-spacing: -0.02em;
+  min-height: 2.5rem;
+}
+
+.weeklyProgressFooter {
+  width: 100%;
+  flex-shrink: 0;
+  margin-top: 0.75rem;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.35rem;
-  margin-bottom: 0.5rem;
 }
 
-.weeklyPct {
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: var(--sarms-primary, #4a6b4a);
+.weeklyProgressFooter .chartCaption {
+  margin-top: 0;
 }
 
 .weeklyCount {
-  font-size: 0.85rem;
-  color: #64748b;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #334155;
+  line-height: 1.4;
 }
 
 .weeklyBarTrack {
@@ -309,6 +408,8 @@
   background: #e2e8f0;
   border-radius: 6px;
   overflow: hidden;
+  flex-shrink: 0;
+  margin-top: 0.5rem;
 }
 
 .weeklyBarFill {
@@ -322,9 +423,11 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  gap: 0.75rem;
-  min-height: 120px;
-  padding: 0.5rem 0;
+  gap: 1rem;
+  min-height: 130px;
+  padding: 0.75rem 0;
+  width: 100%;
+  flex: 1;
 }
 
 .typeVerticalCol {
@@ -333,6 +436,7 @@
   align-items: center;
   flex: 1;
   min-width: 0;
+  max-width: 80px;
 }
 
 .typeVerticalBarWrap {
@@ -340,16 +444,16 @@
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
-  height: 90px;
+  height: 100px;
   width: 100%;
-  max-width: 48px;
+  max-width: 52px;
 }
 
 .typeVerticalValue {
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   font-weight: 800;
   color: #0f172a;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.35rem;
   order: -1;
 }
 
@@ -362,22 +466,23 @@
 }
 
 .typeVerticalLabel {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: #64748b;
   text-align: center;
-  margin-top: 0.35rem;
-  line-height: 1.2;
-  max-width: 70px;
+  margin-top: 0.5rem;
+  line-height: 1.3;
+  max-width: 80px;
 }
 
 .doughnutChart {
-  width: 140px;
-  height: 140px;
-  margin: 0 auto 0.75rem;
+  width: 150px;
+  height: 150px;
+  margin: 0 auto 1rem;
   border-radius: 50%;
   border: 10px solid #f8fafc;
   box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .doughnutLegend {
@@ -387,15 +492,16 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 0.5rem 1rem;
+  gap: 0.6rem 1.25rem;
 }
 
 .doughnutLegendItem {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  font-size: 0.8rem;
+  gap: 0.4rem;
+  font-size: 0.85rem;
   color: #334155;
+  line-height: 1.4;
 }
 
 .doughnutLegendDot {
@@ -408,32 +514,36 @@
 .doughnutLegendValue {
   font-weight: 600;
   color: var(--sarms-primary, #4a6b4a);
-  margin-left: 0.2rem;
+  margin-left: 0.25rem;
 }
 
 .barChart {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  margin-bottom: 0.5rem;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  width: 100%;
+  max-width: 100%;
 }
 
 .barRow {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.75rem;
 }
 
 .barLabel {
-  flex: 0 0 70px;
-  font-size: 0.8rem;
+  flex: 0 0 72px;
+  font-size: 0.85rem;
   font-weight: 600;
   color: #334155;
+  line-height: 1.3;
 }
 
 .barTrack {
   flex: 1;
-  height: 20px;
+  min-width: 0;
+  height: 22px;
   background: #e2e8f0;
   border-radius: 6px;
   overflow: hidden;
@@ -448,18 +558,21 @@
 }
 
 .barValue {
-  flex: 0 0 24px;
-  font-size: 0.85rem;
+  flex: 0 0 28px;
+  font-size: 0.9rem;
   font-weight: 600;
   color: var(--sarms-primary, #4a6b4a);
   text-align: right;
 }
 
 .chartCaption {
-  margin: 0.5rem 0 0;
-  font-size: 0.75rem;
-  color: #64748b;
+  margin: 0.75rem 0 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #334155;
   text-align: center;
+  line-height: 1.4;
+  width: 100%;
 }
 
 .moreAnalyticsWrap {
@@ -610,6 +723,14 @@
   color: #475569;
 }
 
+.opsDuration {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--sarms-text-muted, #64748b);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 /* Fault table */
 .faultTableWrap {
   overflow-x: auto;
@@ -645,6 +766,32 @@
 
 .faultRow:hover {
   background: #f1f5f9;
+}
+
+.faultRowFault {
+  background: #fef2f2;
+}
+
+.faultRowFault:hover {
+  background: #fee2e2;
+}
+
+.faultRowFault td {
+  color: #b91c1c;
+  font-weight: 500;
+}
+
+.faultRowOverdue {
+  background: #fefce8;
+}
+
+.faultRowOverdue:hover {
+  background: #fef9c3;
+}
+
+.faultRowOverdue td {
+  color: #a16207;
+  font-weight: 500;
 }
 
 .faultEmpty {

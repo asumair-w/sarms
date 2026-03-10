@@ -10,12 +10,9 @@ import {
   Legend,
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
-import { INV_GREEN } from './analyticsColors'
+import { OLIVE_PRIMARY, OLIVE_LIGHT, OLIVE_PRIMARY_HOVER } from './analyticsColors'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Title, Tooltip, Legend)
-
-const COLOR_LINE = INV_GREEN
-const COLOR_FILL = INV_GREEN + '20'
 
 const options = {
   responsive: true,
@@ -46,10 +43,14 @@ export default function ProductionTrendChart({ data, onSegmentClick }) {
       {
         label: 'Production',
         data: values.length ? values : [0],
-        borderColor: COLOR_LINE,
-        backgroundColor: COLOR_FILL,
+        borderColor: OLIVE_PRIMARY,
+        backgroundColor: OLIVE_LIGHT,
         fill: true,
         tension: 0.3,
+        pointBackgroundColor: OLIVE_PRIMARY,
+        pointBorderColor: '#fff',
+        pointHoverBackgroundColor: OLIVE_PRIMARY_HOVER,
+        pointHoverBorderColor: '#fff',
       },
     ],
   }

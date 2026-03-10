@@ -9,14 +9,29 @@ import {
 } from 'chart.js'
 import { Bar } from 'react-chartjs-2'
 
-import { CHART_NEUTRAL, CHART_YELLOW, CHART_RED } from './analyticsColors'
+import {
+  SLATE_GREY,
+  SLATE_GREY_HOVER,
+  SOFT_BLUE,
+  SOFT_BLUE_HOVER,
+  OLIVE_PRIMARY,
+  OLIVE_PRIMARY_HOVER,
+  MUTED_ORANGE,
+  MUTED_ORANGE_HOVER,
+  SOFT_RED,
+  SOFT_RED_HOVER,
+} from './analyticsColors'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
 const LABELS = ['Pending', 'In Progress', 'Completed', 'Delayed']
-const COLOR_TASKS = CHART_NEUTRAL
-const COLOR_SESSIONS = CHART_YELLOW
-const COLOR_FAULTS = CHART_RED
+/** Per-category colors: Pending, In Progress, Completed, Delayed */
+const TASKS_COLORS = [SLATE_GREY, SOFT_BLUE, OLIVE_PRIMARY, MUTED_ORANGE]
+const TASKS_HOVER = [SLATE_GREY_HOVER, SOFT_BLUE_HOVER, OLIVE_PRIMARY_HOVER, MUTED_ORANGE_HOVER]
+const SESSIONS_COLORS = [SLATE_GREY, SOFT_BLUE, SLATE_GREY, MUTED_ORANGE]
+const SESSIONS_HOVER = [SLATE_GREY_HOVER, SOFT_BLUE_HOVER, SLATE_GREY_HOVER, MUTED_ORANGE_HOVER]
+const FAULTS_COLORS = [SLATE_GREY, SOFT_RED, SLATE_GREY, SLATE_GREY]
+const FAULTS_HOVER = [SLATE_GREY_HOVER, SOFT_RED_HOVER, SLATE_GREY_HOVER, SLATE_GREY_HOVER]
 
 export default function OperationalStatusChart({ data, onSegmentClick }) {
   const tasks = data?.tasks ?? [0, 0, 0, 0]
@@ -26,9 +41,9 @@ export default function OperationalStatusChart({ data, onSegmentClick }) {
   const chartData = {
     labels: data?.labels ?? LABELS,
     datasets: [
-      { label: 'Tasks', data: tasks, backgroundColor: COLOR_TASKS },
-      { label: 'Sessions', data: sessions, backgroundColor: COLOR_SESSIONS },
-      { label: 'Faults', data: faults, backgroundColor: COLOR_FAULTS },
+      { label: 'Tasks', data: tasks, backgroundColor: TASKS_COLORS, hoverBackgroundColor: TASKS_HOVER },
+      { label: 'Sessions', data: sessions, backgroundColor: SESSIONS_COLORS, hoverBackgroundColor: SESSIONS_HOVER },
+      { label: 'Faults', data: faults, backgroundColor: FAULTS_COLORS, hoverBackgroundColor: FAULTS_HOVER },
     ],
   }
 

@@ -1,11 +1,28 @@
-import { Chart as ChartJS, RadialLinearScale, ArcElement, Tooltip, Legend } from 'chart.js'
-import { PolarArea } from 'react-chartjs-2'
-import { INV_GREEN, CHART_YELLOW, CHART_RED } from './analyticsColors'
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Tooltip,
+  Legend,
+} from 'chart.js'
+import { Bar } from 'react-chartjs-2'
+import {
+  OLIVE_PRIMARY,
+  OLIVE_PRIMARY_HOVER,
+  SOFT_BLUE,
+  SOFT_BLUE_HOVER,
+  MUTED_ORANGE,
+  MUTED_ORANGE_HOVER,
+  SOFT_RED,
+  SOFT_RED_HOVER,
+} from './analyticsColors'
 
-ChartJS.register(RadialLinearScale, ArcElement, Tooltip, Legend)
+ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend)
 
 const LABELS = ['Open faults', 'Scheduled maintenance', 'Overdue maintenance', 'Active equipment %']
-const COLORS = [CHART_RED + '80', CHART_YELLOW + '80', CHART_RED + '80', INV_GREEN + 'cc']
+const COLORS = [SOFT_RED, SOFT_BLUE, MUTED_ORANGE, OLIVE_PRIMARY]
+const HOVER_COLORS = [SOFT_RED_HOVER, SOFT_BLUE_HOVER, MUTED_ORANGE_HOVER, OLIVE_PRIMARY_HOVER]
 
 const options = {
   responsive: true,
@@ -16,11 +33,21 @@ const options = {
       position: 'bottom',
       labels: { boxWidth: 10, font: { size: 10 }, padding: 12 },
     },
+    tooltip: {
+      callbacks: {
+        label: (ctx) => `${ctx.label}: ${ctx.raw}${ctx.dataIndex === 3 ? '%' : ''}`,
+      },
+    },
   },
   scales: {
-    r: {
+    x: {
+      grid: { display: false },
+      ticks: { maxRotation: 25, font: { size: 10 } },
+    },
+    y: {
       beginAtZero: true,
-      ticks: { font: { size: 9 } },
+      suggestedMax: 100,
+      ticks: { font: { size: 10 } },
     },
   },
 }
@@ -32,20 +59,28 @@ export default function EquipmentLoadChart({ data, onSegmentClick }) {
   const activeEquipmentPct = data?.activeEquipmentPct ?? 0
   const labels = data?.labels ?? LABELS
 
+  const values = [openFaults, scheduledMaintenance, overdueMaintenance, Math.round(activeEquipmentPct)]
+  const maxVal = Math.max(100, ...values)
+
   const chartData = {
     labels,
     datasets: [
       {
-        data: [openFaults, scheduledMaintenance, overdueMaintenance, Math.round(activeEquipmentPct)],
+        label: 'Value',
+        data: values,
         backgroundColor: COLORS,
-        borderWidth: 2,
-        borderColor: '#fff',
+        hoverBackgroundColor: HOVER_COLORS,
+        borderWidth: 0,
       },
     ],
   }
 
   const optionsWithClick = {
     ...options,
+    scales: {
+      ...options.scales,
+      y: { ...options.scales.y, max: maxVal },
+    },
     onClick: (event, elements, chart) => {
       if (!onSegmentClick || elements.length === 0) return
       const el = elements[0]
@@ -54,5 +89,5 @@ export default function EquipmentLoadChart({ data, onSegmentClick }) {
     },
   }
 
-  return <PolarArea data={chartData} options={optionsWithClick} />
+  return <Bar data={chartData} options={optionsWithClick} />
 }

@@ -1,8 +1,11 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { jsPDF } from 'jspdf'
+import html2canvas from 'html2canvas'
 import { UNITS } from '../../data/recordEvent'
 import { getInitialZones } from '../../data/workerFlow'
 import { useAppStore } from '../../context/AppStoreContext'
+import { useLanguage } from '../../context/LanguageContext'
+import { getTranslation } from '../../i18n/translations'
 import { nextRecordId } from '../../utils/idGenerators'
 import styles from './RecordProduction.module.css'
 import invStyles from './InventoryEquipment.module.css'
@@ -19,13 +22,16 @@ const defaultForm = () => ({
 })
 
 export default function RecordProduction() {
+  const { lang } = useLanguage()
+  const t = (key) => getTranslation(lang, 'engineer', key)
   const { addRecord, updateRecord, removeRecord, records, zones: storeZones } = useAppStore()
   const zonesList = (storeZones && storeZones.length > 0) ? storeZones : getInitialZones()
+  /** Zones for harvest record only: exclude Inventory (harvest is from growing zones, not inventory). */
+  const harvestZonesList = useMemo(() => zonesList.filter((z) => (z.id || '').toLowerCase() !== 'inventory'), [zonesList])
   const ZONE_LABELS = useMemo(() => Object.fromEntries(zonesList.map((z) => [z.id, z.label])), [zonesList])
   const [form, setForm] = useState(defaultForm())
   const [saved, setSaved] = useState(null)
   const [harvestSectionOpen, setHarvestSectionOpen] = useState(false)
-  const [harvestLogOpen, setHarvestLogOpen] = useState(true)
   const [harvestFilterZone, setHarvestFilterZone] = useState('')
   const [harvestFilterSearch, setHarvestFilterSearch] = useState('')
   const [harvestFilterPeriod, setHarvestFilterPeriod] = useState('all')
@@ -34,6 +40,7 @@ export default function RecordProduction() {
   const [viewHarvestImage, setViewHarvestImage] = useState(null)
   const [editHarvestRecord, setEditHarvestRecord] = useState(null)
   const [editForm, setEditForm] = useState(null)
+  const [zoneDetailOpen, setZoneDetailOpen] = useState(false)
   const [opsFilterZone, setOpsFilterZone] = useState('')
   const [opsFilterWorker, setOpsFilterWorker] = useState('')
   const [opsFilterPeriod, setOpsFilterPeriod] = useState('all')
@@ -45,6 +52,7 @@ export default function RecordProduction() {
     const d = new Date()
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   }) // 'YYYY-MM' when custom
+  const harvestTableRef = useRef(null)
 
   /** Summary period bounds: current period and previous equivalent period (full month or 7d). */
   const summaryPeriodBounds = useMemo(() => {
@@ -229,22 +237,35 @@ export default function RecordProduction() {
     return Math.max(-99, Math.min(999, raw))
   }, [kpiTotalProduction, kpiPreviousTotalProduction])
 
-  /** Top zones by production in selected period (top 2). Sums only the dominant unit per zone for consistent comparison. */
+  /** Top 3 zones by production: rank by total quantity (all units summed) so the zone with most production is first. */
   const kpiTopZones = useMemo(() => {
     if (harvestRecordsInSummaryPeriod.length === 0) return []
-    const dominantUnit = kpiTotalProduction.dominantUnit
     const byZone = {}
     harvestRecordsInSummaryPeriod.forEach((r) => {
-      const u = (r.unit || 'kg').toLowerCase()
-      if (u !== (dominantUnit || 'kg').toLowerCase()) return
       const key = r.zoneId || r.zone || '—'
       const label = r.zone || ZONE_LABELS[r.zoneId] || key
       if (!byZone[key]) byZone[key] = { zoneId: r.zoneId, zoneLabel: label, total: 0 }
       byZone[key].total += Number(r.quantity) || 0
     })
     const sorted = Object.values(byZone).sort((a, b) => b.total - a.total)
-    return sorted.slice(0, 2).map((x) => ({ ...x, unit: dominantUnit }))
-  }, [harvestRecordsInSummaryPeriod, kpiTotalProduction.dominantUnit, ZONE_LABELS])
+    return sorted.slice(0, 3).map((x) => ({ ...x, unit: 'total' }))
+  }, [harvestRecordsInSummaryPeriod, ZONE_LABELS])
+
+  /** All zones with production per unit (for zone detail modal). Sorted by total (all units summed). */
+  const productionByZoneAllUnits = useMemo(() => {
+    if (harvestRecordsInSummaryPeriod.length === 0) return []
+    const byZone = {}
+    harvestRecordsInSummaryPeriod.forEach((r) => {
+      const key = r.zoneId || r.zone || '—'
+      const label = r.zone || ZONE_LABELS[r.zoneId] || key
+      if (!byZone[key]) byZone[key] = { zoneLabel: label, byUnit: {}, total: 0 }
+      const u = (r.unit || 'kg').toString().trim() || 'kg'
+      const qty = Number(r.quantity) || 0
+      byZone[key].byUnit[u] = (byZone[key].byUnit[u] || 0) + qty
+      byZone[key].total += qty
+    })
+    return Object.values(byZone).sort((a, b) => b.total - a.total)
+  }, [harvestRecordsInSummaryPeriod, ZONE_LABELS])
 
   const filteredHarvestRecords = useMemo(() => {
     let list = harvestRecords
@@ -282,76 +303,38 @@ export default function RecordProduction() {
   }, [harvestRecords, harvestFilterZone, harvestFilterSearch, harvestFilterPeriod, harvestDateFrom, harvestDateTo])
 
   function exportHarvestLogPDF() {
-    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-    const margin = 12
-    const pageW = 297
-    const pageH = 210
-    const maxY = pageH - margin
-    let y = margin
-    const lineH = 5
-    const headH = 8
-    const cellPad = 2
+    const el = harvestTableRef.current
+    if (!el) return
+    html2canvas(el, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+    }).then((canvas) => {
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      const margin = 12
+      const pageW = pdf.internal.pageSize.getWidth()
+      const pageH = pdf.internal.pageSize.getHeight()
+      const w = pageW - margin * 2
+      const h = (canvas.height * w) / canvas.width
 
-    const cols = [
-      { key: 'zone', label: 'Zone', w: 28 },
-      { key: 'lines', label: 'Lines / Area', w: 28 },
-      { key: 'date', label: 'Date & time', w: 38 },
-      { key: 'quantity', label: 'Quantity', w: 22 },
-      { key: 'unit', label: 'Unit', w: 18 },
-      { key: 'comment', label: 'Comment', w: 52 },
-    ]
-    const totalW = cols.reduce((s, c) => s + c.w, 0)
-
-    const drawTableRow = (cells, isHeader = false) => {
-      if (y > maxY - headH) { pdf.addPage('a4', 'landscape'); y = margin }
-      const startY = y
-      let rowH = headH
-      const cellTexts = cells.map((text, i) => {
-        const w = cols[i].w - cellPad * 2
-        const lines = pdf.splitTextToSize(String(text || '—').trim(), w)
-        return lines
-      })
-      rowH = Math.max(headH, Math.min(20, cellTexts.reduce((max, lines) => Math.max(max, lines.length * lineH + cellPad * 2), 0)))
-      let x = margin
-      cols.forEach((col, i) => {
-        pdf.rect(x, y, col.w, rowH)
-        pdf.setFontSize(isHeader ? 9 : 8)
-        pdf.setFont('helvetica', isHeader ? 'bold' : 'normal')
-        const lines = cellTexts[i] || []
-        const textY = y + cellPad + (lineH * 0.85)
-        lines.slice(0, Math.ceil((rowH - cellPad * 2) / lineH)).forEach((line, j) => {
-          pdf.text(line, x + cellPad, textY + j * lineH)
-        })
-        x += col.w
-      })
-      y += rowH
-    }
-
-    pdf.setFontSize(14)
-    pdf.setFont('helvetica', 'bold')
-    pdf.text('Harvest Log', margin, y)
-    y += 8
-    pdf.setFontSize(9)
-    pdf.setFont('helvetica', 'normal')
-    pdf.text(`Generated: ${new Date().toLocaleString()}  |  Filters: Zone ${harvestFilterZone ? (ZONE_LABELS[harvestFilterZone] || harvestFilterZone) : 'All'}  |  Period ${harvestFilterPeriod === '7d' ? 'Last 7 days' : harvestFilterPeriod === '30d' ? 'Last 30 days' : harvestFilterPeriod === 'custom' ? `${harvestDateFrom || '—'} to ${harvestDateTo || '—'}` : 'All time'}${harvestFilterSearch.trim() ? `  |  Search: ${harvestFilterSearch.trim()}` : ''}`, margin, y)
-    y += 10
-
-    const headers = cols.map((c) => c.label)
-    drawTableRow(headers, true)
-
-    filteredHarvestRecords.forEach((r) => {
-      const dt = r.dateTime || r.createdAt
-      drawTableRow([
-        r.zone || r.zoneId || '—',
-        r.linesArea || r.lines || '—',
-        dt ? new Date(dt).toLocaleString() : '—',
-        r.quantity != null ? String(r.quantity) : '—',
-        r.unit || '—',
-        (r.notes || '').trim() || '—',
-      ])
-    })
-
-    pdf.save(`Harvest-log-${new Date().toISOString().slice(0, 10)}.pdf`)
+      pdf.setFontSize(14)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('Harvest Log', margin, 10)
+      pdf.setFontSize(9)
+      pdf.setFont('helvetica', 'normal')
+      const filterLine = `Generated: ${new Date().toLocaleString()}  |  Filters: Zone ${harvestFilterZone ? (ZONE_LABELS[harvestFilterZone] || harvestFilterZone) : 'All'}  |  Period ${harvestFilterPeriod === '7d' ? 'Last 7 days' : harvestFilterPeriod === '30d' ? 'Last 30 days' : harvestFilterPeriod === 'custom' ? `${harvestDateFrom || '—'} to ${harvestDateTo || '—'}` : 'All time'}${harvestFilterSearch.trim() ? `  |  Search: ${harvestFilterSearch.trim()}` : ''}`
+      const splitLines = pdf.splitTextToSize(filterLine, w)
+      let y = 16
+      splitLines.forEach((line) => { pdf.text(line, margin, y); y += 5 })
+      y += 4
+      const imgH = Math.min(h, pageH - y - margin)
+      const imgW = (canvas.width * imgH) / canvas.height
+      const imgX = margin + (w - imgW) / 2
+      pdf.addImage(imgData, 'PNG', imgX, y, imgW, imgH)
+      pdf.save(`Harvest-log-${new Date().toISOString().slice(0, 10)}.pdf`)
+    }).catch(() => {})
   }
 
   function validateForm() {
@@ -469,10 +452,10 @@ export default function RecordProduction() {
             <div className={invStyles.summaryCardBody} onClick={(e) => e.stopPropagation()}>
               <div className={invStyles.summaryHarvestHead}>
                 <select value={summaryHarvestMonth} onChange={(e) => setSummaryHarvestMonth(e.target.value)} className={invStyles.summaryHarvestSelect} onClick={(e) => e.stopPropagation()}>
-                  <option value="this">This month</option>
-                  <option value="last">Last month</option>
+                  <option value="this">{t('thisMonth')}</option>
+                  <option value="last">{t('lastMonth')}</option>
                   <option value="7d">Last 7 days</option>
-                  <option value="all">All time</option>
+                  <option value="all">{t('allTime')}</option>
                   <option value="custom">Custom month</option>
                 </select>
                 {summaryHarvestMonth === 'custom' && (
@@ -482,7 +465,7 @@ export default function RecordProduction() {
                     onChange={(e) => setSummaryHarvestCustom(e.target.value)}
                     onClick={(e) => e.stopPropagation()}
                     className={invStyles.summaryHarvestMonthInput}
-                    title="Choose month"
+                    title={t('chooseMonth')}
                   />
                 )}
               </div>
@@ -497,14 +480,12 @@ export default function RecordProduction() {
                 <>
                   {Object.entries(kpiTotalProduction.byUnit).map(([unit, total]) => (
                     <div key={unit} className={invStyles.summaryRow}>
-                      <span>{unit}</span>
                       <strong>{formatQuantity(total)} {unit}</strong>
                     </div>
                   ))}
                 </>
               ) : (
                 <div className={invStyles.summaryRow}>
-                  <span>Quantity</span>
                   <strong>0</strong>
                 </div>
               )}
@@ -515,26 +496,35 @@ export default function RecordProduction() {
               )}
             </div>
           </div>
-          <div className={`${invStyles.summaryCard} ${styles.summaryKpiCard} ${styles.summaryKpiCardZone}`}>
+          <button
+            type="button"
+            className={`${invStyles.summaryCard} ${styles.summaryKpiCard} ${styles.summaryKpiCardZone} ${styles.summaryCardClickable}`}
+            onClick={() => setZoneDetailOpen(true)}
+          >
             <span className={invStyles.summaryCardLabel}>Production by Zone</span>
             <div className={invStyles.summaryCardBody}>
               {kpiTopZones.length > 0 ? (
                 <>
                   <div className={invStyles.summaryRow}>
-                    <span>Top zone</span>
                     <strong>{kpiTopZones[0].zoneLabel} ({formatQuantity(kpiTopZones[0].total)} {kpiTopZones[0].unit})</strong>
                   </div>
                   {kpiTopZones[1] && (
-                    <div className={invStyles.summaryRowSub}>
-                      2nd: {kpiTopZones[1].zoneLabel} ({formatQuantity(kpiTopZones[1].total)} {kpiTopZones[1].unit})
+                    <div className={`${invStyles.summaryRow} ${styles.zoneRowSub}`}>
+                      <strong>{kpiTopZones[1].zoneLabel} ({formatQuantity(kpiTopZones[1].total)} {kpiTopZones[1].unit})</strong>
                     </div>
                   )}
+                  {kpiTopZones[2] && (
+                    <div className={`${invStyles.summaryRow} ${styles.zoneRowSub}`}>
+                      <strong>{kpiTopZones[2].zoneLabel} ({formatQuantity(kpiTopZones[2].total)} {kpiTopZones[2].unit})</strong>
+                    </div>
+                  )}
+                  <div className={styles.zoneCardHint}>Click to view all zones & units</div>
                 </>
               ) : (
                 <div className={invStyles.summaryRowSub}>No records in period</div>
               )}
             </div>
-          </div>
+          </button>
         </div>
       </section>
 
@@ -561,8 +551,8 @@ export default function RecordProduction() {
                 required
                 className={styles.select}
               >
-                <option value="">Select zone</option>
-                {zonesList.map((z) => (
+                <option value="">{t('selectZone')}</option>
+                {harvestZonesList.map((z) => (
                   <option key={z.id} value={z.id}>{z.label}</option>
                 ))}
               </select>
@@ -573,7 +563,7 @@ export default function RecordProduction() {
                 type="text"
                 value={form.linesArea}
                 onChange={(e) => setForm((f) => ({ ...f, linesArea: e.target.value }))}
-                placeholder="e.g. 5–8"
+                placeholder={t('linesPlaceholder')}
                 className={styles.input}
               />
             </div>
@@ -590,7 +580,7 @@ export default function RecordProduction() {
               />
             </div>
             <div className={styles.field}>
-              <label>Quantity harvested</label>
+              <label>{t('quantityHarvested')}</label>
               <input
                 type="number"
                 min={0}
@@ -621,7 +611,7 @@ export default function RecordProduction() {
               value={form.notes}
               onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
               rows={3}
-              placeholder="Remarks, product type, etc."
+              placeholder={t('remarksPlaceholder')}
               className={styles.textarea}
             />
           </div>
@@ -664,21 +654,17 @@ export default function RecordProduction() {
       </section>
 
       <section className={styles.section}>
-        <button type="button" className={styles.sectionHeader} onClick={() => setHarvestLogOpen((o) => !o)}>
+        <div className={`${styles.sectionHeader} ${styles.sectionHeaderStatic}`}>
           <h2 className={styles.sectionTitle}><i className="fas fa-wheat-awn fa-fw" /> Harvest Log</h2>
-          <span className={styles.expandLabel}>{harvestLogOpen ? 'Collapse' : 'Expand'}</span>
-          <span className={styles.chevron}>{harvestLogOpen ? '▼' : '▶'}</span>
-        </button>
-        {harvestLogOpen && (
-          <>
-            <div className={invStyles.harvestFilters}>
+        </div>
+        <div className={invStyles.harvestFilters}>
               <select
                 value={harvestFilterZone}
                 onChange={(e) => setHarvestFilterZone(e.target.value)}
                 className={invStyles.filterSelect}
                 title="Filter by zone"
               >
-                <option value="">All zones</option>
+                <option value="">{t('allZones')}</option>
                 {zonesList.map((z) => (
                   <option key={z.id} value={z.id}>{z.label}</option>
                 ))}
@@ -687,12 +673,12 @@ export default function RecordProduction() {
                 value={harvestFilterPeriod}
                 onChange={(e) => setHarvestFilterPeriod(e.target.value)}
                 className={invStyles.filterSelect}
-                title="Time period"
+                title={t('timePeriod')}
               >
-                <option value="all">All time</option>
+                <option value="all">{t('allTime')}</option>
                 <option value="7d">Last 7 days</option>
                 <option value="30d">Last 30 days</option>
-                <option value="custom">Custom range</option>
+                <option value="custom">{t('customRange')}</option>
               </select>
               {harvestFilterPeriod === 'custom' && (
                 <>
@@ -701,14 +687,14 @@ export default function RecordProduction() {
                     value={harvestDateFrom}
                     onChange={(e) => setHarvestDateFrom(e.target.value)}
                     className={invStyles.filterDate}
-                    title="From date"
+                    title={t('fromDate')}
                   />
                   <input
                     type="date"
                     value={harvestDateTo}
                     onChange={(e) => setHarvestDateTo(e.target.value)}
                     className={invStyles.filterDate}
-                    title="To date"
+                    title={t('toDate')}
                   />
                 </>
               )}
@@ -716,7 +702,7 @@ export default function RecordProduction() {
                 type="text"
                 value={harvestFilterSearch}
                 onChange={(e) => setHarvestFilterSearch(e.target.value)}
-                placeholder="Search zone, lines, notes, quantity…"
+                placeholder={t('searchZonePlaceholder')}
                 className={invStyles.filterInput}
               />
               <div className={invStyles.filtersBarExport}>
@@ -730,7 +716,7 @@ export default function RecordProduction() {
                 {harvestRecords.length === 0 ? 'No harvest inventory yet. Add them from Record Production (Harvest Record form).' : 'No records match the filter.'}
               </p>
             ) : (
-              <div className={invStyles.harvestTableWrap}>
+              <div className={invStyles.harvestTableWrap} ref={harvestTableRef}>
                 <table className={invStyles.table}>
                   <thead>
                     <tr>
@@ -771,8 +757,6 @@ export default function RecordProduction() {
                 </table>
               </div>
             )}
-          </>
-        )}
       </section>
 
       {viewHarvestImage && (
@@ -795,8 +779,8 @@ export default function RecordProduction() {
                     required
                     className={styles.select}
                   >
-                    <option value="">Select zone</option>
-                    {zonesList.map((z) => (
+                    <option value="">{t('selectZone')}</option>
+                    {harvestZonesList.map((z) => (
                       <option key={z.id} value={z.id}>{z.label}</option>
                     ))}
                   </select>
@@ -807,7 +791,7 @@ export default function RecordProduction() {
                     type="text"
                     value={editForm.linesArea}
                     onChange={(e) => setEditForm((f) => ({ ...f, linesArea: e.target.value }))}
-                    placeholder="e.g. 5–8"
+                    placeholder={t('linesPlaceholder')}
                     className={styles.input}
                   />
                 </div>
@@ -865,10 +849,46 @@ export default function RecordProduction() {
                   <button type="button" className={styles.btnSecondary} onClick={() => { setEditHarvestRecord(null); setEditForm(null) }}>
                     Cancel
                   </button>
-                  <button type="submit" className={styles.btnPrimary}>Save changes</button>
+                  <button type="submit" className={styles.btnPrimary}>{t('saveChanges')}</button>
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {zoneDetailOpen && (
+        <div className={styles.modalOverlay} onClick={() => setZoneDetailOpen(false)} role="dialog" aria-modal="true" aria-labelledby="zone-detail-title">
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <h3 id="zone-detail-title" className={styles.modalTitle}>Production by zone (all units)</h3>
+            {productionByZoneAllUnits.length > 0 ? (
+              <ul className={styles.zoneDetailList}>
+                {productionByZoneAllUnits.map((z) => (
+                  <li key={z.zoneLabel} className={styles.zoneDetailItem}>
+                    <span className={styles.zoneDetailZoneName}>{z.zoneLabel}</span>
+                    <div className={styles.zoneDetailUnits}>
+                      {Object.entries(z.byUnit)
+                        .filter(([, v]) => v > 0)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([unit, total]) => (
+                          <span key={unit} className={styles.zoneDetailUnitBadge}>
+                            {formatQuantity(total)} {unit}
+                          </span>
+                        ))}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className={styles.zoneDetailEmpty}>No production records in this period.</p>
+            )}
+            <div className={styles.modalActions}>
+              <div className={styles.modalActionsRight}>
+                <button type="button" className={styles.btnSecondary} onClick={() => setZoneDetailOpen(false)}>
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

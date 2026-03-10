@@ -17,10 +17,10 @@ import {
   ArcElement,
   RadialLinearScale,
 } from 'chart.js'
-import { Bar, Line, Radar, Doughnut } from 'react-chartjs-2'
+import { Bar, Line, Radar, Doughnut, Pie } from 'react-chartjs-2'
 import { DEPARTMENT_OPTIONS, SEED_WORKERS } from '../../data/engineerWorkers'
 import { TASK_STATUS, TASK_STATUS_LABELS } from '../../data/assignTask'
-import { getInitialZones, getTaskById, TASKS_BY_DEPARTMENT, INVENTORY_TASKS } from '../../data/workerFlow'
+import { getInitialZones, getTaskById, getDepartment, getTasksForDepartment, TASKS_BY_DEPARTMENT, INVENTORY_TASKS } from '../../data/workerFlow'
 import { getInventoryStatus, INVENTORY_CATEGORIES, INVENTORY_STATUS } from '../../data/inventory'
 import { FAULT_CATEGORIES, SEVERITY_OPTIONS, FAULT_STATUS_OPEN } from '../../data/faults'
 import { getSessionStatus, getElapsedMinutes, SESSION_STATUS, SESSION_STATUS_LABELS } from '../../data/monitorActive'
@@ -30,6 +30,7 @@ import SystemHealthScore from '../../components/analytics/SystemHealthScore'
 import DrillDownModal from '../../components/analytics/DrillDownModal'
 import { buildOverviewData, getAutoInsight, percentChange } from '../../utils/analyticsOverview'
 import { jsPDF } from 'jspdf'
+import html2canvas from 'html2canvas'
 import styles from './ReportsAnalytics.module.css'
 
 ChartJS.register(
@@ -58,7 +59,27 @@ const WORKER_OPTIONS = SEED_WORKERS.filter((w) => w.role === 'worker' || w.role 
 const DEFAULT_DATE_FROM = () => new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
 const DEFAULT_DATE_TO = () => new Date().toISOString().slice(0, 10)
 
-const COLOR = { GREEN: '#34d399', YELLOW: '#fde047', RED: '#f87171', NEUTRAL: '#94a3b8', ORANGE: '#fb923c', LIGHT_GREEN: '#6ee7b7' }
+/** SARMS olive chart palette – matches Executive Overview analytics */
+const COLOR = {
+  GREEN: '#5c7b5c',
+  YELLOW: '#c7924a',
+  RED: '#b85c5c',
+  NEUTRAL: '#7a8580',
+  ORANGE: '#c7924a',
+  LIGHT_GREEN: '#a9bfa9',
+  SOFT_BLUE: '#4f7c8a',
+}
+/** Hover (darker) for bar/donut – never lighter */
+const HOVER = {
+  GREEN: '#385438',
+  NEUTRAL: '#5e6763',
+  SOFT_BLUE: '#3a606b',
+  LIGHT_GREEN: '#7fa77f',
+  OLIVE_SOFT: '#5c7b5c',
+  ORANGE: '#a6783c',
+  RED: '#8f4444',
+}
+const CHART_GRID = '#e4e9e4'
 
 function inDateRange(iso, from, to) {
   if (!from && !to) return true
@@ -66,6 +87,27 @@ function inDateRange(iso, from, to) {
   if (from && d < from) return false
   if (to && d > to) return false
   return true
+}
+
+/** Session is completed if it has completedAt, completed_at (API), or endTime. */
+function isSessionCompleted(s) {
+  return !!(s?.completedAt ?? s?.completed_at ?? s?.endTime)
+}
+
+/** Session belongs to zone z (z has .id and .label). */
+function sessionInZone(s, z) {
+  const sid = (s.zoneId || s.zone || '').toString().trim().toLowerCase()
+  const slabel = (s.zone || s.zoneId || '').toString().trim()
+  const zid = (z.id || '').toString().trim().toLowerCase()
+  const zlabel = (z.label || '').toString().trim()
+  return sid === zid || slabel === zlabel
+}
+
+/** Same as Monitor Active Work: task is in progress. */
+function isTaskInProgress(status) {
+  if (status == null || status === '') return false
+  const s = String(status).toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_').trim()
+  return s === TASK_STATUS.IN_PROGRESS
 }
 
 const EXPLORER_MODULES = [
@@ -102,9 +144,12 @@ export default function ReportsAnalytics() {
     equipment,
     maintenancePlans,
     zones: storeZones,
+    workers,
   } = useAppStore()
   const zonesList = (storeZones && storeZones.length > 0) ? storeZones : getInitialZones()
   const ZONE_LABEL = useMemo(() => Object.fromEntries(zonesList.map((z) => [z.id, z.label])), [zonesList])
+  /** Zones for "Active sessions by zone" chart: always use full list (A,B,C,D,Inventory) so counts match Engineer Active Workers table. */
+  const sessionsChartZones = useMemo(() => getInitialZones(), [])
   const EQUIPMENT_OPTIONS = useMemo(() => (equipment || []).map((e) => ({ id: e.id, label: e.name || e.id })), [equipment])
 
   const [tick, setTick] = useState(0)
@@ -135,7 +180,9 @@ export default function ReportsAnalytics() {
   const [drillDownOpen, setDrillDownOpen] = useState(false)
   const [drillDownPayload, setDrillDownPayload] = useState(null)
   const [summaryFilterOpen, setSummaryFilterOpen] = useState(false)
+  const [activeDatePreset, setActiveDatePreset] = useState(null)
   const pageCaptureRef = useRef(null)
+  const reportsContentRef = useRef(null)
 
   const now = Date.now()
   const allSessionsWithStatus = useMemo(
@@ -182,6 +229,7 @@ export default function ReportsAnalytics() {
         break
     }
     setFilters((f) => ({ ...f, dateFrom, dateTo }))
+    setActiveDatePreset(preset)
   }
 
   const filteredTasks = useMemo(() => {
@@ -207,6 +255,56 @@ export default function ReportsAnalytics() {
       return true
     })
   }, [allSessionsWithStatus, appliedFilters])
+
+  /** Same data as Engineer "Monitor Active Work" table: real active sessions + virtual from IN_PROGRESS tasks. */
+  const activeSessionsOnly = useMemo(() => {
+    const real = (sessions || []).filter((s) => !isSessionCompleted(s))
+    const taskIdsWithActive = new Set(real.map((s) => String(s.taskId)).filter(Boolean))
+    const virtual = []
+    ;(tasks || []).forEach((task) => {
+      if (!isTaskInProgress(task.status)) return
+      if (task.id != null && taskIdsWithActive.has(String(task.id))) return
+      const dept = getDepartment(task.departmentId)
+      const deptId = (task.departmentId || task.taskType || '').toLowerCase()
+      const taskLabel = getTasksForDepartment(deptId)?.find((t) => t.id === task.taskId)
+      const zoneIdNorm = task.zoneId != null ? String(task.zoneId).toLowerCase() : ''
+      const zoneLabel = ZONE_LABEL[zoneIdNorm] ?? (zoneIdNorm === 'inventory' ? 'Inventory' : zoneIdNorm ? `Zone ${zoneIdNorm.toUpperCase()}` : '—')
+      const workerIds = Array.isArray(task.workerIds) ? task.workerIds : []
+      const base = {
+        taskId: task.id,
+        departmentId: deptId || task.departmentId,
+        department: dept?.labelEn ?? task.departmentId ?? '—',
+        task: taskLabel?.labelEn ?? task.taskId ?? '—',
+        zoneId: zoneIdNorm || task.zoneId,
+        zone: zoneLabel,
+        linesArea: task.linesArea || '—',
+        startTime: task.createdAt || new Date().toISOString(),
+        expectedMinutes: task.estimatedMinutes || 60,
+        assignedByEngineer: false,
+      }
+      const workerList = workers && workers.length > 0 ? workers : WORKER_OPTIONS
+      if (workerIds.length === 0) {
+        virtual.push({ id: `task-${task.id}`, workerId: '', workerName: '—', ...base })
+      } else {
+        workerIds.forEach((wId) => {
+          const w = (workerList || []).find((x) => String(x.id) === String(wId))
+          virtual.push({
+            id: `task-${task.id}-${wId}`,
+            workerId: String(wId),
+            workerName: w?.fullName ?? String(wId),
+            ...base,
+          })
+        })
+      }
+    })
+    return [...real, ...virtual]
+  }, [sessions, tasks, workers, ZONE_LABEL])
+
+  /** Active sessions with status (On time / Delayed / Flagged) – same as Engineer Active Workers table. */
+  const activeSessionsWithStatus = useMemo(() => {
+    const now = Date.now()
+    return activeSessionsOnly.map((s) => ({ ...s, status: getSessionStatus(s, now) }))
+  }, [activeSessionsOnly, tick])
 
   const filteredMaintenance = useMemo(() => {
     const list = maintenancePlans || []
@@ -263,21 +361,60 @@ export default function ReportsAnalytics() {
     return arr
   }, [appliedFilters])
 
-  const miniMetrics = useMemo(() => {
+  /** Production by unit; dominant = unit with largest total; byUnit for switcher. */
+  const productionByUnitAndDominant = useMemo(() => {
     const prodRecords = filteredRecords.filter((r) => r.recordType === 'production')
-    const totalProduction = prodRecords.reduce((s, r) => s + (Number(r.quantity) || 0), 0)
+    const byUnit = {}
+    prodRecords.forEach((r) => {
+      const u = (r.unit || 'kg').toString().trim() || 'kg'
+      byUnit[u] = (byUnit[u] || 0) + (Number(r.quantity) || 0)
+    })
+    const entries = Object.entries(byUnit).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
+    const dominant = entries[0]
+    return {
+      byUnit,
+      dominantUnit: dominant ? dominant[0] : 'kg',
+      dominantTotal: dominant ? dominant[1] : 0,
+    }
+  }, [filteredRecords])
+
+  const [selectedProductionUnit, setSelectedProductionUnit] = useState(null)
+  const [productionUnitDropdownOpen, setProductionUnitDropdownOpen] = useState(false)
+  const productionUnitDropdownRef = useRef(null)
+  useEffect(() => {
+    if (!productionUnitDropdownOpen) return
+    const close = (e) => {
+      if (productionUnitDropdownRef.current && !productionUnitDropdownRef.current.contains(e.target)) setProductionUnitDropdownOpen(false)
+    }
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [productionUnitDropdownOpen])
+
+  const displayedProductionUnit = selectedProductionUnit ?? productionByUnitAndDominant.dominantUnit
+  const displayedProductionTotal = selectedProductionUnit != null
+    ? (productionByUnitAndDominant.byUnit[selectedProductionUnit] ?? 0)
+    : productionByUnitAndDominant.dominantTotal
+  const productionUnitOptions = useMemo(() => {
+    const entries = Object.entries(productionByUnitAndDominant.byUnit).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
+    if (entries.length > 0) return entries.map(([u]) => u)
+    if (productionByUnitAndDominant.dominantUnit) return [productionByUnitAndDominant.dominantUnit]
+    return ['kg']
+  }, [productionByUnitAndDominant.byUnit, productionByUnitAndDominant.dominantUnit])
+
+  const miniMetrics = useMemo(() => {
     const openFaults = filteredFaults.filter((f) => (f.status || FAULT_STATUS_OPEN) === FAULT_STATUS_OPEN).length
     const delayedTasks = filteredSessions.filter((s) => s.status === SESSION_STATUS.DELAYED).length
     const criticalInventory = inventoryWithStatus.filter((i) => i.status === INVENTORY_STATUS.CRITICAL).length
-    const activeSessionsCount = filteredSessions.filter((s) => !s.completedAt).length
+    const activeSessionsCount = filteredSessions.filter((s) => !isSessionCompleted(s)).length
     return {
-      totalProduction,
+      totalProduction: productionByUnitAndDominant.dominantTotal,
+      totalProductionUnit: productionByUnitAndDominant.dominantUnit,
       openFaults,
       delayedTasks,
       criticalInventory,
       activeSessions: activeSessionsCount,
     }
-  }, [filteredRecords, filteredFaults, filteredSessions, inventoryWithStatus])
+  }, [filteredRecords, filteredFaults, filteredSessions, inventoryWithStatus, productionByUnitAndDominant])
 
   const equipmentById = useMemo(() => Object.fromEntries((equipment || []).map((e) => [e.id, e])), [equipment])
 
@@ -350,7 +487,10 @@ export default function ReportsAnalytics() {
       if (appliedFilters.sessionStatus && (s.status || '') !== appliedFilters.sessionStatus) return false
       return true
     })
-    const prevProd = prevRecordsList.filter((r) => r.recordType === 'production').reduce((s, r) => s + (Number(r.quantity) || 0), 0)
+    const dominantUnit = productionByUnitAndDominant.dominantUnit
+    const prevProd = prevRecordsList
+      .filter((r) => r.recordType === 'production' && ((r.unit || 'kg').toString().trim() || 'kg') === dominantUnit)
+      .reduce((s, r) => s + (Number(r.quantity) || 0), 0)
     const prevDelayed = prevSessions.filter((s) => s.status === SESSION_STATUS.DELAYED).length
     const prevOverdue = (filteredMaintenance || []).filter((p) => (p.plannedDate || '').slice(0, 10) < prevToStr).length
     const openFaultsPrev = (faults || []).filter((f) => {
@@ -364,7 +504,7 @@ export default function ReportsAnalytics() {
       openFaults: openFaultsPrev,
       overdueMaintenance: prevOverdue,
     }
-  }, [appliedFilters, records, allSessionsWithStatus, filteredMaintenance, faults, ZONE_LABEL])
+  }, [appliedFilters, records, allSessionsWithStatus, filteredMaintenance, faults, ZONE_LABEL, productionByUnitAndDominant])
 
   const currentOverdueMaintenance = useMemo(
     () => (filteredMaintenance || []).filter((p) => (p.plannedDate || '').slice(0, 10) < (appliedFilters?.dateTo || new Date().toISOString().slice(0, 10))).length,
@@ -397,6 +537,115 @@ export default function ReportsAnalytics() {
         : { labels: [], datasets: [{ label: 'Production', data: [0], borderColor: COLOR.GREEN, backgroundColor: COLOR.GREEN + '20', fill: true, tension: 0.3 }] },
     [overviewData]
   )
+
+  /** Production by department: this period (last 7 days) vs previous period (7 days before) for comparison. */
+  const productionComparisonByDept = useMemo(() => {
+    const prodRecords = (records || []).filter((r) => r.recordType === 'production')
+    const toDate = (iso) => (iso ? String(iso).slice(0, 10) : '')
+    const today = new Date().toISOString().slice(0, 10)
+    const rangeEnd = appliedFilters.dateTo && appliedFilters.dateTo <= today ? appliedFilters.dateTo : today
+    const rangeStart = appliedFilters.dateFrom || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
+    const end = new Date(rangeEnd + 'T12:00:00')
+    const thisPeriodEnd = new Date(end)
+    const thisPeriodStart = new Date(end)
+    thisPeriodStart.setDate(thisPeriodStart.getDate() - 6)
+    const prevPeriodEnd = new Date(end)
+    prevPeriodEnd.setDate(prevPeriodEnd.getDate() - 7)
+    const prevPeriodStart = new Date(end)
+    prevPeriodStart.setDate(prevPeriodStart.getDate() - 13)
+    const thisFrom = thisPeriodStart.toISOString().slice(0, 10)
+    const thisTo = thisPeriodEnd.toISOString().slice(0, 10)
+    const prevFrom = prevPeriodStart.toISOString().slice(0, 10)
+    const prevTo = prevPeriodEnd.toISOString().slice(0, 10)
+    const inRange = (r) => {
+      const d = toDate(r.dateTime || r.createdAt)
+      if (!d) return false
+      if (appliedFilters.dateFrom && d < appliedFilters.dateFrom) return false
+      if (appliedFilters.dateTo && d > appliedFilters.dateTo) return false
+      if (appliedFilters.dept && (r.department || '').toLowerCase() !== appliedFilters.dept.toLowerCase()) return false
+      if (appliedFilters.zone) {
+        const rZone = (r.zone || r.zoneId || '').toString().trim()
+        const zLabel = (ZONE_LABEL[appliedFilters.zone] || '').toString().trim()
+        if (rZone !== appliedFilters.zone && rZone !== zLabel) return false
+      }
+      if (appliedFilters.worker && (r.worker || '').trim() !== (WORKER_OPTIONS.find((w) => w.id === appliedFilters.worker)?.fullName || '').trim()) return false
+      return true
+    }
+    const byDept = (from, to) => {
+      const list = prodRecords.filter((r) => {
+        if (!inRange(r)) return false
+        const d = toDate(r.dateTime || r.createdAt)
+        return d >= from && d <= to
+      })
+      return DEPARTMENT_OPTIONS.map((d) =>
+        list.reduce((s, r) => ((r.department || '').toLowerCase() === (d.value || '').toLowerCase() ? s + (Number(r.quantity) || 0) : s), 0)
+      )
+    }
+    const thisWeek = byDept(thisFrom, thisTo)
+    const lastWeek = byDept(prevFrom, prevTo)
+    const labels = DEPARTMENT_OPTIONS.map((d) => d.label)
+    const pctChanges = labels.map((_, i) => percentChange(thisWeek[i], lastWeek[i]))
+    return { labels, thisWeek, lastWeek, pctChanges }
+  }, [records, appliedFilters, ZONE_LABEL])
+
+  /** Production by zone: this period vs previous (all zones except Inventory). Fixed list so Zone A/B/C/D always appear. */
+  const productionZonesForCharts = useMemo(() => {
+    return getInitialZones().filter((z) => (z.id || '').toString().toLowerCase() !== 'inventory')
+  }, [])
+
+  const productionComparisonByZone = useMemo(() => {
+    const zonesForChart = productionZonesForCharts
+    const prodRecords = (records || []).filter((r) => r.recordType === 'production')
+    const toDate = (iso) => (iso ? String(iso).slice(0, 10) : '')
+    const today = new Date().toISOString().slice(0, 10)
+    const rangeEnd = appliedFilters.dateTo && appliedFilters.dateTo <= today ? appliedFilters.dateTo : today
+    const end = new Date(rangeEnd + 'T12:00:00')
+    const thisPeriodStart = new Date(end)
+    thisPeriodStart.setDate(thisPeriodStart.getDate() - 6)
+    const prevPeriodEnd = new Date(end)
+    prevPeriodEnd.setDate(prevPeriodEnd.getDate() - 7)
+    const prevPeriodStart = new Date(end)
+    prevPeriodStart.setDate(prevPeriodStart.getDate() - 13)
+    const thisFrom = thisPeriodStart.toISOString().slice(0, 10)
+    const thisTo = end.toISOString().slice(0, 10)
+    const prevFrom = prevPeriodStart.toISOString().slice(0, 10)
+    const prevTo = prevPeriodEnd.toISOString().slice(0, 10)
+    const inRange = (r) => {
+      const d = toDate(r.dateTime || r.createdAt)
+      if (!d) return false
+      if (appliedFilters.dateFrom && d < appliedFilters.dateFrom) return false
+      if (appliedFilters.dateTo && d > appliedFilters.dateTo) return false
+      if (appliedFilters.dept && (r.department || '').toLowerCase() !== appliedFilters.dept.toLowerCase()) return false
+      if (appliedFilters.zone) {
+        const rZone = (r.zone || r.zoneId || '').toString().trim()
+        const zLabel = (ZONE_LABEL[appliedFilters.zone] || '').toString().trim()
+        if (rZone !== appliedFilters.zone && rZone !== zLabel) return false
+      }
+      if (appliedFilters.worker && (r.worker || '').trim() !== (WORKER_OPTIONS.find((w) => w.id === appliedFilters.worker)?.fullName || '').trim()) return false
+      return true
+    }
+    const matchZone = (r, z) => {
+      const id = (z.id || '').toString().toLowerCase()
+      const label = (z.label || ZONE_LABEL[z.id] || z.id).toString()
+      const rZone = (r.zoneId || r.zone || '').toString().trim()
+      const rNorm = rZone.toLowerCase()
+      return rNorm === id || rZone === label || (ZONE_LABEL[z.id] && rZone === ZONE_LABEL[z.id])
+    }
+    const byZone = (from, to) =>
+      zonesForChart.map((z) => {
+        const list = prodRecords.filter((r) => {
+          if (!inRange(r)) return false
+          const d = toDate(r.dateTime || r.createdAt)
+          return d >= from && d <= to
+        })
+        return list.reduce((s, r) => (matchZone(r, z) ? s + (Number(r.quantity) || 0) : s), 0)
+      })
+    const thisWeek = byZone(thisFrom, thisTo)
+    const lastWeek = byZone(prevFrom, prevTo)
+    const labels = zonesForChart.map((z) => z.label || ZONE_LABEL[z.id] || z.id)
+    const pctChanges = labels.map((_, i) => percentChange(thisWeek[i], lastWeek[i]))
+    return { labels, thisWeek, lastWeek, pctChanges }
+  }, [records, appliedFilters, ZONE_LABEL, productionZonesForCharts])
 
   const inventoryDoughnutChartData = useMemo(
     () =>
@@ -478,6 +727,54 @@ export default function ReportsAnalytics() {
 
   const doughnutOptions = { ...chartOptions }
 
+  /** Grouped bar (this week vs last week), not stacked. */
+  const groupedBarOptions = {
+    ...chartOptions,
+    scales: {
+      x: { stacked: false, grid: { display: false }, ticks: { maxRotation: 0, font: { size: 11 } } },
+      y: { stacked: false, beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { font: { size: 10 } } },
+    },
+    plugins: {
+      ...chartOptions.plugins,
+      tooltip: {
+        callbacks: {
+          afterBody: (items) => {
+            if (!items.length || !productionComparisonByDept) return ''
+            const i = items[0].dataIndex
+            const pct = productionComparisonByDept.pctChanges[i]
+            if (pct == null || pct === 0) return ''
+            const sign = pct > 0 ? '+' : ''
+            return `(${sign}${pct}% vs previous period)`
+          },
+        },
+      },
+    },
+  }
+
+  /** Grouped bar by zone: tooltip uses productionComparisonByZone. */
+  const groupedBarOptionsZone = {
+    ...chartOptions,
+    scales: {
+      x: { stacked: false, grid: { display: false }, ticks: { maxRotation: 0, font: { size: 11 } } },
+      y: { stacked: false, beginAtZero: true, grid: { color: CHART_GRID }, ticks: { font: { size: 10 } } },
+    },
+    plugins: {
+      ...chartOptions.plugins,
+      tooltip: {
+        callbacks: {
+          afterBody: (items) => {
+            if (!items.length || !productionComparisonByZone) return ''
+            const i = items[0].dataIndex
+            const pct = productionComparisonByZone.pctChanges[i]
+            if (pct == null || pct === 0) return ''
+            const sign = pct > 0 ? '+' : ''
+            return `(${sign}${pct}% vs previous period)`
+          },
+        },
+      },
+    },
+  }
+
   /** Horizontal bar chart with integer x-axis (for counts). */
   const horizontalBarIntegerOptions = {
     ...chartOptions,
@@ -485,7 +782,7 @@ export default function ReportsAnalytics() {
     scales: {
       x: {
         beginAtZero: true,
-        grid: { color: 'rgba(0,0,0,0.06)' },
+        grid: { color: CHART_GRID },
         ticks: { stepSize: 1, font: { size: 10 }, callback: (value) => (Number.isInteger(value) ? value : '') },
       },
       y: { grid: { display: false }, ticks: { font: { size: 11 } } },
@@ -497,7 +794,7 @@ export default function ReportsAnalytics() {
       `SARMS Analytical Summary – ${new Date().toLocaleDateString()}`,
       '',
       `Period: ${appliedFilters.dateFrom} to ${appliedFilters.dateTo}`,
-      `Total production: ${miniMetrics.totalProduction} units`,
+      `Total production: ${displayedProductionTotal} ${displayedProductionUnit || 'units'}`,
       `Open faults: ${miniMetrics.openFaults}`,
       `Delayed tasks (sessions): ${miniMetrics.delayedTasks}`,
       `Critical inventory items: ${miniMetrics.criticalInventory}`,
@@ -511,119 +808,268 @@ export default function ReportsAnalytics() {
   }
 
   function exportPDF() {
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-    const margin = 18
-    const lineHeight = 6
-    const sectionGap = 4
-    let y = margin
-    const maxY = 277
-
-    const addLine = (text, fontSize = 10, isBold = false) => {
-      if (y > maxY) { pdf.addPage(); y = margin }
-      pdf.setFontSize(fontSize)
-      pdf.setFont('helvetica', isBold ? 'bold' : 'normal')
-      pdf.text(text, margin, y)
-      y += lineHeight + (fontSize > 10 ? 1 : 0)
-    }
-
-    const addSection = (title) => {
-      y += sectionGap
-      if (y > maxY) { pdf.addPage(); y = margin }
-      addLine(title, 12, true)
-      y += 2
-    }
-
-    // Title & date
-    addLine('SARMS General Report', 16, true)
-    addLine(`Generated: ${new Date().toLocaleString()}`, 9)
-    y += sectionGap
-
-    // Active filters
-    addSection('1. Active filters')
-    const filterLines = []
-    if (appliedFilters.dateFrom || appliedFilters.dateTo) {
-      filterLines.push(`Date range: ${appliedFilters.dateFrom || '—'} to ${appliedFilters.dateTo || '—'}`)
-    }
-    if (appliedFilters.dept) {
-      filterLines.push(`Department: ${DEPARTMENT_OPTIONS.find((d) => d.value === appliedFilters.dept)?.label || appliedFilters.dept}`)
-    }
-    if (appliedFilters.zone) {
-      filterLines.push(`Zone: ${ZONE_LABEL[appliedFilters.zone] || appliedFilters.zone}`)
-    }
-    if (appliedFilters.worker) {
-      filterLines.push(`Worker: ${WORKER_OPTIONS.find((w) => w.id === appliedFilters.worker)?.fullName || appliedFilters.worker}`)
-    }
-    if (appliedFilters.equipment) {
-      filterLines.push(`Equipment: ${EQUIPMENT_OPTIONS.find((e) => e.id === appliedFilters.equipment)?.label || appliedFilters.equipment}`)
-    }
-    if (appliedFilters.taskStatus) {
-      filterLines.push(`Task status: ${TASK_STATUS_LABELS[appliedFilters.taskStatus] || appliedFilters.taskStatus}`)
-    }
-    if (appliedFilters.faultSeverity) {
-      filterLines.push(`Fault severity: ${SEVERITY_OPTIONS.find((s) => s.id === appliedFilters.faultSeverity)?.label || appliedFilters.faultSeverity}`)
-    }
-    if (appliedFilters.invCategory) {
-      filterLines.push(`Inventory category: ${INVENTORY_CATEGORIES.find((c) => c.id === appliedFilters.invCategory)?.label || appliedFilters.invCategory}`)
-    }
-    if (appliedFilters.sessionStatus) {
-      filterLines.push(`Session status: ${SESSION_STATUS_LABELS[appliedFilters.sessionStatus] || appliedFilters.sessionStatus}`)
-    }
-    if (filterLines.length === 0) filterLines.push('None (all data in range)')
-    filterLines.forEach((line) => addLine(line))
-
-    // Current view (module)
-    addSection('2. Current view')
-    const moduleLabel = EXPLORER_MODULES.find((m) => m.id === openExplorer)?.label || openExplorer
-    addLine(moduleLabel)
-
-    // Summary (filtered data)
-    addSection('3. Summary (filtered data)')
-    const op = overviewData?.operationalStatus
-    if (op) {
-      addLine(`Tasks — Pending: ${op.tasks?.[0] ?? 0}, In progress: ${op.tasks?.[1] ?? 0}, Completed: ${op.tasks?.[2] ?? 0}`)
-      addLine(`Sessions — Active: ${op.sessions?.[1] ?? 0}, Delayed: ${op.sessions?.[3] ?? 0}`)
-      addLine(`Open faults: ${op.faults?.[1] ?? 0}`)
-    }
-    addLine(`Total production (units): ${miniMetrics.totalProduction}`)
-    addLine(`Active sessions: ${miniMetrics.activeSessions}`)
-    addLine(`Critical inventory items: ${miniMetrics.criticalInventory}`)
-    addLine(`Filtered tasks count: ${filteredTasks.length}`)
-    addLine(`Filtered records count: ${filteredRecords.length}`)
-
-    if (overviewData?.riskMetrics?.values?.length) {
-      y += 2
-      addLine('Risk metrics (%):', 10, true)
-      const labels = overviewData.riskMetrics.labels || []
-      overviewData.riskMetrics.values.forEach((v, i) => {
-        addLine(`  ${labels[i] || ''}: ${Math.round(v)}%`)
+    const el = reportsContentRef.current
+    if (!el) return
+    html2canvas(el, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+    }).then((canvas) => {
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF({
+        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+        unit: 'mm',
+        format: 'a4',
       })
-    }
-    if (overviewData?.inventoryHealth) {
-      const ih = overviewData.inventoryHealth
-      addLine(`Inventory health — Normal: ${ih.normal}, Low: ${ih.low}, Critical: ${ih.critical}`)
-    }
-    if (overviewData?.equipmentLoad) {
-      const el = overviewData.equipmentLoad
-      addLine(`Equipment — Open faults: ${el.openFaults}, Scheduled maintenance: ${el.scheduledMaintenance}, Overdue: ${el.overdueMaintenance}, Active: ${Math.round(el.activeEquipmentPct || 0)}%`)
-    }
-    if (overviewData?.zoneDistribution?.labels?.length) {
-      y += 2
-      addLine('By zone (tasks / sessions / faults):', 10, true)
-      overviewData.zoneDistribution.labels.forEach((label, i) => {
-        const t = overviewData.zoneDistribution.tasks?.[i] ?? 0
-        const s = overviewData.zoneDistribution.sessions?.[i] ?? 0
-        const f = overviewData.zoneDistribution.faults?.[i] ?? 0
-        addLine(`  ${label}: ${t} / ${s} / ${f}`)
-      })
-    }
+      const pdfW = pdf.internal.pageSize.getWidth()
+      const pdfH = pdf.internal.pageSize.getHeight()
+      const margin = 10
+      const w = pdfW - margin * 2
+      const h = (canvas.height * w) / canvas.width
+      const CLR = { black: [0, 0, 0], green: [40, 130, 70], red: [185, 55, 55], gray: [110, 110, 110] }
+      const writeSegments = (segments, startY, lineHeight) => {
+        let x = margin
+        let yy = startY
+        segments.forEach(({ text, color }) => {
+          pdf.setTextColor(...(color || CLR.black))
+          const s = String(text)
+          pdf.text(s, x, yy)
+          x += pdf.getTextWidth(s)
+        })
+        pdf.setTextColor(...CLR.black)
+        return startY + lineHeight
+      }
 
-    // Insight
-    if (autoInsight?.message) {
-      addSection('4. Insight')
-      addLine(autoInsight.message)
-    }
+      pdf.setFontSize(14)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('General Report', margin, 12)
+      pdf.setFontSize(9)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text(new Date().toLocaleString(), margin, 18)
 
-    pdf.save(`SARMS-report-${appliedFilters.dateFrom || 'all'}-to-${appliedFilters.dateTo || 'all'}-${Date.now()}.pdf`)
+      let y = 24
+      pdf.setFontSize(10)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('Filters applied:', margin, y)
+      y += 5
+      const dateRange = (appliedFilters.dateFrom || appliedFilters.dateTo) ? `${appliedFilters.dateFrom || '—'} to ${appliedFilters.dateTo || '—'}` : 'All'
+      const deptLabel = appliedFilters.dept ? (DEPARTMENT_OPTIONS.find((d) => d.value === appliedFilters.dept)?.label || appliedFilters.dept) : 'All'
+      const zoneLabelVal = appliedFilters.zone ? (ZONE_LABEL[appliedFilters.zone] || appliedFilters.zone) : 'All'
+      const workerLabel = appliedFilters.worker ? (WORKER_OPTIONS.find((w) => w.id === appliedFilters.worker)?.fullName || appliedFilters.worker) : 'All'
+      const equipmentLabel = appliedFilters.equipment ? (EQUIPMENT_OPTIONS.find((e) => e.id === appliedFilters.equipment)?.label || appliedFilters.equipment) : 'All'
+      const taskStatusLabel = appliedFilters.taskStatus ? (TASK_STATUS_LABELS[appliedFilters.taskStatus] || appliedFilters.taskStatus) : 'All'
+      const faultSevLabel = appliedFilters.faultSeverity ? (SEVERITY_OPTIONS.find((s) => s.id === appliedFilters.faultSeverity)?.label || appliedFilters.faultSeverity) : 'All'
+      const invCatLabel = appliedFilters.invCategory ? (INVENTORY_CATEGORIES.find((c) => c.id === appliedFilters.invCategory)?.label || appliedFilters.invCategory) : 'All'
+      const sessionStatusLabel = appliedFilters.sessionStatus ? (SESSION_STATUS_LABELS[appliedFilters.sessionStatus] || appliedFilters.sessionStatus) : 'All'
+      const moduleLabel = EXPLORER_MODULES.find((m) => m.id === openExplorer)?.label || openExplorer
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(9)
+      const filterLine1 = `Date: ${dateRange}   ·   Department: ${deptLabel}   ·   Zone: ${zoneLabelVal}   ·   Worker: ${workerLabel}`
+      const filterLine2 = `Equipment: ${equipmentLabel}   ·   Task status: ${taskStatusLabel}   ·   Fault severity: ${faultSevLabel}   ·   Inventory: ${invCatLabel}   ·   Session status: ${sessionStatusLabel}`
+      const filterLine3 = `Current view: ${moduleLabel}`
+      const lineH = 5
+      const split1 = pdf.splitTextToSize(filterLine1, w)
+      split1.forEach((line) => { pdf.text(line, margin, y); y += lineH })
+      const split2 = pdf.splitTextToSize(filterLine2, w)
+      split2.forEach((line) => { pdf.text(line, margin, y); y += lineH })
+      pdf.text(filterLine3, margin, y); y += lineH
+      y += 4
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(10)
+      pdf.text('KPI', margin, y)
+      y += 5
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(9)
+      const lineHk = 6
+      y = writeSegments([
+        { text: 'Total production:  ', color: null },
+        { text: displayedProductionTotal, color: CLR.green },
+        { text: `  ${displayedProductionUnit || 'units'}    ·    `, color: null },
+        { text: 'Open faults:  ', color: null },
+        { text: miniMetrics.openFaults, color: miniMetrics.openFaults > 0 ? CLR.red : CLR.gray },
+        { text: '    ·    ', color: null },
+        { text: 'Delayed tasks:  ', color: null },
+        { text: miniMetrics.delayedTasks, color: miniMetrics.delayedTasks > 0 ? CLR.red : CLR.gray },
+      ], y, lineHk)
+      y = writeSegments([
+        { text: 'Critical inventory:  ', color: null },
+        { text: miniMetrics.criticalInventory, color: miniMetrics.criticalInventory > 0 ? CLR.red : CLR.gray },
+        { text: '    ·    ', color: null },
+        { text: 'Active sessions:  ', color: null },
+        { text: miniMetrics.activeSessions, color: CLR.green },
+        { text: '    ·    ', color: null },
+        { text: 'Overdue maintenance:  ', color: null },
+        { text: currentOverdueMaintenance, color: currentOverdueMaintenance > 0 ? CLR.red : CLR.gray },
+      ], y, lineHk)
+      if (trendComparison != null) {
+        pdf.setFontSize(8)
+        const tc = trendComparison
+        y = writeSegments([
+          { text: '(Production ', color: null },
+          { text: `${tc.productionChange >= 0 ? '+' : ''}${tc.productionChange}%`, color: tc.productionChange >= 0 ? CLR.green : CLR.red },
+          { text: '   Faults ', color: null },
+          { text: `${tc.faultsChange >= 0 ? '+' : ''}${tc.faultsChange}%`, color: tc.faultsChange > 0 ? CLR.red : tc.faultsChange < 0 ? CLR.green : CLR.gray },
+          { text: '   Delayed ', color: null },
+          { text: `${tc.delayedChange >= 0 ? '+' : ''}${tc.delayedChange}%`, color: tc.delayedChange > 0 ? CLR.red : tc.delayedChange < 0 ? CLR.green : CLR.gray },
+          { text: '   Maintenance ', color: null },
+          { text: `${tc.maintenanceChange >= 0 ? '+' : ''}${tc.maintenanceChange}%`, color: tc.maintenanceChange > 0 ? CLR.red : tc.maintenanceChange < 0 ? CLR.green : CLR.gray },
+          { text: ' vs previous period)', color: null },
+        ], y, 4)
+        pdf.setFontSize(9)
+      }
+      y += 3
+      pdf.setDrawColor(220, 220, 220)
+      pdf.line(margin, y, margin + w, y)
+      y += 4
+      const headerH = y
+      const imgH = Math.min(h, pdfH - headerH - 4)
+      const imgW = (canvas.width * imgH) / canvas.height
+      const imgX = margin + (w - imgW) / 2
+      pdf.addImage(imgData, 'PNG', imgX, headerH, imgW, imgH)
+      let statsY = headerH + imgH + 6
+      if (statsY > pdfH - 15) {
+        pdf.addPage(pdf.internal.pageSize.getWidth() > pdf.internal.pageSize.getHeight() ? 'l' : 'p', 'a4')
+        statsY = margin
+      }
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(10)
+      pdf.text('Statistics (chart data)', margin, statsY)
+      statsY += 5
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(8)
+      const lineH2 = 4.5
+      const op = overviewData?.operationalStatus
+      if (op) {
+        const p0 = op.tasks?.[0] ?? 0
+        const p1 = op.tasks?.[1] ?? 0
+        const p2 = op.tasks?.[2] ?? 0
+        statsY = writeSegments([
+          { text: 'Tasks — Pending:  ', color: null },
+          { text: p0, color: CLR.gray },
+          { text: '   In progress:  ', color: null },
+          { text: p1, color: CLR.gray },
+          { text: '   Completed:  ', color: null },
+          { text: p2, color: CLR.green },
+        ], statsY, lineH2)
+        const s1 = op.sessions?.[1] ?? 0
+        const s3 = op.sessions?.[3] ?? 0
+        statsY = writeSegments([
+          { text: 'Sessions — Active:  ', color: null },
+          { text: s1, color: CLR.green },
+          { text: '   Delayed:  ', color: null },
+          { text: s3, color: s3 > 0 ? CLR.red : CLR.gray },
+        ], statsY, lineH2)
+        const faults = op.faults?.[1] ?? 0
+        statsY = writeSegments([
+          { text: 'Open faults:  ', color: null },
+          { text: faults, color: faults > 0 ? CLR.red : CLR.gray },
+        ], statsY, lineH2)
+      }
+      statsY = writeSegments([
+        { text: 'Filtered tasks:  ', color: null },
+        { text: filteredTasks.length, color: CLR.gray },
+        { text: '   ·   Filtered sessions:  ', color: null },
+        { text: filteredSessions.length, color: CLR.gray },
+        { text: '   ·   Filtered records:  ', color: null },
+        { text: filteredRecords.length, color: CLR.gray },
+      ], statsY, lineH2)
+      if (overviewData?.zoneDistribution?.labels?.length) {
+        statsY += 2
+        overviewData.zoneDistribution.labels.slice(0, 8).forEach((label, i) => {
+          const t = overviewData.zoneDistribution.tasks?.[i] ?? 0
+          const s = overviewData.zoneDistribution.sessions?.[i] ?? 0
+          const f = overviewData.zoneDistribution.faults?.[i] ?? 0
+          statsY = writeSegments([
+            { text: `${label}: tasks  `, color: null },
+            { text: t, color: CLR.gray },
+            { text: '   sessions  ', color: null },
+            { text: s, color: CLR.gray },
+            { text: '   faults  ', color: null },
+            { text: f, color: f > 0 ? CLR.red : CLR.gray },
+          ], statsY, lineH2)
+        })
+      }
+      if (overviewData?.inventoryHealth) {
+        const ih = overviewData.inventoryHealth
+        statsY = writeSegments([
+          { text: 'Inventory — Normal:  ', color: null },
+          { text: ih.normal, color: CLR.green },
+          { text: '   Low:  ', color: null },
+          { text: ih.low, color: CLR.gray },
+          { text: '   Critical:  ', color: null },
+          { text: ih.critical, color: ih.critical > 0 ? CLR.red : CLR.gray },
+        ], statsY, lineH2)
+      }
+      if (overviewData?.equipmentLoad) {
+        const el = overviewData.equipmentLoad
+        statsY = writeSegments([
+          { text: 'Equipment — Open faults:  ', color: null },
+          { text: el.openFaults, color: el.openFaults > 0 ? CLR.red : CLR.gray },
+          { text: '   Scheduled:  ', color: null },
+          { text: el.scheduledMaintenance, color: CLR.gray },
+          { text: '   Overdue:  ', color: null },
+          { text: el.overdueMaintenance, color: el.overdueMaintenance > 0 ? CLR.red : CLR.gray },
+          { text: '   Active:  ', color: null },
+          { text: `${Math.round(el.activeEquipmentPct || 0)}%`, color: CLR.green },
+        ], statsY, lineH2)
+      }
+      if (openExplorer === 'operations') {
+        const pending = filteredTasks.filter((t) => t.status === TASK_STATUS.PENDING_APPROVAL).length
+        const inProg = filteredTasks.filter((t) => t.status === TASK_STATUS.IN_PROGRESS).length
+        const done = filteredTasks.filter((t) => t.status === TASK_STATUS.COMPLETED).length
+        statsY = writeSegments([
+          { text: 'Tasks by status — Pending:  ', color: null },
+          { text: pending, color: CLR.gray },
+          { text: '   In progress:  ', color: null },
+          { text: inProg, color: CLR.gray },
+          { text: '   Completed:  ', color: null },
+          { text: done, color: CLR.green },
+        ], statsY, lineH2)
+      }
+      if (openExplorer === 'sessions') {
+        const onTime = filteredSessions.filter((s) => s.status === SESSION_STATUS.ON_TIME).length
+        const delayed = filteredSessions.filter((s) => s.status === SESSION_STATUS.DELAYED).length
+        const flagged = filteredSessions.filter((s) => s.status === SESSION_STATUS.FLAGGED).length
+        statsY = writeSegments([
+          { text: 'Sessions — On time:  ', color: null },
+          { text: onTime, color: CLR.green },
+          { text: '   Delayed:  ', color: null },
+          { text: delayed, color: delayed > 0 ? CLR.red : CLR.gray },
+          { text: '   Flagged:  ', color: null },
+          { text: flagged, color: flagged > 0 ? CLR.red : CLR.gray },
+        ], statsY, lineH2)
+      }
+      if (openExplorer === 'production' && overviewData?.productionTrend) {
+        const pt = overviewData.productionTrend
+        const totalProd = (pt.values || []).reduce((s, v) => s + Number(v), 0)
+        const daysCount = (pt.dates || []).length
+        statsY = writeSegments([
+          { text: 'Production — Total:  ', color: null },
+          { text: totalProd, color: CLR.green },
+          { text: ' units   Days with data:  ', color: null },
+          { text: daysCount, color: CLR.gray },
+        ], statsY, lineH2)
+      }
+      if (overviewData?.riskMetrics?.values?.length) {
+        const rv = overviewData.riskMetrics.values
+        statsY = writeSegments([
+          { text: 'Risk — Delayed %:  ', color: null },
+          { text: `${Math.round(rv[0])}%`, color: rv[0] > 25 ? CLR.red : rv[0] > 0 ? CLR.gray : CLR.green },
+          { text: '   Critical faults %:  ', color: null },
+          { text: `${Math.round(rv[1])}%`, color: rv[1] > 25 ? CLR.red : CLR.gray },
+          { text: '   Critical inv %:  ', color: null },
+          { text: `${Math.round(rv[2])}%`, color: rv[2] > 25 ? CLR.red : CLR.gray },
+        ], statsY, lineH2)
+        statsY = writeSegments([
+          { text: 'Worker delay %:  ', color: null },
+          { text: `${Math.round(rv[3])}%`, color: rv[3] > 25 ? CLR.red : CLR.gray },
+          { text: '   Overdue maint %:  ', color: null },
+          { text: `${Math.round(rv[4])}%`, color: rv[4] > 25 ? CLR.red : CLR.gray },
+        ], statsY, lineH2)
+      }
+      pdf.save(`General-Report-${new Date().toISOString().slice(0, 10)}.pdf`)
+    }).catch(() => {})
   }
 
   function exportExcel() {
@@ -674,7 +1120,7 @@ export default function ReportsAnalytics() {
             <div className={styles.datePresets}>
               <span className={styles.datePresetsLabel}>Quick range:</span>
               {['7', '30', 'month', '90'].map((p) => (
-                <button key={p} type="button" className={styles.presetBtn} onClick={() => setDatePreset(p)}>
+                <button key={p} type="button" className={`${styles.presetBtn} ${activeDatePreset === p ? styles.presetBtnActive : ''}`} onClick={() => setDatePreset(p)} aria-pressed={activeDatePreset === p}>
                   {p === '7' && 'Last 7 days'}
                   {p === '30' && 'Last 30 days'}
                   {p === 'month' && 'This month'}
@@ -685,11 +1131,11 @@ export default function ReportsAnalytics() {
             <div className={styles.filtersGrid}>
               <div className={styles.filterGroup}>
                 <label>Date from</label>
-                <input type="date" value={filters.dateFrom} onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value }))} className={styles.input} />
+                <input type="date" value={filters.dateFrom} onChange={(e) => { setFilters((f) => ({ ...f, dateFrom: e.target.value })); setActiveDatePreset(null); }} className={styles.input} />
               </div>
               <div className={styles.filterGroup}>
                 <label>Date to</label>
-                <input type="date" value={filters.dateTo} onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value }))} className={styles.input} />
+                <input type="date" value={filters.dateTo} onChange={(e) => { setFilters((f) => ({ ...f, dateTo: e.target.value })); setActiveDatePreset(null); }} className={styles.input} />
               </div>
               <div className={styles.filterGroup}>
                 <label>Department</label>
@@ -782,11 +1228,42 @@ export default function ReportsAnalytics() {
 
       {/* KPI cards below Summary Filter – same spec as Equipment / Monitor */}
       <section className={styles.summaryCardsWrap}>
-        <div className={styles.summaryKpiCard}>
+        <div className={`${styles.summaryKpiCard} ${styles.summaryKpiCardProduction}`}>
           <span className={styles.metricLabel}>Total production</span>
           <div className={styles.summaryKpiCardBody}>
-            <span className={styles.metricValue}>{miniMetrics.totalProduction}</span>
-            <span className={styles.metricUnit}>units</span>
+            <div className={styles.productionValueRow} ref={productionUnitDropdownRef}>
+              <span className={styles.metricValue}>{displayedProductionTotal}</span>
+              <div className={styles.productionUnitWrap}>
+                <button
+                  type="button"
+                  className={styles.productionUnitBtn}
+                  onClick={(e) => { e.stopPropagation(); setProductionUnitDropdownOpen((o) => !o) }}
+                  title="Change unit"
+                  aria-expanded={productionUnitDropdownOpen}
+                  aria-haspopup="listbox"
+                >
+                  {displayedProductionUnit}
+                  <i className={`fas fa-fw ${productionUnitDropdownOpen ? 'fa-chevron-up' : 'fa-chevron-down'}`} />
+                </button>
+                {productionUnitDropdownOpen && productionUnitOptions.length > 0 && (
+                  <ul className={styles.productionUnitDropdown} role="listbox">
+                    {productionUnitOptions.map((u) => (
+                      <li key={u}>
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={u === displayedProductionUnit}
+                          className={u === displayedProductionUnit ? `${styles.productionUnitOption} ${styles.productionUnitOptionActive}` : styles.productionUnitOption}
+                          onClick={(e) => { e.stopPropagation(); setSelectedProductionUnit(u); setProductionUnitDropdownOpen(false) }}
+                        >
+                          {u} ({productionByUnitAndDominant.byUnit[u] ?? 0})
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
             {trendComparison != null && (
               <span className={`${styles.trendIndicator} ${trendComparison.productionChange > 0 ? styles.trendUp : trendComparison.productionChange < 0 ? styles.trendDown : styles.trendFlat}`}>
                 {trendComparison.productionChange > 0 ? '↑' : trendComparison.productionChange < 0 ? '↓' : '—'} {trendComparison.productionChange > 0 ? '+' : ''}{trendComparison.productionChange}%
@@ -905,23 +1382,24 @@ export default function ReportsAnalytics() {
         )}
 
         {/* Content: Executive overview (default) or selected module – Internal Charts only */}
-        {chartsView === 'internal' && openExplorer === 'executive' && (
-          <>
-            <ExecutiveOverview data={overviewData} onDrillDown={handleDrillDown} zoneIds={zonesList.map((z) => z.id)} />
-            <div className={styles.autoInsightBox} data-type={autoInsight?.type ?? 'stable'}>
-              <span className={styles.autoInsightIcon}>
-                {autoInsight?.type === 'warning' && <i className="fas fa-exclamation-triangle" />}
-                {autoInsight?.type === 'risk' && <i className="fas fa-times-circle" />}
-                {(autoInsight?.type === 'stable' || !autoInsight?.type) && <i className="fas fa-check-circle" />}
-              </span>
-              <span className={styles.autoInsightText}>{autoInsight?.message ?? 'Calculating…'}</span>
-            </div>
-          </>
-        )}
-        {chartsView === 'internal' && openExplorer === 'operations' && (
+        {chartsView === 'internal' && (
+          <div ref={reportsContentRef}>
+            {openExplorer === 'executive' && (
+              <>
+                <ExecutiveOverview data={overviewData} onDrillDown={handleDrillDown} zoneIds={zonesList.map((z) => z.id)} />
+                <div className={styles.autoInsightBox} data-type={autoInsight?.type ?? 'stable'}>
+                  <span className={styles.autoInsightIcon}>
+                    {autoInsight?.type === 'warning' && <i className="fas fa-exclamation-triangle" />}
+                    {autoInsight?.type === 'risk' && <i className="fas fa-times-circle" />}
+                    {(autoInsight?.type === 'stable' || !autoInsight?.type) && <i className="fas fa-check-circle" />}
+                  </span>
+                  <span className={styles.autoInsightText}>{autoInsight?.message ?? 'Calculating…'}</span>
+                </div>
+              </>
+            )}
+            {openExplorer === 'operations' && (
           <div className={styles.explorerBlock}>
-            <h3 className={styles.explorerBlockTitle}>Operations — tasks by status, zone, department</h3>
-            <div className={styles.explorerCharts}>
+            <div className={`${styles.explorerCharts} ${styles.explorerChartsOperations}`}>
               <div className={styles.chartCard}>
                 <h4 className={styles.chartCardTitle}>Tasks by status</h4>
                 <div className={styles.chartContainer}>
@@ -935,7 +1413,7 @@ export default function ReportsAnalytics() {
                           filteredTasks.filter((t) => t.status === TASK_STATUS.IN_PROGRESS).length,
                           filteredTasks.filter((t) => t.status === TASK_STATUS.COMPLETED).length,
                         ],
-                        backgroundColor: [COLOR.RED + 'cc', COLOR.ORANGE + 'cc', COLOR.GREEN + 'cc'],
+                        backgroundColor: [COLOR.NEUTRAL, COLOR.SOFT_BLUE, COLOR.GREEN],
                       }],
                     }}
                     options={barIntegerYOptions}
@@ -952,12 +1430,12 @@ export default function ReportsAnalytics() {
                         count: filteredTasks.filter((t) => (t.zoneId || '') === z.id).length,
                       }))
                       const sorted = [...zoneCounts].sort((a, b) => b.count - a.count)
-                      const loadColors = [COLOR.RED, COLOR.ORANGE, COLOR.YELLOW, COLOR.LIGHT_GREEN, COLOR.GREEN]
+                      const loadColors = [COLOR.GREEN, COLOR.LIGHT_GREEN, COLOR.SOFT_BLUE, COLOR.YELLOW, COLOR.NEUTRAL]
                       return {
                         labels: sorted.map((x) => x.label),
                         datasets: [{
                           data: sorted.map((x) => x.count),
-                          backgroundColor: sorted.map((_, i) => loadColors[Math.min(i, loadColors.length - 1)] + 'cc'),
+                          backgroundColor: sorted.map((_, i) => loadColors[Math.min(i, loadColors.length - 1)]),
                           borderWidth: 2,
                           borderColor: '#fff',
                         }],
@@ -967,73 +1445,34 @@ export default function ReportsAnalytics() {
                   />
                 </div>
               </div>
-              <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Tasks by department</h4>
-                <div className={styles.chartContainer}>
-                  <Bar
-                    data={(() => {
-                      const deptCounts = DEPARTMENT_OPTIONS.map((d) => ({
-                        label: d.label,
-                        count: filteredTasks.filter((t) => (t.departmentId || t.taskType || '').toString().toLowerCase() === (d.value || '').toLowerCase()).length,
-                      }))
-                      const max = Math.max(1, ...deptCounts.map((x) => x.count))
-                      const loadColors = [COLOR.RED + 'cc', COLOR.ORANGE + 'cc', COLOR.YELLOW + 'cc', COLOR.LIGHT_GREEN + 'cc', COLOR.GREEN + 'cc']
-                      return {
-                        labels: deptCounts.map((x) => x.label),
-                        datasets: [{
-                          label: 'Tasks',
-                          data: deptCounts.map((x) => x.count),
-                          backgroundColor: deptCounts.map((x) => {
-                            const rank = max > 0 ? (x.count / max) : 0
-                            if (rank >= 0.8) return loadColors[0]
-                            if (rank >= 0.5) return loadColors[1]
-                            if (rank >= 0.25) return loadColors[2]
-                            if (rank > 0) return loadColors[3]
-                            return loadColors[4]
-                          }),
-                        }],
-                      }
-                    })()}
-                    options={barIntegerYOptions}
-                  />
-                </div>
-              </div>
             </div>
           </div>
-        )}
-        {chartsView === 'internal' && openExplorer === 'production' && (
+            )}
+            {openExplorer === 'production' && (
           <div className={styles.explorerBlock}>
-            <h3 className={styles.explorerBlockTitle}>Production — by department and trend</h3>
-            <div className={styles.explorerCharts}>
+            <div className={`${styles.explorerCharts} ${styles.explorerChartsProduction}`}>
               <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Production by department</h4>
+                <h4 className={styles.chartCardTitle}>Production — this period vs previous (by zone)</h4>
                 <div className={styles.chartContainer}>
                   <Bar
-                    data={(() => {
-                      const prodRecords = filteredRecords.filter((r) => r.recordType === 'production')
-                      const deptTotals = DEPARTMENT_OPTIONS.map((d) => ({
-                        label: d.label,
-                        total: prodRecords.reduce((s, r) => (r.department || '').toLowerCase() === (d.value || '').toLowerCase() ? s + (Number(r.quantity) || 0) : s, 0),
-                      }))
-                      const maxTotal = Math.max(1, ...deptTotals.map((x) => x.total))
-                      const loadColors = [COLOR.RED + 'cc', COLOR.ORANGE + 'cc', COLOR.YELLOW + 'cc', COLOR.LIGHT_GREEN + 'cc', COLOR.GREEN + 'cc']
-                      return {
-                        labels: deptTotals.map((x) => x.label),
-                        datasets: [{
-                          label: 'Units',
-                          data: deptTotals.map((x) => x.total),
-                          backgroundColor: deptTotals.map((x) => {
-                            const rank = x.total / maxTotal
-                            if (rank >= 0.8) return loadColors[0]
-                            if (rank >= 0.5) return loadColors[1]
-                            if (rank >= 0.25) return loadColors[2]
-                            if (rank > 0) return loadColors[3]
-                            return loadColors[4]
-                          }),
-                        }],
-                      }
-                    })()}
-                    options={barIntegerYOptions}
+                    data={{
+                      labels: productionComparisonByZone.labels,
+                      datasets: [
+                        {
+                          label: 'This period (last 7 days)',
+                          data: productionComparisonByZone.thisWeek,
+                          backgroundColor: COLOR.GREEN,
+                          hoverBackgroundColor: HOVER.GREEN,
+                        },
+                        {
+                          label: 'Previous period (7 days before)',
+                          data: productionComparisonByZone.lastWeek,
+                          backgroundColor: COLOR.NEUTRAL,
+                          hoverBackgroundColor: HOVER.NEUTRAL,
+                        },
+                      ],
+                    }}
+                    options={groupedBarOptionsZone}
                   />
                 </div>
               </div>
@@ -1043,7 +1482,7 @@ export default function ReportsAnalytics() {
                   <Doughnut
                     data={(() => {
                       const prodRecords = filteredRecords.filter((r) => r.recordType === 'production')
-                      const zoneTotals = zonesList.map((z) => {
+                      const zoneTotals = productionZonesForCharts.map((z) => {
                         const id = (z.id || '').toString().toLowerCase()
                         const label = (z.label || ZONE_LABEL[z.id] || z.id).toString()
                         const total = prodRecords.reduce((s, r) => {
@@ -1054,15 +1493,14 @@ export default function ReportsAnalytics() {
                         }, 0)
                         return { label, total }
                       })
-                      const withData = zoneTotals.filter((x) => x.total > 0).sort((a, b) => b.total - a.total)
-                      const loadColors = [COLOR.RED, COLOR.ORANGE, COLOR.YELLOW, COLOR.LIGHT_GREEN, COLOR.GREEN]
+                      const zoneColors = [COLOR.GREEN, '#7fa77f', COLOR.LIGHT_GREEN, COLOR.SOFT_BLUE]
+                      const zoneHoverColors = [HOVER.GREEN, HOVER.OLIVE_SOFT, HOVER.LIGHT_GREEN, HOVER.SOFT_BLUE]
                       return {
-                        labels: withData.length > 0 ? withData.map((x) => x.label) : ['No production by zone'],
+                        labels: zoneTotals.map((x) => x.label),
                         datasets: [{
-                          data: withData.length > 0 ? withData.map((x) => x.total) : [1],
-                          backgroundColor: withData.length > 0
-                            ? withData.map((_, i) => loadColors[Math.min(i, loadColors.length - 1)] + 'cc')
-                            : [COLOR.NEUTRAL + '99'],
+                          data: zoneTotals.map((x) => (x.total > 0 ? x.total : 1)),
+                          backgroundColor: zoneTotals.map((_, i) => zoneColors[Math.min(i, zoneColors.length - 1)]),
+                          hoverBackgroundColor: zoneTotals.map((_, i) => zoneHoverColors[Math.min(i, zoneHoverColors.length - 1)]),
                           borderWidth: 2,
                           borderColor: '#fff',
                         }],
@@ -1072,69 +1510,12 @@ export default function ReportsAnalytics() {
                   />
                 </div>
               </div>
-              <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Production trend</h4>
-                <div className={styles.chartContainer}>
-                  <Line data={productionTrendChartData} options={lineOptions} />
-                </div>
-              </div>
             </div>
           </div>
         )}
-        {chartsView === 'internal' && openExplorer === 'workers' && (
+            {openExplorer === 'workers' && (
           <div className={styles.explorerBlock}>
-            <h3 className={styles.explorerBlockTitle}>Workers — sessions and tasks per worker</h3>
-            <div className={styles.explorerCharts}>
-              <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Sessions by worker</h4>
-                <div className={styles.chartContainer}>
-                  <Bar
-                    data={(() => {
-                      const workerIds = [...new Set(filteredSessions.map((s) => s.workerId))].filter(Boolean).slice(0, 8)
-                      const counts = workerIds.map((wid) => filteredSessions.filter((s) => s.workerId === wid).length)
-                      const maxCount = Math.max(1, ...counts)
-                      const loadColors = [COLOR.RED + 'cc', COLOR.ORANGE + 'cc', COLOR.YELLOW + 'cc', COLOR.LIGHT_GREEN + 'cc', COLOR.GREEN + 'cc']
-                      return {
-                        labels: workerIds.map((wid) => filteredSessions.find((s) => s.workerId === wid)?.workerName || WORKER_OPTIONS.find((w) => w.id === wid)?.fullName || wid),
-                        datasets: [{
-                          label: 'Sessions',
-                          data: counts,
-                          backgroundColor: counts.map((c) => {
-                            const rank = c / maxCount
-                            if (rank >= 0.8) return loadColors[0]
-                            if (rank >= 0.5) return loadColors[1]
-                            if (rank >= 0.25) return loadColors[2]
-                            if (rank > 0) return loadColors[3]
-                            return loadColors[4]
-                          }),
-                        }],
-                      }
-                    })()}
-                    options={barIntegerYOptions}
-                  />
-                </div>
-              </div>
-              <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Session status (on time / delayed / flagged)</h4>
-                <div className={styles.chartContainer}>
-                  <Doughnut
-                    data={{
-                      labels: ['On time', 'Delayed', 'Flagged'],
-                      datasets: [{
-                        data: [
-                          filteredSessions.filter((s) => s.status === SESSION_STATUS.ON_TIME).length,
-                          filteredSessions.filter((s) => s.status === SESSION_STATUS.DELAYED).length,
-                          filteredSessions.filter((s) => s.status === SESSION_STATUS.FLAGGED).length,
-                        ],
-                        backgroundColor: [COLOR.GREEN, COLOR.YELLOW, COLOR.RED],
-                        borderWidth: 2,
-                        borderColor: '#fff',
-                      }],
-                    }}
-                    options={doughnutOptions}
-                  />
-                </div>
-              </div>
+            <div className={`${styles.explorerCharts} ${styles.explorerChartsWorkers}`}>
               <div className={styles.chartCard}>
                 <h4 className={styles.chartCardTitle}>Tasks per worker</h4>
                 <div className={styles.chartContainer}>
@@ -1155,114 +1536,37 @@ export default function ReportsAnalytics() {
                       if (sorted.length === 0) {
                         return {
                           labels: ['No task assignments'],
-                          datasets: [{ label: 'Tasks', data: [0], backgroundColor: [COLOR.NEUTRAL + '99'] }],
+                          datasets: [{ label: 'Tasks', data: [0], backgroundColor: COLOR.NEUTRAL, hoverBackgroundColor: HOVER.NEUTRAL }],
                         }
                       }
-                      const maxCount = Math.max(1, ...sorted.map(([, c]) => c))
-                      const loadColors = [COLOR.RED + 'cc', COLOR.ORANGE + 'cc', COLOR.YELLOW + 'cc', COLOR.LIGHT_GREEN + 'cc', COLOR.GREEN + 'cc']
                       return {
                         labels: sorted.map(([wid]) => WORKER_OPTIONS.find((w) => w.id === wid)?.fullName || wid),
                         datasets: [{
                           label: 'Tasks',
                           data: sorted.map(([, c]) => c),
-                          backgroundColor: sorted.map(([, c]) => {
-                            const rank = c / maxCount
-                            if (rank >= 0.8) return loadColors[0]
-                            if (rank >= 0.5) return loadColors[1]
-                            if (rank >= 0.25) return loadColors[2]
-                            if (rank > 0) return loadColors[3]
-                            return loadColors[4]
-                          }),
+                          backgroundColor: COLOR.GREEN,
+                          hoverBackgroundColor: HOVER.GREEN,
                         }],
                       }
                     })()}
-                    options={barIntegerYOptions}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-        {chartsView === 'internal' && openExplorer === 'equipment' && (
-          <div className={styles.explorerBlock}>
-            <h3 className={styles.explorerBlockTitle}>Equipment — faults by category, severity, and trend</h3>
-            <div className={styles.explorerCharts}>
-              <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Faults by category</h4>
-                <div className={styles.chartContainer}>
-                  <Doughnut
-                    data={(() => {
-                      const categoryCounts = FAULT_CATEGORIES.map((c) => ({
-                        label: c.label,
-                        count: filteredFaults.filter((f) => f.category === c.id).length,
-                      })).filter((x) => x.count > 0)
-                      const sorted = [...categoryCounts].sort((a, b) => b.count - a.count)
-                      const loadColors = [COLOR.RED, COLOR.ORANGE, COLOR.YELLOW, COLOR.LIGHT_GREEN, COLOR.GREEN]
-                      if (sorted.length === 0) {
-                        return {
-                          labels: ['No faults'],
-                          datasets: [{ data: [1], backgroundColor: [COLOR.NEUTRAL + '99'], borderWidth: 2, borderColor: '#fff' }],
-                        }
-                      }
-                      return {
-                        labels: sorted.map((x) => x.label),
-                        datasets: [{
-                          data: sorted.map((x) => x.count),
-                          backgroundColor: sorted.map((_, i) => loadColors[Math.min(i, loadColors.length - 1)] + 'cc'),
-                          borderWidth: 2,
-                          borderColor: '#fff',
-                        }],
-                      }
-                    })()}
-                    options={doughnutOptions}
+                    options={horizontalBarIntegerOptions}
                   />
                 </div>
               </div>
               <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Faults by equipment</h4>
-                <div className={styles.chartContainer}>
-                  <Bar
-                    data={(() => {
-                      if (!filteredFaults.length) {
-                        return {
-                          labels: ['No data'],
-                          datasets: [{ label: 'Faults', data: [0], backgroundColor: [COLOR.NEUTRAL + '99'] }],
-                        }
-                      }
-                      const equipmentIds = [...new Set(filteredFaults.map((f) => f.equipmentId))].slice(0, 6)
-                      const counts = equipmentIds.map((eid) => filteredFaults.filter((f) => f.equipmentId === eid).length)
-                      const labels = equipmentIds.map((eid) => filteredFaults.find((f) => f.equipmentId === eid)?.equipmentName || eid)
-                      const maxCount = Math.max(1, ...counts)
-                      const loadColors = [COLOR.RED + 'cc', COLOR.ORANGE + 'cc', COLOR.YELLOW + 'cc', COLOR.LIGHT_GREEN + 'cc', COLOR.GREEN + 'cc']
-                      return {
-                        labels,
-                        datasets: [{
-                          label: 'Faults',
-                          data: counts,
-                          backgroundColor: counts.map((c) => {
-                            const rank = c / maxCount
-                            if (rank >= 0.8) return loadColors[0]
-                            if (rank >= 0.5) return loadColors[1]
-                            if (rank >= 0.25) return loadColors[2]
-                            if (rank > 0) return loadColors[3]
-                            return loadColors[4]
-                          }),
-                        }],
-                      }
-                    })()}
-                    options={barIntegerYOptions}
-                  />
-                </div>
-              </div>
-              <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Faults by severity</h4>
+                <h4 className={styles.chartCardTitle}>Session status</h4>
                 <div className={styles.chartContainer}>
                   <Doughnut
                     data={{
-                      labels: SEVERITY_OPTIONS.map((s) => s.label),
+                      labels: ['On time', 'Delayed', 'Flagged'],
                       datasets: [{
-                        data: SEVERITY_OPTIONS.map((s) => filteredFaults.filter((f) => f.severity === s.id).length),
-                        backgroundColor: [COLOR.GREEN + 'cc', COLOR.YELLOW + 'cc', COLOR.ORANGE + 'cc', COLOR.RED + 'cc'],
+                        data: [
+                          filteredSessions.filter((s) => s.status === SESSION_STATUS.ON_TIME).length,
+                          filteredSessions.filter((s) => s.status === SESSION_STATUS.DELAYED).length,
+                          filteredSessions.filter((s) => s.status === SESSION_STATUS.FLAGGED).length,
+                        ],
+                        backgroundColor: [COLOR.GREEN, COLOR.YELLOW, COLOR.RED],
+                        hoverBackgroundColor: [HOVER.GREEN, HOVER.ORANGE, HOVER.RED],
                         borderWidth: 2,
                         borderColor: '#fff',
                       }],
@@ -1274,84 +1578,191 @@ export default function ReportsAnalytics() {
             </div>
           </div>
         )}
-        {chartsView === 'internal' && openExplorer === 'inventory' && (
+            {openExplorer === 'equipment' && (
           <div className={styles.explorerBlock}>
-            <h3 className={styles.explorerBlockTitle}>Inventory — by category and status</h3>
-            <div className={styles.explorerCharts}>
+            <div className={`${styles.explorerCharts} ${styles.explorerChartsEquipment}`}>
               <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Items by category</h4>
+                <h4 className={styles.chartCardTitle}>Faults by category</h4>
                 <div className={styles.chartContainer}>
-                  <Bar
+                  <Doughnut
                     data={(() => {
-                      const categoryCounts = INVENTORY_CATEGORIES.map((c) => ({
+                      const categoryCounts = FAULT_CATEGORIES.map((c) => ({
                         label: c.label,
-                        count: inventoryWithStatus.filter((i) => i.category === c.id).length,
-                      }))
-                      const maxCount = Math.max(1, ...categoryCounts.map((x) => x.count))
-                      const loadColors = [COLOR.RED + 'cc', COLOR.ORANGE + 'cc', COLOR.YELLOW + 'cc', COLOR.LIGHT_GREEN + 'cc', COLOR.GREEN + 'cc']
+                        count: filteredFaults.filter((f) => f.category === c.id).length,
+                      })).filter((x) => x.count > 0)
+                      const sorted = [...categoryCounts].sort((a, b) => b.count - a.count)
+                      const faultSegmentColors = [COLOR.GREEN, COLOR.SOFT_BLUE, COLOR.YELLOW, COLOR.LIGHT_GREEN, COLOR.NEUTRAL]
+                      const faultSegmentHover = [HOVER.GREEN, HOVER.SOFT_BLUE, HOVER.ORANGE, HOVER.LIGHT_GREEN, HOVER.NEUTRAL]
+                      if (sorted.length === 0) {
+                        return {
+                          labels: ['No faults'],
+                          datasets: [{ data: [1], backgroundColor: [COLOR.NEUTRAL], hoverBackgroundColor: [HOVER.NEUTRAL], borderWidth: 2, borderColor: '#fff' }],
+                        }
+                      }
                       return {
-                        labels: categoryCounts.map((x) => x.label),
+                        labels: sorted.map((x) => x.label),
                         datasets: [{
-                          label: 'Items',
-                          data: categoryCounts.map((x) => x.count),
-                          backgroundColor: categoryCounts.map((x) => {
-                            const rank = x.count / maxCount
-                            if (rank >= 0.8) return loadColors[0]
-                            if (rank >= 0.5) return loadColors[1]
-                            if (rank >= 0.25) return loadColors[2]
-                            if (rank > 0) return loadColors[3]
-                            return loadColors[4]
-                          }),
+                          data: sorted.map((x) => x.count),
+                          backgroundColor: sorted.map((_, i) => faultSegmentColors[Math.min(i, faultSegmentColors.length - 1)]),
+                          hoverBackgroundColor: sorted.map((_, i) => faultSegmentHover[Math.min(i, faultSegmentHover.length - 1)]),
+                          borderWidth: 2,
+                          borderColor: '#fff',
                         }],
                       }
                     })()}
-                    options={barIntegerYOptions}
+                    options={doughnutOptions}
                   />
                 </div>
               </div>
               <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Inventory health (doughnut)</h4>
+                <h4 className={styles.chartCardTitle}>Most failing equipment</h4>
                 <div className={styles.chartContainer}>
-                  <Doughnut data={inventoryDoughnutChartData || { labels: ['Normal', 'Low', 'Critical'], datasets: [{ data: [0, 0, 0], backgroundColor: [COLOR.GREEN, COLOR.YELLOW, COLOR.RED], borderWidth: 2, borderColor: '#fff' }] }} options={doughnutOptions} />
-                </div>
-              </div>
-              <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Items by status</h4>
-                <div className={styles.chartContainer}>
-                  <Bar
-                    data={{
-                      labels: ['Normal', 'Low', 'Critical'],
-                      datasets: [{
-                        label: 'Items',
-                        data: [
-                          inventoryWithStatus.filter((i) => i.status === INVENTORY_STATUS.NORMAL).length,
-                          inventoryWithStatus.filter((i) => i.status === INVENTORY_STATUS.LOW).length,
-                          inventoryWithStatus.filter((i) => i.status === INVENTORY_STATUS.CRITICAL).length,
-                        ],
-                        backgroundColor: [COLOR.GREEN + 'cc', COLOR.YELLOW + 'cc', COLOR.RED + 'cc'],
-                      }],
+                  <Radar
+                    data={(() => {
+                      if (!filteredFaults.length) {
+                        return {
+                          labels: ['No data'],
+                          datasets: [{ label: 'Fault count', data: [0], backgroundColor: COLOR.NEUTRAL + '33', borderColor: COLOR.NEUTRAL, borderWidth: 2, pointBackgroundColor: COLOR.NEUTRAL, pointHoverBackgroundColor: HOVER.NEUTRAL, faultDates: [] }],
+                        }
+                      }
+                      const byEquipment = {}
+                      filteredFaults.forEach((f) => {
+                        const eid = f.equipmentId || 'unknown'
+                        if (!byEquipment[eid]) {
+                          byEquipment[eid] = { name: f.equipmentName || eid, count: 0, dates: [] }
+                        }
+                        byEquipment[eid].count += 1
+                        const iso = f.createdAt || f.reportedAt || f.date
+                        if (iso) byEquipment[eid].dates.push(iso)
+                      })
+                      const sorted = Object.entries(byEquipment)
+                        .map(([eid, o]) => ({ equipmentId: eid, name: o.name, count: o.count, dates: o.dates.sort() }))
+                        .sort((a, b) => b.count - a.count)
+                        .slice(0, 8)
+                      return {
+                        labels: sorted.map((x) => x.name),
+                        datasets: [{
+                          label: 'Fault count',
+                          data: sorted.map((x) => x.count),
+                          faultDates: sorted.map((x) => x.dates),
+                          backgroundColor: COLOR.GREEN + '44',
+                          borderColor: COLOR.GREEN,
+                          borderWidth: 2,
+                          pointBackgroundColor: COLOR.GREEN,
+                          pointBorderColor: '#fff',
+                          pointHoverBackgroundColor: HOVER.GREEN,
+                        }],
+                      }
+                    })()}
+                    options={{
+                      ...radarOptions,
+                      scales: {
+                        r: {
+                          beginAtZero: true,
+                          suggestedMax: 12,
+                          grid: { color: CHART_GRID },
+                          ticks: { stepSize: 1, font: { size: 9 } },
+                          pointLabels: { font: { size: 10 } },
+                        },
+                      },
+                      plugins: {
+                        ...radarOptions.plugins,
+                        tooltip: {
+                          callbacks: {
+                            label: (ctx) => `${ctx.label}: ${ctx.raw} fault${ctx.raw !== 1 ? 's' : ''}`,
+                            afterBody: (items) => {
+                              const ctx = items[0]
+                              const ds = ctx.dataset
+                              const dates = ds.faultDates?.[ctx.dataIndex]
+                              if (!dates || !dates.length) return ''
+                              const formatted = dates
+                                .slice()
+                                .sort()
+                                .map((d) => new Date(d).toLocaleDateString(undefined, { dateStyle: 'short' }))
+                              return ['', 'Dates:'].concat(formatted)
+                            },
+                          },
+                        },
+                      },
                     }}
-                    options={barIntegerYOptions}
                   />
                 </div>
               </div>
             </div>
           </div>
         )}
-        {chartsView === 'internal' && openExplorer === 'sessions' && (
+            {openExplorer === 'inventory' && (
           <div className={styles.explorerBlock}>
-            <h3 className={styles.explorerBlockTitle}>Sessions — by zone, department, status</h3>
-            <div className={styles.explorerCharts}>
+            <div className={`${styles.explorerCharts} ${styles.explorerChartsInventory}`}>
               <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Sessions by zone</h4>
+                <h4 className={styles.chartCardTitle}>Items by category</h4>
+                <div className={styles.chartContainer}>
+                  <Pie
+                    data={(() => {
+                      const categoryCounts = INVENTORY_CATEGORIES.map((c) => ({
+                        label: c.label,
+                        count: inventoryWithStatus.filter((i) => i.category === c.id).length,
+                      }))
+                      const categoryColors = [COLOR.GREEN, COLOR.SOFT_BLUE, COLOR.LIGHT_GREEN, COLOR.NEUTRAL, COLOR.YELLOW]
+                      const categoryHover = [HOVER.GREEN, HOVER.SOFT_BLUE, HOVER.LIGHT_GREEN, HOVER.NEUTRAL, HOVER.ORANGE]
+                      return {
+                        labels: categoryCounts.map((x) => x.label),
+                        datasets: [{
+                          data: categoryCounts.map((x) => x.count),
+                          backgroundColor: categoryCounts.map((_, i) => categoryColors[Math.min(i, categoryColors.length - 1)]),
+                          hoverBackgroundColor: categoryCounts.map((_, i) => categoryHover[Math.min(i, categoryHover.length - 1)]),
+                          borderWidth: 2,
+                          borderColor: '#fff',
+                        }],
+                      }
+                    })()}
+                    options={doughnutOptions}
+                  />
+                </div>
+              </div>
+              <div className={styles.chartCard}>
+                <h4 className={styles.chartCardTitle}>Critical & low products</h4>
+                <div className={styles.chartContainer}>
+                  {(() => {
+                    const critical = inventoryWithStatus.filter((i) => i.status === INVENTORY_STATUS.CRITICAL)
+                    const low = inventoryWithStatus.filter((i) => i.status === INVENTORY_STATUS.LOW)
+                    const line = (item) => `${item.name || item.id} — ${Number(item.quantity)} ${item.unit || ''}`.trim()
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        <div>
+                          <strong style={{ color: COLOR.RED, fontSize: '0.85rem' }}>Critical ({critical.length})</strong>
+                          <ul style={{ margin: '0.25rem 0 0', paddingLeft: '1.25rem', fontSize: '0.8rem', color: '#374151' }}>
+                            {critical.length === 0 ? <li>None</li> : critical.map((i) => <li key={i.id}>{line(i)}</li>)}
+                          </ul>
+                        </div>
+                        <div>
+                          <strong style={{ color: COLOR.ORANGE, fontSize: '0.85rem' }}>Low ({low.length})</strong>
+                          <ul style={{ margin: '0.25rem 0 0', paddingLeft: '1.25rem', fontSize: '0.8rem', color: '#374151' }}>
+                            {low.length === 0 ? <li>None</li> : low.map((i) => <li key={i.id}>{line(i)}</li>)}
+                          </ul>
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+            {openExplorer === 'sessions' && (
+          <div className={styles.explorerBlock}>
+            <div className={`${styles.explorerCharts} ${styles.explorerChartsSessions}`}>
+              <div className={styles.chartCard}>
+                <h4 className={styles.chartCardTitle}>Active sessions by zone</h4>
                 <div className={styles.chartContainer}>
                   <Bar
                     data={{
-                      labels: zonesList.map((z) => ZONE_LABEL[z.id] || z.id),
+                      labels: sessionsChartZones.map((z) => z.label || z.id),
                       datasets: [{
-                        label: 'Sessions',
-                        data: zonesList.map((z) => filteredSessions.filter((s) => (s.zoneId || s.zone) === z.id || (s.zoneId || s.zone) === z.label).length),
-                        backgroundColor: COLOR.GREEN + 'cc',
+                        label: 'Active',
+                        data: sessionsChartZones.map((z) => activeSessionsOnly.filter((s) => sessionInZone(s, z)).length),
+                        backgroundColor: COLOR.GREEN,
+                        hoverBackgroundColor: HOVER.GREEN,
                       }],
                     }}
                     options={horizontalBarIntegerOptions}
@@ -1365,8 +1776,9 @@ export default function ReportsAnalytics() {
                     data={{
                       labels: DEPARTMENT_OPTIONS.map((d) => d.label),
                       datasets: [{
-                        data: DEPARTMENT_OPTIONS.map((d) => filteredSessions.filter((s) => (s.departmentId || s.department || '').toLowerCase() === d.value.toLowerCase()).length),
-                        backgroundColor: [COLOR.GREEN + 'cc', COLOR.YELLOW + 'cc', '#93c5fdcc'],
+                        data: DEPARTMENT_OPTIONS.map((d) => activeSessionsOnly.filter((s) => (s.departmentId || s.department || '').toLowerCase() === d.value.toLowerCase()).length),
+                        backgroundColor: [COLOR.GREEN, COLOR.YELLOW, COLOR.SOFT_BLUE],
+                        hoverBackgroundColor: [HOVER.GREEN, HOVER.ORANGE, HOVER.SOFT_BLUE],
                         borderWidth: 2,
                         borderColor: '#fff',
                       }],
@@ -1375,27 +1787,9 @@ export default function ReportsAnalytics() {
                   />
                 </div>
               </div>
-              <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Session status</h4>
-                <div className={styles.chartContainer}>
-                  <Bar
-                    data={{
-                      labels: ['On time', 'Delayed', 'Flagged'],
-                      datasets: [{
-                        label: 'Sessions',
-                        data: [
-                          filteredSessions.filter((s) => s.status === SESSION_STATUS.ON_TIME).length,
-                          filteredSessions.filter((s) => s.status === SESSION_STATUS.DELAYED).length,
-                          filteredSessions.filter((s) => s.status === SESSION_STATUS.FLAGGED).length,
-                        ],
-                        backgroundColor: [COLOR.GREEN + 'cc', COLOR.YELLOW + 'cc', COLOR.RED + 'cc'],
-                      }],
-                    }}
-                    options={barIntegerYOptions}
-                  />
-                </div>
-              </div>
             </div>
+          </div>
+            )}
           </div>
         )}
 

@@ -15,6 +15,7 @@ import { TASK_STATUS } from '../../data/assignTask'
 import { useAppStore } from '../../context/AppStoreContext'
 import { nextRecordId } from '../../utils/idGenerators'
 import { useLanguage } from '../../context/LanguageContext'
+import { getTranslation } from '../../i18n/translations'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -77,7 +78,8 @@ function isTaskInProgress(status) {
 export default function MonitorActiveWork() {
   const navigate = useNavigate()
   const { lang } = useLanguage()
-  const { sessions, updateSession, addSession, addRecord, updateTaskStatus, records, zones: storeZones, workers, tasks } = useAppStore()
+  const t = (key) => getTranslation(lang, 'engineer', key)
+  const { sessions, updateSession, addSession, removeSession, addRecord, updateTaskStatus, records, zones: storeZones, workers, tasks } = useAppStore()
   const zonesList = (storeZones && storeZones.length > 0) ? storeZones : getInitialZones()
   const ZONE_LABELS = useMemo(() => Object.fromEntries(zonesList.map((z) => [z.id, z.label])), [zonesList])
   const [filterDept, setFilterDept] = useState('')
@@ -86,6 +88,7 @@ export default function MonitorActiveWork() {
   const [filterStatus, setFilterStatus] = useState('')
   const [searchWorker, setSearchWorker] = useState('')
   const activeWorkersTableRef = useRef(null)
+  const opsLogListRef = useRef(null)
   const [clickedCard, setClickedCard] = useState(null)
   const [viewSession, setViewSession] = useState(null)
   const [noteSession, setNoteSession] = useState(null)
@@ -268,55 +271,105 @@ export default function MonitorActiveWork() {
     return `${h}h ${rem}m`
   }
 
-  function printOpsLog() {
-    const prevTitle = document.title
-    document.title = `Operations log – ${new Date().toISOString().slice(0, 10)}`
-    window.print()
-    document.title = prevTitle
-  }
-
   function exportOpsLogPDF() {
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-    const margin = 18
-    const lineHeight = 6
-    let y = margin
-    const maxY = 277
-
-    const addLine = (text, fontSize = 10, isBold = false) => {
-      if (y > maxY) { pdf.addPage(); y = margin }
-      pdf.setFontSize(fontSize)
-      pdf.setFont('helvetica', isBold ? 'bold' : 'normal')
-      const lines = pdf.splitTextToSize(text, 180)
-      lines.forEach((line) => {
-        if (y > maxY) { pdf.addPage(); y = margin }
-        pdf.text(line, margin, y)
-        y += lineHeight
-      })
-    }
-
-    addLine('Operations log', 16, true)
-    addLine(`Generated: ${new Date().toLocaleString()}`, 9)
-    y += 4
-
-    addLine('Filters applied', 11, true)
-    addLine(`Zone: ${opsFilterZone ? (ZONE_LABELS[opsFilterZone] || opsFilterZone) : 'All'}`)
-    addLine(`Worker: ${opsFilterWorker || 'All'}`)
-    addLine(`Period: ${opsFilterPeriod === '7d' ? 'Last 7 days' : opsFilterPeriod === '30d' ? 'Last 30 days' : opsFilterPeriod === 'custom' ? `${opsFilterDateFrom || '—'} to ${opsFilterDateTo || '—'}` : 'All time'}`)
-    if (opsFilterSearch.trim()) addLine(`Search: ${opsFilterSearch.trim()}`)
-    y += 4
-
-    addLine(`Records: ${filteredOpsLog.length}`, 11, true)
-    y += 4
-
-    filteredOpsLog.forEach((r, i) => {
-      addLine(`${i + 1}. ${r.worker || '—'} · ${r.zone || r.zoneId || '—'} · ${r.linesArea || r.lines || '—'}`, 10)
-      const dt = r.dateTime || r.createdAt
-      addLine(`   Date: ${dt ? new Date(dt).toLocaleString() : '—'} | Duration: ${r.duration != null ? `${r.duration} min` : '—'} | Qty: ${r.quantity != null ? r.quantity : '—'} ${r.unit || ''}`, 9)
-      if ((r.notes || '').trim()) addLine(`   Notes: ${String(r.notes).substring(0, 80)}${String(r.notes).length > 80 ? '…' : ''}`, 9)
-      y += 2
+    if (filteredOpsLog.length === 0) return
+    const wrap = document.createElement('div')
+    wrap.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;padding:8px;font-family:system-ui,-apple-system,sans-serif;font-size:12px;direction:ltr;'
+    const table = document.createElement('table')
+    table.style.cssText = 'border-collapse:collapse;width:100%;min-width:1150px;'
+    const thead = document.createElement('thead')
+    const headerRow = document.createElement('tr')
+    const headers = ['#', 'Worker', 'Zone', 'Lines', 'Date / time', 'Duration', 'Qty', 'Notes']
+    headers.forEach((h) => {
+      const th = document.createElement('th')
+      th.textContent = h
+      th.style.cssText = 'text-align:left;padding:6px 8px;border:1px solid #b4b4b4;background:#f1f5f9;font-weight:bold;'
+      headerRow.appendChild(th)
     })
-
-    pdf.save(`Operations-log-${new Date().toISOString().slice(0, 10)}.pdf`)
+    thead.appendChild(headerRow)
+    table.appendChild(thead)
+    const tbody = document.createElement('tbody')
+    const cellStyle = 'text-align:left;padding:5px 8px;border:1px solid #b4b4b4;'
+    filteredOpsLog.forEach((r, i) => {
+      const dt = r.dateTime || r.createdAt
+      const dateStr = dt ? new Date(dt).toLocaleString() : '—'
+      const durationStr = r.duration != null ? `${r.duration} min` : '—'
+      const qtyStr = r.quantity != null ? `${r.quantity} ${(r.unit || '').trim()}`.trim() || '—' : '—'
+      const notesPart = (r.notes || '').trim()
+      const engPart = (r.engineerNotes || '').trim()
+      const notesStr = notesPart && engPart ? `${notesPart} | ${engPart}` : notesPart || engPart || '—'
+      const row = document.createElement('tr')
+      const cells = [
+        i + 1,
+        (r.worker || '—').trim(),
+        (r.zone || r.zoneId || '—').trim(),
+        (r.linesArea || r.lines || '—').trim(),
+        dateStr,
+        durationStr,
+        qtyStr,
+        notesStr,
+      ]
+      cells.forEach((val) => {
+        const td = document.createElement('td')
+        td.textContent = String(val)
+        td.style.cssText = cellStyle
+        row.appendChild(td)
+      })
+      tbody.appendChild(row)
+    })
+    table.appendChild(tbody)
+    wrap.appendChild(table)
+    document.body.appendChild(wrap)
+    html2canvas(wrap, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+    }).then((canvas) => {
+      document.body.removeChild(wrap)
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      const margin = 12
+      const pageW = pdf.internal.pageSize.getWidth()
+      const pageH = pdf.internal.pageSize.getHeight()
+      const w = pageW - margin * 2
+      pdf.setFontSize(14)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text(t('opsLog'), margin, 10)
+      pdf.setFontSize(9)
+      pdf.setFont('helvetica', 'normal')
+      const periodLabel = opsFilterPeriod === '7d' ? t('last7Days') : opsFilterPeriod === '30d' ? t('last30Days') : opsFilterPeriod === 'custom' ? `${opsFilterDateFrom || '—'} to ${opsFilterDateTo || '—'}` : t('allTime')
+      const filterLine = `Generated: ${new Date().toLocaleString()}  |  Zone: ${opsFilterZone ? (ZONE_LABELS[opsFilterZone] || opsFilterZone) : t('allZones')}  |  Worker: ${opsFilterWorker || t('allWorkers')}  |  Period: ${periodLabel}`
+      const splitLines = pdf.splitTextToSize(filterLine, w)
+      let y = 16
+      splitLines.forEach((line) => { pdf.text(line, margin, y); y += 5 })
+      y += 4
+      const availableH = pageH - y - margin
+      const imgW = w
+      const imgH = (canvas.height * w) / canvas.width
+      if (imgH <= availableH) {
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', margin, y, imgW, imgH)
+      } else {
+        const sliceHpx = (availableH / imgH) * canvas.height
+        let srcY = 0
+        let isFirstPage = true
+        while (srcY < canvas.height) {
+          if (!isFirstPage) pdf.addPage('a4', 'landscape')
+          const sliceHeight = Math.min(sliceHpx, canvas.height - srcY)
+          const sliceCanvas = document.createElement('canvas')
+          sliceCanvas.width = canvas.width
+          sliceCanvas.height = sliceHeight
+          const ctx = sliceCanvas.getContext('2d')
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height)
+          ctx.drawImage(canvas, 0, srcY, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight)
+          const sliceHmm = (sliceHeight / canvas.height) * imgH
+          pdf.addImage(sliceCanvas.toDataURL('image/png'), 'PNG', margin, isFirstPage ? y : margin, imgW, sliceHmm)
+          srcY += sliceHeight
+          isFirstPage = false
+        }
+      }
+      pdf.save(`Operations-log-${new Date().toISOString().slice(0, 10)}.pdf`)
+    }).catch(() => { document.body.removeChild(wrap) })
   }
 
   useEffect(() => {
@@ -358,6 +411,7 @@ export default function MonitorActiveWork() {
       const zoneLabel = ZONE_LABELS[zoneIdNorm] ?? (zoneIdNorm === 'inventory' ? 'Inventory' : zoneIdNorm ? `Zone ${zoneIdNorm.toUpperCase()}` : '—')
       const workerIds = Array.isArray(task.workerIds) ? task.workerIds : []
       const departmentIdNorm = (task.departmentId || task.taskType || '').toLowerCase()
+      /* Tasks with no real session are self-started (worker started from tablet); show Source = Self-started */
       const baseSession = {
         taskId: task.id,
         departmentId: departmentIdNorm || task.departmentId,
@@ -369,7 +423,7 @@ export default function MonitorActiveWork() {
         linesArea: task.linesArea || '—',
         startTime: task.createdAt || new Date().toISOString(),
         expectedMinutes: task.estimatedMinutes || 60,
-        assignedByEngineer: true,
+        assignedByEngineer: false,
       }
       if (workerIds.length === 0) {
         list.push({
@@ -623,14 +677,14 @@ export default function MonitorActiveWork() {
     const completedAt = new Date().toISOString()
 
     if (s) {
-      updateSession(sessionId, { completedAt })
       if (viewSession?.id === sessionId) setViewSession(null)
       if (noteSession?.id === sessionId) setNoteSession(null)
-      const startMs = new Date(s.startTime).getTime()
+      const startMs = s.startTime ? new Date(s.startTime).getTime() : Date.now()
       const durationMinutes = Math.round((Date.now() - startMs) / 60000)
       const engineerNotesStr = (s.notes?.length)
-        ? s.notes.map((n) => `${new Date(n.at).toLocaleString()}: ${n.text}`).join('\n')
+        ? s.notes.map((n) => (n.text || '').trim()).filter(Boolean).join('\n')
         : undefined
+      const linesVal = s.linesArea ?? s.lines ?? '—'
       addRecord({
         id: nextRecordId(records),
         recordType: 'production',
@@ -638,17 +692,19 @@ export default function MonitorActiveWork() {
         department: s.department ?? '',
         task: s.task ?? '',
         zone: s.zone ?? '',
-        zoneId: s.zoneId,
-        linesArea: s.linesArea ?? '',
-        lines: s.linesArea ?? '',
+        zoneId: s.zoneId ?? '',
+        linesArea: linesVal,
+        lines: linesVal,
         dateTime: completedAt,
         createdAt: completedAt,
         duration: durationMinutes,
-        startTime: s.startTime,
+        startTime: s.startTime ?? completedAt,
         notes: undefined,
         engineerNotes: engineerNotesStr,
         imageData: s.imageData,
       })
+      if (s.taskId) updateTaskStatus(s.taskId, TASK_STATUS.COMPLETED)
+      removeSession(sessionId)
       return
     }
 
@@ -660,7 +716,7 @@ export default function MonitorActiveWork() {
       const startMs = sessionData.startTime ? new Date(sessionData.startTime).getTime() : Date.now()
       const durationMinutes = Math.round((Date.now() - startMs) / 60000)
       const engineerNotesStr = (sessionData.notes?.length)
-        ? sessionData.notes.map((n) => `${new Date(n.at).toLocaleString()}: ${n.text}`).join('\n')
+        ? sessionData.notes.map((n) => (n.text || '').trim()).filter(Boolean).join('\n')
         : undefined
       addRecord({
         id: nextRecordId(records),
@@ -712,13 +768,44 @@ export default function MonitorActiveWork() {
       const w = pdfW - margin * 2
       const h = (canvas.height * w) / canvas.width
       pdf.setFontSize(14)
-      pdf.text('Active Workers', margin, 12)
+      pdf.setFont('helvetica', 'bold')
+      const reportTitle = clickedCard === 'delayed' ? 'Delayed Tasks' : clickedCard === 'flagged' ? 'Flagged Issues' : clickedCard === 'on_time' ? 'On Time Tasks' : 'Active Workers'
+      pdf.text(reportTitle, margin, 12)
       pdf.setFontSize(9)
+      pdf.setFont('helvetica', 'normal')
       pdf.text(new Date().toLocaleString(), margin, 18)
-      const imgH = Math.min(h, pdfH - 28)
+      let y = 24
+      pdf.setFontSize(10)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('Filters applied:', margin, y)
+      y += 5
+      const deptLabel = filterDept ? (DEPARTMENT_OPTIONS.find((d) => d.value === filterDept)?.label || filterDept) : 'All'
+      const taskLabel = filterTaskId ? (taskLabelByLang(getTaskById(filterTaskId), lang) || filterTaskId) : 'All'
+      const zoneLabel = filterZone ? (ZONE_LABELS[filterZone] || filterZone) : 'All'
+      const statusLabel = filterStatus ? (SESSION_STATUS_LABELS[filterStatus] || filterStatus) : 'All'
+      const workerSearch = searchWorker.trim() || '—'
+      const sortCol = sortBy === 'workerName' ? 'Worker Name' : sortBy === 'department' ? 'Department' : sortBy === 'task' ? 'Task' : sortBy === 'zone' ? 'Zone' : sortBy === 'startTime' ? 'Start Time' : sortBy === 'elapsedMinutes' ? 'Duration' : sortBy === 'status' ? 'Status' : sortBy
+      const sortDir = sortOrder === 'asc' ? 'asc' : 'desc'
+      const sortLabel = sortBy ? `${sortCol} (${sortDir})` : '—'
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(9)
+      const filterLine1 = `Department: ${deptLabel}   ·   Task: ${taskLabel}   ·   Zone: ${zoneLabel}   ·   Status: ${statusLabel}`
+      const filterLine2 = `Worker search: ${workerSearch}`
+      const filterLine3 = `Sort: ${sortLabel}   ·   Rows: ${sortedFiltered.length}`
+      const lineH = 5
+      const split1 = pdf.splitTextToSize(filterLine1, w)
+      split1.forEach((line) => { pdf.text(line, margin, y); y += lineH })
+      pdf.text(filterLine2, margin, y); y += lineH
+      pdf.text(filterLine3, margin, y); y += lineH
+      y += 3
+      pdf.setDrawColor(220, 220, 220)
+      pdf.line(margin, y, margin + w, y)
+      y += 4
+      const headerH = y
+      const imgH = Math.min(h, pdfH - headerH - 4)
       const imgW = (canvas.width * imgH) / canvas.height
       const imgX = margin + (w - imgW) / 2
-      pdf.addImage(imgData, 'PNG', imgX, 22, imgW, imgH)
+      pdf.addImage(imgData, 'PNG', imgX, headerH, imgW, imgH)
       pdf.save(`Active-Workers-${new Date().toISOString().slice(0, 10)}.pdf`)
     }).catch(() => {})
   }
@@ -804,7 +891,7 @@ export default function MonitorActiveWork() {
               <span className={styles.mergedKpiLabel}>Avg Duration</span>
               <span className={styles.mergedKpiValue}>{formatMinutesToHoursMinutes(kpiAvgDuration.avgMinutes)}</span>
               <span className={styles.mergedKpiSub}>
-                {kpiAvgDuration.status === 'ok' ? 'Within expected' : kpiAvgDuration.status === 'warn' ? 'Slightly above expected' : kpiAvgDuration.status === 'high' ? 'Above expected' : '—'}
+                {kpiAvgDuration.status === 'ok' ? t('withinExpected') : kpiAvgDuration.status === 'warn' ? t('slightlyAbove') : kpiAvgDuration.status === 'high' ? t('aboveExpected') : '—'}
               </span>
             </div>
           </div>
@@ -874,7 +961,7 @@ export default function MonitorActiveWork() {
             <label>Worker (name or ID)</label>
             <input
               type="search"
-              placeholder="Search..."
+              placeholder={t('searchPlaceholder')}
               value={searchWorker}
               onChange={(e) => setSearchWorker(e.target.value)}
             />
@@ -997,9 +1084,6 @@ export default function MonitorActiveWork() {
             <button type="button" className={opsLogStyles.opsPrintBtn} onClick={exportOpsLogPDF} disabled={filteredOpsLog.length === 0} title="Download as PDF">
               <i className="fas fa-file-pdf fa-fw" /> Export PDF
             </button>
-            <button type="button" className={opsLogStyles.opsPrintBtn} onClick={printOpsLog} disabled={filteredOpsLog.length === 0} title="Print">
-              <i className="fas fa-print fa-fw" /> Print
-            </button>
           </div>
         </div>
 
@@ -1010,7 +1094,7 @@ export default function MonitorActiveWork() {
             className={opsLogStyles.opsFilterSelect}
             title="Zone"
           >
-            <option value="">All zones</option>
+            <option value="">{t('allZones')}</option>
             {zonesList.map((z) => (
               <option key={z.id} value={z.id}>{z.label}</option>
             ))}
@@ -1021,7 +1105,7 @@ export default function MonitorActiveWork() {
             className={opsLogStyles.opsFilterSelect}
             title="Worker"
           >
-            <option value="">All workers</option>
+            <option value="">{t('allWorkers')}</option>
             {opsLogWorkers.map((w) => (
               <option key={w} value={w}>{w}</option>
             ))}
@@ -1030,12 +1114,12 @@ export default function MonitorActiveWork() {
             value={opsFilterPeriod}
             onChange={(e) => setOpsFilterPeriod(e.target.value)}
             className={opsLogStyles.opsFilterSelect}
-            title="Time period"
+            title={t('timePeriod')}
           >
-            <option value="all">All time</option>
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-            <option value="custom">Custom range</option>
+            <option value="all">{t('allTime')}</option>
+            <option value="7d">{t('last7Days')}</option>
+            <option value="30d">{t('last30Days')}</option>
+            <option value="custom">{t('customRange')}</option>
           </select>
           {opsFilterPeriod === 'custom' && (
             <>
@@ -1059,7 +1143,7 @@ export default function MonitorActiveWork() {
             type="text"
             value={opsFilterSearch}
             onChange={(e) => setOpsFilterSearch(e.target.value)}
-            placeholder="Search worker, zone, lines, comments…"
+            placeholder={t('searchWorkerZonePlaceholder')}
             className={opsLogStyles.opsFilterSearch}
           />
         </div>
@@ -1068,7 +1152,7 @@ export default function MonitorActiveWork() {
         ) : filteredOpsLog.length === 0 ? (
           <p className={opsLogStyles.operationsLogEmpty}>No records match the filter.</p>
         ) : (
-          <div className={opsLogStyles.operationsLogList}>
+          <div className={opsLogStyles.operationsLogList} ref={opsLogListRef}>
             {filteredOpsLog.map((r) => (
               <div key={r.id} className={opsLogStyles.opsCard}>
                 {r.worker && (
@@ -1109,7 +1193,7 @@ export default function MonitorActiveWork() {
                 )}
                 {r.engineerNotes && (
                   <div className={opsLogStyles.opsRow}>
-                    <span className={opsLogStyles.opsLabel}>Engineer notes</span>
+                    <span className={opsLogStyles.opsLabel}>{t('engineerNotes')}</span>
                     <span className={opsLogStyles.opsValue}>{r.engineerNotes}</span>
                   </div>
                 )}
@@ -1154,7 +1238,7 @@ export default function MonitorActiveWork() {
         return (
         <div className={styles.modalOverlay} onClick={() => setViewSession(null)}>
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.modalTitle}>Session details</h3>
+            <h3 className={styles.modalTitle}>{t('sessionDetails')}</h3>
             <dl className={styles.dl}>
               <dt>Worker</dt><dd>{currentSession.workerName}</dd>
               <dt>Department</dt><dd>{currentSession.department}</dd>
@@ -1170,14 +1254,14 @@ export default function MonitorActiveWork() {
                 {currentSession.notes?.length ? (
                   <ul className={styles.notesList}>
                     {currentSession.notes.map((n, i) => (
-                      <li key={i}>{new Date(n.at).toLocaleString()}: {n.text}</li>
+                      <li key={i}>{n.text}</li>
                     ))}
                   </ul>
                 ) : '—'}
               </dd>
             </dl>
             <div className={styles.modalActions}>
-              <button type="button" className={styles.btnSecondary} onClick={() => setViewSession(null)}>Close</button>
+              <button type="button" className={styles.btnSecondary} onClick={() => setViewSession(null)}>{t('viewClose')}</button>
             </div>
           </div>
         </div>
@@ -1193,7 +1277,7 @@ export default function MonitorActiveWork() {
               className={styles.noteTextarea}
               value={noteText}
               onChange={(e) => setNoteText(e.target.value)}
-              placeholder="Operational note..."
+              placeholder={t('operationalNote')}
               rows={4}
             />
             <div className={styles.modalActions}>
@@ -1252,7 +1336,7 @@ export default function MonitorActiveWork() {
                     labels: riskTrendByDay.map((d) => d.date),
                     datasets: [
                       {
-                        label: 'Delayed count',
+                        label: t('delayedCount'),
                         data: riskTrendByDay.map((d) => d.count),
                         borderColor: '#fb923c',
                         backgroundColor: '#fb923c20',
@@ -1274,7 +1358,7 @@ export default function MonitorActiveWork() {
               </div>
             </section>
             <section className={styles.riskSection}>
-              <h4 className={styles.riskSectionTitle}>Bottleneck insights</h4>
+              <h4 className={styles.riskSectionTitle}>{t('bottleneckInsights')}</h4>
               <div className={styles.bottleneckGrid}>
                 {bottleneckInsights.zone && (
                   <div className={styles.bottleneckCard}>

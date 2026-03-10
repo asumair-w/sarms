@@ -40,14 +40,15 @@ export default function EngineerSettings() {
             >
               {t('english')}
             </button>
-            <button
-              type="button"
-              className={lang === 'ar' ? styles.langBtnActive : styles.langBtn}
-              onClick={() => setLang('ar')}
-              aria-pressed={lang === 'ar'}
-            >
-              {t('arabic')}
-            </button>
+              <button
+                type="button"
+                className={lang === 'ar' ? styles.langBtnActive : styles.langBtn}
+                onClick={() => setLang('ar')}
+                aria-pressed={lang === 'ar'}
+                data-lang="ar"
+              >
+                {t('arabic')}
+              </button>
           </div>
         </div>
       </section>

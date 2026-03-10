@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useLanguage } from '../context/LanguageContext'
-import { useAppStore } from '../context/AppStoreContext'
 import { getTranslation } from '../i18n/translations'
 import { POWER_BI_STORAGE_KEY } from '../config/powerBi'
+import { clearAllSarmsDataStorage } from '../context/AppStoreContext'
 import styles from './AdminSettings.module.css'
 
 function getStoredPowerBiUrl() {
@@ -15,12 +15,10 @@ function getStoredPowerBiUrl() {
 
 export default function AdminSettings() {
   const { lang, setLang } = useLanguage()
-  const { resetToSeed } = useAppStore()
   const t = (key) => getTranslation(lang, 'admin', key)
   const [powerBiUrl, setPowerBiUrl] = useState('')
   const [powerBiSaved, setPowerBiSaved] = useState(false)
   const [account, setAccount] = useState({ userId: '', role: '' })
-  const [resetDone, setResetDone] = useState(false)
 
   useEffect(() => {
     setPowerBiUrl(getStoredPowerBiUrl())
@@ -73,6 +71,7 @@ export default function AdminSettings() {
               className={lang === 'ar' ? styles.langBtnActive : styles.langBtn}
               onClick={() => setLang('ar')}
               aria-pressed={lang === 'ar'}
+              data-lang="ar"
             >
               {t('arabic')}
             </button>
@@ -113,28 +112,6 @@ export default function AdminSettings() {
         </div>
       </section>
 
-      {/* Testing: reset data to seed */}
-      <section className={styles.section}>
-        <h2 className={styles.sectionTitle}><i className="fas fa-database fa-fw" /> {t('testingData')}</h2>
-        <p className={styles.sectionDesc}>
-          {t('testingDataDesc')}
-        </p>
-        <div className={styles.row}>
-          <button
-            type="button"
-            className={styles.resetDataBtn}
-            onClick={() => {
-              resetToSeed()
-              setResetDone(true)
-              setTimeout(() => setResetDone(false), 3000)
-            }}
-          >
-            {t('resetDataToSeed')}
-          </button>
-          {resetDone && <span className={styles.saved}>{t('resetDataDone')}</span>}
-        </div>
-      </section>
-
       {/* Account */}
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}><i className="fas fa-user fa-fw" /> {t('account')}</h2>
@@ -145,6 +122,17 @@ export default function AdminSettings() {
           <span><span className={styles.accountLabel}>{t('userId')}</span> {account.userId}</span>
           <span><span className={styles.accountLabel}>{t('role')}</span> {(account.role && ['admin', 'engineer', 'worker'].includes(account.role)) ? t('role' + account.role.charAt(0).toUpperCase() + account.role.slice(1)) : account.role}</span>
         </div>
+        <p className={styles.hint}>{t('clearAllDataDesc')}</p>
+        <button
+          type="button"
+          className={styles.clearDataBtn}
+          onClick={() => {
+            clearAllSarmsDataStorage()
+            window.location.reload()
+          }}
+        >
+          {t('clearAllData')}
+        </button>
       </section>
     </div>
   )

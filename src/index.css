@@ -46,9 +46,22 @@ html[lang="en"] {
   font-family: 'Times New Roman', Times, Georgia, serif;
 }
 
-/* Arabic: SaudiWeb */
+/* Arabic: SaudiWeb + RTL */
 html[lang="ar"] {
   font-family: 'SaudiWeb', 'Segoe UI', Tahoma, sans-serif;
+}
+
+html[dir="rtl"] {
+  text-align: right;
+}
+
+html[dir="rtl"] body {
+  direction: rtl;
+}
+
+/* RTL: flip margins for layout (optional; components can override) */
+html[dir="rtl"] .tableScroll {
+  direction: rtl;
 }
 
 body {

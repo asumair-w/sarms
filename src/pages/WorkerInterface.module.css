@@ -274,6 +274,11 @@
   gap: 1rem;
 }
 
+/* Last card (e.g. Inventory) fills the full row when it sits alone */
+.deptCard:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
 @media (min-width: 768px) {
   .deptGrid {
     gap: 1.25rem;

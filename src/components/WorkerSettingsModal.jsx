@@ -55,6 +55,7 @@ export default function WorkerSettingsModal({ onClose }) {
                 className={lang === 'ar' ? sectionStyles.langBtnActive : sectionStyles.langBtn}
                 onClick={() => setLang('ar')}
                 aria-pressed={lang === 'ar'}
+                data-lang="ar"
               >
                 {t('arabic')}
               </button>

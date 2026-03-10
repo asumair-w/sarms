@@ -102,15 +102,15 @@
 }
 
 .equipmentCard[data-status="active"] {
-  border-left: 4px solid #22c55e;
+  border-left: 4px solid #5c7b5c;
 }
 
 .equipmentCard[data-status="under_maintenance"] {
-  border-left: 4px solid #eab308;
+  border-left: 4px solid #c7924a;
 }
 
 .equipmentCard[data-status="out_of_service"] {
-  border-left: 4px solid #ef4444;
+  border-left: 4px solid #b85c5c;
 }
 
 .eqInfo {
@@ -138,15 +138,15 @@
 .eqStatus {
   font-size: 0.85rem;
   font-weight: 600;
-  color: #166534;
+  color: #5c7b5c;
 }
 
 .equipmentCard[data-status="under_maintenance"] .eqStatus {
-  color: #b45309;
+  color: #c7924a;
 }
 
 .equipmentCard[data-status="out_of_service"] .eqStatus {
-  color: #b91c1c;
+  color: #b85c5c;
 }
 
 .eqActions {

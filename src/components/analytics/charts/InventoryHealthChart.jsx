@@ -1,12 +1,15 @@
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
 import { Doughnut } from 'react-chartjs-2'
-import { INV_GREEN, CHART_YELLOW, CHART_RED } from './analyticsColors'
+import { OLIVE_PRIMARY, OLIVE_PRIMARY_HOVER, MUTED_ORANGE, MUTED_ORANGE_HOVER, SOFT_RED, SOFT_RED_HOVER } from './analyticsColors'
 
 ChartJS.register(ArcElement, Tooltip, Legend)
 
-const COLOR_NORMAL = INV_GREEN
-const COLOR_LOW = CHART_YELLOW
-const COLOR_CRITICAL = CHART_RED
+const COLOR_NORMAL = OLIVE_PRIMARY
+const COLOR_LOW = MUTED_ORANGE
+const COLOR_CRITICAL = SOFT_RED
+const HOVER_NORMAL = OLIVE_PRIMARY_HOVER
+const HOVER_LOW = MUTED_ORANGE_HOVER
+const HOVER_CRITICAL = SOFT_RED_HOVER
 
 const options = {
   responsive: true,
@@ -27,6 +30,7 @@ export default function InventoryHealthChart({ data, onSegmentClick }) {
       {
         data: [normal, low, critical],
         backgroundColor: [COLOR_NORMAL, COLOR_LOW, COLOR_CRITICAL],
+        hoverBackgroundColor: [HOVER_NORMAL, HOVER_LOW, HOVER_CRITICAL],
         borderWidth: 2,
         borderColor: '#fff',
       },

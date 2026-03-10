@@ -32,14 +32,14 @@ function App() {
       <Route path="/engineer" element={<EngineerRouteGuard />}>
         <Route element={<EngineerLayout />}>
           <Route index element={<EngineerHome />} />
-          <Route path="register" element={<RegisterManageWorkers />} />
-          <Route path="register/worker/:id" element={<WorkerProfile />} />
+          <Route path="register" element={<Navigate to="/engineer" replace />} />
+          <Route path="register/worker/:id" element={<Navigate to="/engineer" replace />} />
           <Route path="assign-task" element={<AssignTask />} />
           <Route path="monitor" element={<MonitorActiveWork />} />
           <Route path="production" element={<RecordProduction />} />
           <Route path="inventory" element={<InventoryEquipment />} />
           <Route path="faults" element={<LogFaultMaintenance />} />
-          <Route path="reports" element={<ReportsAnalytics />} />
+          <Route path="reports" element={<Navigate to="/engineer" replace />} />
           <Route path="settings" element={<EngineerSettings />} />
           <Route path=":section" element={<EngineerSectionPlaceholder />} />
         </Route>

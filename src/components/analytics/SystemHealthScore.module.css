@@ -31,15 +31,15 @@
 }
 
 .ring.high .progress {
-  stroke: #34d399;
+  stroke: #5c7b5c;
 }
 
 .ring.medium .progress {
-  stroke: #fde047;
+  stroke: #c7924a;
 }
 
 .ring.low .progress {
-  stroke: #f87171;
+  stroke: #b85c5c;
 }
 
 .value {

@@ -149,30 +149,30 @@
 }
 
 .summaryCardNormal {
-  border-color: #86efac;
-  background: #f0fdf4;
+  border-color: rgba(92, 123, 92, 0.5);
+  background: rgba(92, 123, 92, 0.06);
 }
 
 .summaryCardNormal .summaryCardValue {
-  color: #15803d;
+  color: #5c7b5c;
 }
 
 .summaryCardLow {
-  border-color: #fdba74;
-  background: #fff7ed;
+  border-color: rgba(199, 146, 74, 0.5);
+  background: rgba(199, 146, 74, 0.06);
 }
 
 .summaryCardLow .summaryCardValue {
-  color: #b45309;
+  color: #c7924a;
 }
 
 .summaryCardCritical {
-  border-color: #fecaca;
-  background: #fef2f2;
+  border-color: rgba(184, 92, 92, 0.5);
+  background: rgba(184, 92, 92, 0.06);
 }
 
 .summaryCardCritical .summaryCardValue {
-  color: #b91c1c;
+  color: #b85c5c;
 }
 
 /* Harvest: crop / production – fresh green */
@@ -198,19 +198,19 @@
 .summaryCardTotal .summaryCardValue { font-size: 1.25rem; }
 
 .summaryCardUpdated {
-  border-color: #bae6fd;
-  background: #f0f9ff;
+  border-color: rgba(79, 124, 138, 0.4);
+  background: rgba(79, 124, 138, 0.06);
 }
-.summaryCardUpdated:hover { background: #e0f2fe; border-color: #7dd3fc; }
-.summaryCardUpdated .summaryCardValue { font-size: 1.25rem; }
+.summaryCardUpdated:hover { background: rgba(79, 124, 138, 0.1); border-color: #4f7c8a; }
+.summaryCardUpdated .summaryCardValue { font-size: 1.25rem; color: #4f7c8a; }
 
 .summaryCardTotalUpdated {
-  border-color: #bae6fd;
+  border-color: rgba(79, 124, 138, 0.4);
   background: #fff;
   cursor: default;
 }
-.summaryCardTotalUpdated .summaryCardLabel { background: #f0f9ff; color: #0369a1; }
-.summaryCardTotalUpdated:hover { border-color: #7dd3fc; }
+.summaryCardTotalUpdated .summaryCardLabel { background: rgba(79, 124, 138, 0.08); color: #4f7c8a; }
+.summaryCardTotalUpdated:hover { border-color: #4f7c8a; }
 .summaryCardActiveUpdated {
   box-shadow: 0 0 0 2px var(--sarms-primary, #5c7b5c);
 }
@@ -254,14 +254,14 @@
   border-color: #6ee7b7;
   background: #fff;
 }
-.summaryCardMovement:hover { border-color: #34d399; }
-.summaryCardMovement .summaryCardLabel { background: #ecfdf5; color: #047857; }
-.summaryRowAdded span { color: #15803d; }
-.summaryRowAdded strong { color: #15803d; }
-.summaryRowUpdated span { color: #0369a1; }
-.summaryRowUpdated strong { color: #0369a1; }
-.summaryRowDecreased span { color: #b91c1c; }
-.summaryRowDecreased strong { color: #b91c1c; }
+.summaryCardMovement:hover { border-color: #5c7b5c; }
+.summaryCardMovement .summaryCardLabel { background: rgba(92, 123, 92, 0.1); color: #5c7b5c; }
+.summaryRowAdded span { color: #5c7b5c; }
+.summaryRowAdded strong { color: #5c7b5c; }
+.summaryRowUpdated span { color: #4f7c8a; }
+.summaryRowUpdated strong { color: #4f7c8a; }
+.summaryRowDecreased span { color: #b85c5c; }
+.summaryRowDecreased strong { color: #b85c5c; }
 
 /* Equipment: technical / maintenance – clear blue */
 .summaryCardEquipment {
@@ -289,7 +289,7 @@
 .summaryCardHighFailureDanger {
   min-height: 72px;
   padding: 0;
-  border: 2px solid #f87171;
+  border: 2px solid rgba(184, 92, 92, 0.6);
   border-radius: 12px;
   background: #fff;
 }
@@ -298,19 +298,19 @@
   font-size: 0.85rem;
   font-weight: 700;
   border-radius: 10px 10px 0 0;
-  border-bottom: 1px solid #fecaca;
-  background: #fef2f2;
-  color: #991b1b;
+  border-bottom: 1px solid rgba(184, 92, 92, 0.35);
+  background: rgba(184, 92, 92, 0.1);
+  color: #b85c5c;
 }
 .summaryCardHighFailureDanger .summaryCardBody { background: #fff; padding: 0.75rem; }
-.summaryCardHighFailureDanger:hover { border-color: #ef4444; }
-.summaryCardHighFailureDanger .summaryCardValue { color: #b91c1c; }
-.summaryCardHighFailureDanger .summaryCardSub { color: #991b1b; }
+.summaryCardHighFailureDanger:hover { border-color: #b85c5c; }
+.summaryCardHighFailureDanger .summaryCardValue { color: #b85c5c; }
+.summaryCardHighFailureDanger .summaryCardSub { color: #8f4444; }
 
 .summaryCardHighFailureOk {
   min-height: 72px;
   padding: 0;
-  border: 2px solid #fca5a5;
+  border: 2px solid rgba(184, 92, 92, 0.4);
   border-radius: 12px;
   background: #fff;
 }
@@ -319,14 +319,14 @@
   font-size: 0.85rem;
   font-weight: 700;
   border-radius: 10px 10px 0 0;
-  border-bottom: 1px solid #fecaca;
-  background: #fef2f2;
-  color: #991b1b;
+  border-bottom: 1px solid rgba(184, 92, 92, 0.3);
+  background: rgba(184, 92, 92, 0.08);
+  color: #b85c5c;
 }
 .summaryCardHighFailureOk .summaryCardBody { background: #fff; padding: 0.75rem; }
-.summaryCardHighFailureOk:hover { border-color: #f87171; }
-.summaryCardHighFailureOk .summaryCardValue { color: #b91c1c; }
-.summaryCardHighFailureOk .summaryCardSub { color: #991b1b; }
+.summaryCardHighFailureOk:hover { border-color: #b85c5c; }
+.summaryCardHighFailureOk .summaryCardValue { color: #b85c5c; }
+.summaryCardHighFailureOk .summaryCardSub { color: #8f4444; }
 
 .summaryCardIcon {
   position: absolute;
@@ -336,11 +336,11 @@
 }
 
 .summaryCardHighFailureDanger .summaryCardIcon {
-  color: #b91c1c;
+  color: #b85c5c;
 }
 
 .summaryCardHighFailureOk .summaryCardIcon {
-  color: #b91c1c;
+  color: #b85c5c;
 }
 
 .summaryCard {
@@ -356,7 +356,7 @@
 .summaryCardOverdueDanger {
   min-height: 72px;
   padding: 0;
-  border: 2px solid #f87171;
+  border: 2px solid rgba(184, 92, 92, 0.6);
   border-radius: 12px;
   background: #fff;
 }
@@ -365,18 +365,18 @@
   font-size: 0.85rem;
   font-weight: 700;
   border-radius: 10px 10px 0 0;
-  border-bottom: 1px solid #fecaca;
-  background: #fef2f2;
-  color: #991b1b;
+  border-bottom: 1px solid rgba(184, 92, 92, 0.35);
+  background: rgba(184, 92, 92, 0.1);
+  color: #b85c5c;
 }
 .summaryCardOverdueDanger .summaryCardBody { background: #fff; padding: 0.75rem; }
-.summaryCardOverdueDanger:hover { border-color: #ef4444; }
-.summaryCardOverdueDanger .summaryCardValue { color: #b91c1c; }
+.summaryCardOverdueDanger:hover { border-color: #b85c5c; }
+.summaryCardOverdueDanger .summaryCardValue { color: #b85c5c; }
 
 .summaryCardOverdueOk {
   min-height: 72px;
   padding: 0;
-  border: 2px solid #86efac;
+  border: 2px solid rgba(92, 123, 92, 0.5);
   border-radius: 12px;
   background: #fff;
 }
@@ -385,22 +385,22 @@
   font-size: 0.85rem;
   font-weight: 700;
   border-radius: 10px 10px 0 0;
-  border-bottom: 1px solid #bbf7d0;
-  background: #f0fdf4;
-  color: #166534;
+  border-bottom: 1px solid rgba(92, 123, 92, 0.3);
+  background: rgba(92, 123, 92, 0.1);
+  color: #5c7b5c;
 }
 .summaryCardOverdueOk .summaryCardBody { background: #fff; padding: 0.75rem; }
-.summaryCardOverdueOk:hover { border-color: #22c55e; }
-.summaryCardOverdueOk .summaryCardValue { color: #15803d; }
+.summaryCardOverdueOk:hover { border-color: #5c7b5c; }
+.summaryCardOverdueOk .summaryCardValue { color: #5c7b5c; }
 
 .summaryCardOverdue .summaryCardStockRow { font-size: 0.8rem; color: #475569; }
 .summaryCardOverdue .summaryCardStockRow em { color: #64748b; }
 
-/* Workload – Monitor spec */
+/* Workload – SARMS soft blue */
 .summaryCardWorkload {
   min-height: 72px;
   padding: 0;
-  border: 2px solid #60a5fa;
+  border: 2px solid rgba(79, 124, 138, 0.5);
   border-radius: 12px;
   background: #fff;
 }
@@ -409,20 +409,20 @@
   font-size: 0.85rem;
   font-weight: 700;
   border-radius: 10px 10px 0 0;
-  border-bottom: 1px solid #93c5fd;
-  background: #eff6ff;
-  color: #1d4ed8;
+  border-bottom: 1px solid rgba(79, 124, 138, 0.3);
+  background: rgba(79, 124, 138, 0.08);
+  color: #4f7c8a;
 }
 .summaryCardWorkload .summaryCardBody { background: #fff; padding: 0.75rem; }
-.summaryCardWorkload:hover { border-color: #3b82f6; }
-.summaryCardWorkload .summaryCardStockRow { color: #1e40af; font-size: 0.8rem; }
-.summaryCardWorkload .summaryCardStockRow em { color: #1e3a8a; }
+.summaryCardWorkload:hover { border-color: #4f7c8a; }
+.summaryCardWorkload .summaryCardStockRow { color: #4f7c8a; font-size: 0.8rem; }
+.summaryCardWorkload .summaryCardStockRow em { color: #3a606b; }
 
-/* Equipment Status – Monitor spec */
+/* Equipment Status – SARMS neutral grey */
 .summaryCardEquipmentStatus {
   min-height: 72px;
   padding: 0;
-  border: 2px solid #a78bfa;
+  border: 2px solid rgba(122, 133, 128, 0.5);
   border-radius: 12px;
   background: #fff;
 }
@@ -431,21 +431,21 @@
   font-size: 0.85rem;
   font-weight: 700;
   border-radius: 10px 10px 0 0;
-  border-bottom: 1px solid #c4b5fd;
-  background: #f5f3ff;
-  color: #5b21b6;
+  border-bottom: 1px solid rgba(122, 133, 128, 0.3);
+  background: rgba(122, 133, 128, 0.08);
+  color: #7a8580;
 }
 .summaryCardEquipmentStatus .summaryCardBody { background: #fff; padding: 0.75rem; }
-.summaryCardEquipmentStatus:hover { border-color: #8b5cf6; }
-.summaryCardEquipmentStatus .summaryCardStockRow { color: #6d28d9; font-size: 0.8rem; }
-.summaryCardEquipmentStatus .summaryCardStockRow em { color: #5b21b6; }
-.summaryCardEquipmentStatus .summaryCardSub { font-size: 0.75rem; color: #7c3aed; }
+.summaryCardEquipmentStatus:hover { border-color: #7a8580; }
+.summaryCardEquipmentStatus .summaryCardStockRow { color: #7a8580; font-size: 0.8rem; }
+.summaryCardEquipmentStatus .summaryCardStockRow em { color: #5e6763; }
+.summaryCardEquipmentStatus .summaryCardSub { font-size: 0.75rem; color: #7a8580; }
 
-/* DUE & THIS WEEK – Monitor spec */
+/* DUE & THIS WEEK – SARMS olive */
 .summaryCardThisWeek {
   min-height: 72px;
   padding: 0;
-  border: 2px solid #34d399;
+  border: 2px solid rgba(92, 123, 92, 0.5);
   border-radius: 12px;
   background: #fff;
 }
@@ -454,19 +454,19 @@
   font-size: 0.85rem;
   font-weight: 700;
   border-radius: 10px 10px 0 0;
-  border-bottom: 1px solid #6ee7b7;
-  background: #ecfdf5;
-  color: #047857;
+  border-bottom: 1px solid rgba(92, 123, 92, 0.3);
+  background: rgba(92, 123, 92, 0.1);
+  color: #5c7b5c;
 }
 .summaryCardThisWeek .summaryCardBody { background: #fff; padding: 0.75rem; }
-.summaryCardThisWeek:hover { border-color: #10b981; }
-.summaryCardThisWeek .summaryCardStockRow { color: #059669; font-size: 0.8rem; }
-.summaryCardThisWeek .summaryCardStockRow em { color: #047857; }
+.summaryCardThisWeek:hover { border-color: #5c7b5c; }
+.summaryCardThisWeek .summaryCardStockRow { color: #5c7b5c; font-size: 0.8rem; }
+.summaryCardThisWeek .summaryCardStockRow em { color: #7fa77f; }
 
 .summaryCardOverdueThisWeek {
   min-height: 72px;
   padding: 0;
-  border: 2px solid #34d399;
+  border: 2px solid rgba(92, 123, 92, 0.5);
   border-radius: 12px;
   background: #fff;
 }
@@ -475,35 +475,35 @@
   font-size: 0.85rem;
   font-weight: 700;
   border-radius: 10px 10px 0 0;
-  border-bottom: 1px solid #6ee7b7;
-  background: #ecfdf5;
-  color: #047857;
+  border-bottom: 1px solid rgba(92, 123, 92, 0.3);
+  background: rgba(92, 123, 92, 0.1);
+  color: #5c7b5c;
 }
 .summaryCardOverdueThisWeek .summaryCardBody { background: #fff; padding: 0.75rem; }
-.summaryCardOverdueThisWeek:hover { border-color: #10b981; }
-.summaryCardOverdueThisWeek .summaryCardStockRow { color: #059669; font-size: 0.8rem; }
-.summaryCardOverdueThisWeek .summaryCardStockRow em { color: #047857; }
+.summaryCardOverdueThisWeek:hover { border-color: #5c7b5c; }
+.summaryCardOverdueThisWeek .summaryCardStockRow { color: #5c7b5c; font-size: 0.8rem; }
+.summaryCardOverdueThisWeek .summaryCardStockRow em { color: #7fa77f; }
 
 .summaryCardStockRowSub { font-size: 0.85em; color: #64748b; }
 
 .summaryCardOverdueThisWeek.summaryCardOverdueDanger {
-  border-color: #f87171;
+  border-color: rgba(184, 92, 92, 0.6);
   background: #fff;
 }
 .summaryCardOverdueThisWeek.summaryCardOverdueDanger .summaryCardLabel {
-  background: #fef2f2;
-  color: #991b1b;
-  border-bottom-color: #fecaca;
+  background: rgba(184, 92, 92, 0.1);
+  color: #b85c5c;
+  border-bottom-color: rgba(184, 92, 92, 0.35);
 }
-.summaryCardOverdueThisWeek.summaryCardOverdueDanger:hover { border-color: #ef4444; }
+.summaryCardOverdueThisWeek.summaryCardOverdueDanger:hover { border-color: #b85c5c; }
 .summaryCardOverdueThisWeek.summaryCardOverdueDanger .summaryCardLabel,
-.summaryCardOverdueThisWeek.summaryCardOverdueDanger .summaryCardStockRow em { color: #b91c1c; }
-.summaryCardOverdueThisWeek.summaryCardOverdueDanger .summaryCardStockRow { color: #991b1b; }
+.summaryCardOverdueThisWeek.summaryCardOverdueDanger .summaryCardStockRow em { color: #b85c5c; }
+.summaryCardOverdueThisWeek.summaryCardOverdueDanger .summaryCardStockRow { color: #8f4444; }
 
 .summaryCardOverdueThisWeekOk {
   min-height: 72px;
   padding: 0;
-  border: 2px solid #86efac;
+  border: 2px solid rgba(92, 123, 92, 0.5);
   border-radius: 12px;
   background: #fff;
 }
@@ -512,21 +512,21 @@
   font-size: 0.85rem;
   font-weight: 700;
   border-radius: 10px 10px 0 0;
-  border-bottom: 1px solid #bbf7d0;
-  background: #f0fdf4;
-  color: #166534;
+  border-bottom: 1px solid rgba(92, 123, 92, 0.3);
+  background: rgba(92, 123, 92, 0.1);
+  color: #5c7b5c;
 }
 .summaryCardOverdueThisWeekOk .summaryCardBody { background: #fff; padding: 0.75rem; }
-.summaryCardOverdueThisWeekOk:hover { border-color: #22c55e; }
+.summaryCardOverdueThisWeekOk:hover { border-color: #5c7b5c; }
 .summaryCardOverdueThisWeekOk .summaryCardStockRow,
-.summaryCardOverdueThisWeekOk .summaryCardStockRow em { color: #047857; }
+.summaryCardOverdueThisWeekOk .summaryCardStockRow em { color: #5c7b5c; }
 
 .highFailureIcon {
   display: inline;
   margin-left: 0.35rem;
   font-size: 1rem;
   line-height: 1;
-  color: #b91c1c;
+  color: #b85c5c;
   cursor: help;
   vertical-align: middle;
 }
@@ -563,14 +563,14 @@
 
 /* Stock: inventory / supplies – warm amber tone */
 .summaryCardStock {
-  border-color: #fcd34d;
+  border-color: rgba(199, 146, 74, 0.5);
   background: #fff;
 }
-.summaryCardStock .summaryCardLabel { background: #fffbeb; color: #92400e; }
-.summaryCardStock:hover { border-color: #d97706; }
-.stockCritical { color: #b91c1c; }
-.stockLow { color: #b45309; }
-.stockRefill { color: #64748b; }
+.summaryCardStock .summaryCardLabel { background: rgba(199, 146, 74, 0.1); color: #c7924a; }
+.summaryCardStock:hover { border-color: #c7924a; }
+.stockCritical { color: #b85c5c; }
+.stockLow { color: #c7924a; }
+.stockRefill { color: #7a8580; }
 .summaryHarvestHead {
   margin-bottom: 0.25rem;
   display: flex;
@@ -733,6 +733,14 @@
 
 .sectionHeader:hover {
   background: rgba(0, 0, 0, 0.03);
+}
+
+.sectionHeaderStatic {
+  cursor: default;
+}
+
+.sectionHeaderStatic:hover {
+  background: transparent;
 }
 
 .sectionTitle {
@@ -1097,23 +1105,23 @@
 }
 
 .statusBadge[data-status="normal"] {
-  background: #dcfce7;
-  color: #166534;
+  background: rgba(92, 123, 92, 0.32);
+  color: #4a634a;
 }
 
 .statusBadge[data-status="low"] {
-  background: var(--sarms-warning-bg, #fef9c3);
-  color: #a16207;
+  background: rgba(199, 146, 74, 0.32);
+  color: #a6783c;
 }
 
 .statusBadge[data-status="critical"] {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: rgba(184, 92, 92, 0.32);
+  color: #9e4a4a;
 }
 
 .eqBadge[data-status="active"] {
-  background: #dcfce7;
-  color: #166534;
+  background: rgba(92, 123, 92, 0.32);
+  color: #4a634a;
   padding: 0.25rem 0.6rem;
   border-radius: 6px;
   font-size: 0.8rem;
@@ -1121,8 +1129,8 @@
 }
 
 .eqBadge[data-status="under_maintenance"] {
-  background: #ffedd5;
-  color: #b45309;
+  background: rgba(199, 146, 74, 0.32);
+  color: #a6783c;
   padding: 0.25rem 0.6rem;
   border-radius: 6px;
   font-size: 0.8rem;
@@ -1130,8 +1138,8 @@
 }
 
 .eqBadge[data-status="out_of_service"] {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: rgba(184, 92, 92, 0.32);
+  color: #9e4a4a;
   padding: 0.25rem 0.6rem;
   border-radius: 6px;
   font-size: 0.8rem;

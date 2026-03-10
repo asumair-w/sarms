@@ -4,6 +4,7 @@ import { useLanguage } from '../context/LanguageContext'
 import { getTranslation } from '../i18n/translations'
 import {
   DEPARTMENTS,
+  INVENTORY_DEPARTMENT,
   ZONES as DEFAULT_ZONES,
   getDepartment,
   getZone,
@@ -34,6 +35,7 @@ const STEPS = {
   ZONE: 'zone',
   LINES: 'lines',
   EXECUTION: 'execution',
+  COMPLETION_FORM: 'completion_form', // add comment & photo before completing assigned task
   CONFIRMATION: 'confirmation',
 }
 
@@ -45,10 +47,14 @@ function labelByLang(item, lang) {
 export default function WorkerInterface() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { lang } = useLanguage()
-  const { workers, sessions, zones = [], records = [], tasks = [], addSession, removeSession, addTask, updateTaskStatus, addRecord, defaultBatchByZone = {} } = useAppStore()
+  const { lang, syncLangFromUser } = useLanguage()
+  const { workers, sessions, zones = [], records = [], tasks = [], addSession, removeSession, updateSession, addTask, updateTaskStatus, addRecord, defaultBatchByZone = {} } = useAppStore()
   const zonesList = (zones && zones.length > 0) ? zones : DEFAULT_ZONES
   const t = (key) => getTranslation(lang, 'worker', key)
+
+  useEffect(() => {
+    syncLangFromUser()
+  }, [syncLangFromUser])
 
   const userId = location.state?.userId ?? (typeof window !== 'undefined' ? sessionStorage.getItem('sarms-user-id') : null) ?? 'worker'
   const worker = useMemo(() => {
@@ -61,7 +67,7 @@ export default function WorkerInterface() {
   const workerId = worker?.id ?? userId
   const workerName = worker?.fullName ?? userId
 
-  const [step, setStep] = useState(STEPS.ZONE)
+  const [step, setStep] = useState(STEPS.DEPARTMENT)
   const [selectedDeptId, setSelectedDeptId] = useState(null)
   const [selectedTask, setSelectedTask] = useState(null)
   const [selectedZoneId, setSelectedZoneId] = useState(null)
@@ -74,18 +80,40 @@ export default function WorkerInterface() {
   const [completionNotes, setCompletionNotes] = useState('')
   const [completionImage, setCompletionImage] = useState(null) // data URL or null
   const [recordSavedForCompletion, setRecordSavedForCompletion] = useState(false)
+  const [pendingCompleteSession, setPendingCompleteSession] = useState(null) // assigned session awaiting notes/photo before complete
 
   const selectedDept = useMemo(() => (selectedDeptId ? getDepartment(selectedDeptId) : null), [selectedDeptId])
   const selectedZone = useMemo(() => (selectedZoneId ? getZone(selectedZoneId, zonesList) : null), [selectedZoneId, zonesList])
   const departmentTasks = useMemo(() => (selectedDeptId ? getTasksForDepartment(selectedDeptId) : []), [selectedDeptId])
 
-  /** Sessions assigned to this worker by the engineer (show first; worker can only complete them). */
-  const myAssignedSessions = useMemo(
-    () => (sessions || []).filter(
-      (s) => String(s.workerId) === String(workerId) && s.assignedByEngineer
-    ),
-    [sessions, workerId]
-  )
+  /** Sessions assigned to this worker by the engineer (show first; worker can only complete them).
+   * Match by worker id, employeeId, or userId; also resolve session.workerId via store/SEED so
+   * sessions stored with internal id (e.g. 1) still match when user logs in with employeeId (e.g. w1). */
+  const myAssignedSessions = useMemo(() => {
+    if (!sessions?.length) return []
+    const uid = String(userId ?? '').trim().toLowerCase()
+    const wid = String(workerId ?? '').trim()
+    const eid = worker?.employeeId ? String(worker.employeeId).trim().toLowerCase() : ''
+    const resolveSessionWorker = (s) => {
+      const sId = String(s.workerId ?? '').trim()
+      if (!sId) return null
+      const fromStore = (workers || []).find((w) => String(w.id ?? '').trim() === sId || String(w.employeeId ?? '').trim().toLowerCase() === sId.toLowerCase())
+      if (fromStore) return fromStore
+      const fromSeed = SEED_WORKERS.find((w) => String(w.id ?? '').trim() === sId || String(w.employeeId ?? '').trim().toLowerCase() === sId.toLowerCase())
+      return fromSeed || null
+    }
+    return sessions.filter((s) => {
+      if (!s.assignedByEngineer) return false
+      const sId = String(s.workerId ?? '').trim()
+      if (!sId) return false
+      if (sId === wid) return true
+      if (eid && sId.toLowerCase() === eid) return true
+      if (uid && sId.toLowerCase() === uid) return true
+      const sessionWorker = resolveSessionWorker(s)
+      if (sessionWorker && (String(sessionWorker.employeeId ?? '').trim().toLowerCase() === uid || String(sessionWorker.id ?? '').trim() === wid)) return true
+      return false
+    })
+  }, [sessions, workerId, worker, userId, workers])
 
   // Restore in-progress session when worker logs back in (so they can finish the task).
   // If the worker has tasks assigned by the engineer, show those first and do NOT restore from localStorage
@@ -141,24 +169,35 @@ export default function WorkerInterface() {
     setBlockMessage(null)
   }
 
+  /** Back from Task to Zone without clearing department. */
+  function goBackToZone() {
+    setStep(STEPS.ZONE)
+    setSelectedZoneId(null)
+    setSelectedTask(null)
+    setBlockMessage(null)
+  }
+
   function goToDepartment() {
     setStep(STEPS.DEPARTMENT)
-    if (!activeSession) setSelectedTask(null)
+    if (!activeSession) {
+      setSelectedZoneId(null)
+      setSelectedTask(null)
+    }
     setBlockMessage(null)
   }
 
   function handleCompleteAssigned(session) {
-    if (!session?.taskId) return
-    updateTaskStatus(session.taskId, TASK_STATUS.COMPLETED)
-    removeSession(session.id)
-    const [lineFromPart, lineToPart] = (session.linesArea || '–').split('–')
-    const startMs = new Date(session.startTime).getTime()
+    if (!session?.id) return
+    const lineParts = (session.linesArea || '–').split(/[–\-]/).map((p) => (p || '').trim())
+    const lineFromPart = lineParts[0] ?? ''
+    const lineToPart = lineParts[1] ?? ''
+    const startMs = (session.startTime ? new Date(session.startTime).getTime() : Date.now())
     const endMs = Date.now()
     const endTime = new Date().toISOString()
     const durationMins = Math.round((endMs - startMs) / 60000)
     const linesStr = `${(lineFromPart || '').trim()} – ${(lineToPart || '').trim()}`.trim()
     const engineerNotesStr = (session.notes && session.notes.length)
-      ? session.notes.map((n) => `${new Date(n.at).toLocaleString()}: ${n.text}`).join('\n')
+      ? session.notes.map((n) => (n.text || '').trim()).filter(Boolean).join('\n')
       : undefined
     const record = {
       id: nextRecordId(records),
@@ -173,11 +212,15 @@ export default function WorkerInterface() {
       createdAt: new Date().toISOString(),
       duration: durationMins,
       startTime: session.startTime,
-      notes: undefined,
+      notes: completionNotes.trim() || undefined,
       engineerNotes: engineerNotesStr,
-      imageData: undefined,
+      imageData: completionImage || undefined,
     }
+    // Save record immediately so it persists even if user refreshes or closes before "Log another" / "Log out"
     addRecord(record)
+    if (session.taskId) updateTaskStatus(session.taskId, TASK_STATUS.COMPLETED)
+    // Mark session completed so it appears in Analytics (Active vs completed by zone); do not remove
+    updateSession(session.id, { completedAt: endTime })
     setCompletedSession({
       department: session.department,
       task: session.task,
@@ -188,12 +231,31 @@ export default function WorkerInterface() {
       end_time: endTime,
       status: 'completed',
       duration: durationMins,
-      engineerNotes: session.notes && session.notes.length ? [...session.notes] : undefined,
+      engineerNotes: engineerNotesStr,
     })
     setCompletionNotes('')
     setCompletionImage(null)
     setRecordSavedForCompletion(true)
+    setPendingCompleteSession(null)
     setStep(STEPS.CONFIRMATION)
+  }
+
+  function openCompletionForm(session) {
+    setPendingCompleteSession(session)
+    setCompletionNotes('')
+    setCompletionImage(null)
+    setStep(STEPS.COMPLETION_FORM)
+  }
+
+  function confirmCompleteWithNotes() {
+    if (pendingCompleteSession) {
+      handleCompleteAssigned(pendingCompleteSession)
+    }
+  }
+
+  function cancelCompletionForm() {
+    setPendingCompleteSession(null)
+    setStep(STEPS.DEPARTMENT)
   }
 
   function goToTask() {
@@ -218,7 +280,12 @@ export default function WorkerInterface() {
 
   function handleSelectDepartment(deptId) {
     setSelectedDeptId(deptId)
-    setStep(STEPS.TASK)
+    if (deptId === 'inventory') {
+      setSelectedZoneId('inventory')
+      setStep(STEPS.TASK)
+    } else {
+      setStep(STEPS.ZONE)
+    }
   }
 
   function handleSelectTask(task) {
@@ -234,13 +301,7 @@ export default function WorkerInterface() {
 
   function handleSelectZone(zoneId) {
     setSelectedZoneId(zoneId)
-    if (zoneId === 'inventory') {
-      setSelectedDeptId('inventory')
-      setStep(STEPS.TASK)
-    } else {
-      setSelectedDeptId(null)
-      setStep(STEPS.DEPARTMENT)
-    }
+    setStep(STEPS.TASK)
   }
 
   const LINE_MIN = 1
@@ -272,13 +333,14 @@ export default function WorkerInterface() {
     setStep(STEPS.EXECUTION)
   }
 
+  /** Worker self-start: create task as Pending → logout. Task appears in Assign Task for engineer to Accept; after Accept it appears in Monitor Active Work. */
   function handleStartTask() {
     if (activeSession) {
       setBlockMessage(t('activeTaskBlock'))
       return
     }
     const now = new Date().toISOString()
-    const linesArea = `${lineFrom.trim()}–${lineTo.trim()}`
+    const linesArea = selectedZoneId === 'inventory' ? '—' : `${lineFrom.trim()}–${lineTo.trim()}`
     const taskId = generateTaskId(tasks)
     const task = {
       id: taskId,
@@ -291,8 +353,9 @@ export default function WorkerInterface() {
       workerIds: [String(workerId)],
       priority: 'medium',
       estimatedMinutes: 60,
-      notes: linesArea ? `Lines: ${linesArea}` : '',
+      notes: linesArea !== '—' ? `Lines: ${linesArea}` : '',
       status: TASK_STATUS.PENDING_APPROVAL,
+      startedByWorker: true,
       gridRow: 1,
       gridCol: 1,
       gridSide: 'left',
@@ -312,7 +375,11 @@ export default function WorkerInterface() {
       setBlockMessage(t('inventoryNotesRequired'))
       return
     }
-    if (activeSession._sessionId) removeSession(activeSession._sessionId)
+    if (activeSession._sessionId) {
+      const sessionInStore = (sessions || []).find((s) => s.id === activeSession._sessionId)
+      if (sessionInStore?.taskId) updateTaskStatus(sessionInStore.taskId, TASK_STATUS.COMPLETED)
+      removeSession(activeSession._sessionId)
+    }
     try {
       localStorage.removeItem(WORKER_SESSION_STORAGE_KEY + (userId || '').trim().toLowerCase())
     } catch (_) {}
@@ -322,7 +389,7 @@ export default function WorkerInterface() {
     const durationMins = Math.round(durationMs / 60000)
     const latestSession = (sessions || []).find((ss) => ss.id === activeSession._sessionId)
     const engineerNotesStr = (latestSession?.notes?.length)
-      ? latestSession.notes.map((n) => `${new Date(n.at).toLocaleString()}: ${n.text}`).join('\n')
+      ? latestSession.notes.map((n) => (n.text || '').trim()).filter(Boolean).join('\n')
       : undefined
     const linesStr = `${activeSession.line_from || ''} – ${activeSession.line_to || ''}`.trim()
     const completed = {
@@ -360,8 +427,8 @@ export default function WorkerInterface() {
 
   function saveCompletionRecord() {
     if (!completedSession) return
-    const engineerNotesStr = (completedSession.engineerNotes && completedSession.engineerNotes.length)
-      ? completedSession.engineerNotes.map((n) => `${new Date(n.at).toLocaleString()}: ${n.text}`).join('\n')
+    const engineerNotesStr = typeof completedSession.engineerNotes === 'string'
+      ? completedSession.engineerNotes
       : undefined
     const record = {
       id: nextRecordId(records),
@@ -392,7 +459,7 @@ export default function WorkerInterface() {
     setSelectedTask(null)
     setLineFrom('')
     setLineTo('')
-    setStep(STEPS.ZONE)
+    setStep(STEPS.DEPARTMENT)
   }
 
   function handleLogOut() {
@@ -442,7 +509,7 @@ export default function WorkerInterface() {
       {showSettings && (
         <WorkerSettingsModal onClose={() => setShowSettings(false)} />
       )}
-      {step === STEPS.ZONE && myAssignedSessions.length > 0 && (
+      {step === STEPS.DEPARTMENT && myAssignedSessions.length > 0 && (
         <div className={styles.screen}>
           <h1 className={styles.screenTitle}><i className={`${faIcon('list-bullet')} ${styles.stepIcon}`} /> {t('assignedToYou')}</h1>
           <div className={styles.taskGrid}>
@@ -456,7 +523,7 @@ export default function WorkerInterface() {
                 <button
                   type="button"
                   className={styles.primaryButton}
-                  onClick={() => handleCompleteAssigned(session)}
+                  onClick={() => openCompletionForm(session)}
                 >
                   <i className={`${faIcon('check')} ${styles.btnIcon}`} /> {t('completeTask')}
                 </button>
@@ -465,12 +532,15 @@ export default function WorkerInterface() {
           </div>
         </div>
       )}
-      {step === STEPS.ZONE && myAssignedSessions.length === 0 && (
+      {step === STEPS.ZONE && (
         <div className={styles.screen}>
-          <p className={styles.stepBadge}>1</p>
+          <button type="button" className={styles.backButton} onClick={goToDepartment}>
+            <i className={`${faIcon(lang === 'ar' ? 'arrow-right' : 'arrow-left')} ${styles.backArrow}`} /> {t('back')}
+          </button>
+          <p className={styles.stepBadge}>2</p>
           <h1 className={styles.screenTitle}><i className={`${faIcon('squares-2x2')} ${styles.stepIcon}`} /> {t('selectZone')}</h1>
           <div className={styles.zoneGrid}>
-            {zonesList.map((z) => (
+            {zonesList.filter((z) => z.id !== 'inventory').map((z) => (
               <button
                 key={z.id}
                 type="button"
@@ -485,12 +555,9 @@ export default function WorkerInterface() {
         </div>
       )}
 
-      {step === STEPS.DEPARTMENT && (
+      {step === STEPS.DEPARTMENT && myAssignedSessions.length === 0 && (
         <div className={styles.screen}>
-          <button type="button" className={styles.backButton} onClick={goToZone}>
-            <i className={`${faIcon(lang === 'ar' ? 'arrow-right' : 'arrow-left')} ${styles.backArrow}`} /> {t('back')}
-          </button>
-          <p className={styles.stepBadge}>2</p>
+          <p className={styles.stepBadge}>1</p>
           <h1 className={styles.screenTitle}>{t('selectDepartment')}</h1>
           {activeSession ? (
             <div className={styles.activeTaskBlock}>
@@ -501,7 +568,7 @@ export default function WorkerInterface() {
             </div>
           ) : (
           <div className={styles.deptGrid}>
-            {DEPARTMENTS.map((d) => (
+            {[...DEPARTMENTS, INVENTORY_DEPARTMENT].map((d) => (
               <button
                 key={d.id}
                 type="button"
@@ -519,10 +586,10 @@ export default function WorkerInterface() {
 
       {step === STEPS.TASK && (
         <div className={styles.screen}>
-          <button type="button" className={styles.backButton} onClick={selectedZoneId === 'inventory' ? goToZone : goToDepartment}>
+          <button type="button" className={styles.backButton} onClick={selectedDeptId === 'inventory' ? goToDepartment : goBackToZone}>
             <i className={`${faIcon(lang === 'ar' ? 'arrow-right' : 'arrow-left')} ${styles.backArrow}`} /> {t('back')}
           </button>
-          <p className={styles.stepBadge}>{selectedZoneId === 'inventory' ? '2' : '3'}</p>
+          <p className={styles.stepBadge}>3</p>
           <h1 className={styles.screenTitle}>
             <i className={`${faIcon('list-bullet')} ${styles.stepIcon}`} /> {selectedZoneId === 'inventory' ? t('selectInventoryTask') : t('selectTask')}
           </h1>
@@ -687,6 +754,71 @@ export default function WorkerInterface() {
             </button>
             <button type="button" className={styles.endBtn} onClick={handleEndTask}>
               <i className={`${faIcon('stop')} ${styles.btnIcon}`} /> {t('endTask')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === STEPS.COMPLETION_FORM && pendingCompleteSession && (
+        <div className={styles.screen}>
+          <button type="button" className={styles.backButton} onClick={cancelCompletionForm}>
+            <i className={`${faIcon(lang === 'ar' ? 'arrow-right' : 'arrow-left')} ${styles.backArrow}`} /> {t('back')}
+          </button>
+          <h1 className={styles.screenTitle}>
+            <i className={`${faIcon('check')} ${styles.stepIcon}`} /> {t('completeTask')}
+          </h1>
+          <div className={styles.summaryCard}>
+            <div className={styles.summaryRow}>
+              <span className={styles.infoLabel}>{t('department')}</span>
+              <span>{pendingCompleteSession.department}</span>
+            </div>
+            <div className={styles.summaryRow}>
+              <span className={styles.infoLabel}>{t('task')}</span>
+              <span>{pendingCompleteSession.task}</span>
+            </div>
+            <div className={styles.summaryRow}>
+              <span className={styles.infoLabel}>{t('zone')}</span>
+              <span>{pendingCompleteSession.zone}</span>
+            </div>
+            <div className={styles.summaryRow}>
+              <span className={styles.infoLabel}>{t('lines')}</span>
+              <span>{pendingCompleteSession.linesArea || '—'}</span>
+            </div>
+          </div>
+          <p className={styles.completionFormHint}>{t('completionFormHint')}</p>
+          <div className={styles.completionExtra}>
+            <label className={styles.completionNotesLabel} htmlFor="completion-form-notes">{t('completionNotesLabel')}</label>
+            <textarea
+              id="completion-form-notes"
+              className={styles.completionNotesInput}
+              value={completionNotes}
+              onChange={(e) => setCompletionNotes(e.target.value)}
+              placeholder={t('completionNotesPlaceholder')}
+              rows={3}
+            />
+            <div className={styles.completionPhotoWrap}>
+              <span className={styles.completionPhotoLabel}>{t('addPhoto')}</span>
+              {completionImage ? (
+                <div className={styles.completionImagePreviewWrap}>
+                  <img src={completionImage} alt="" className={styles.completionImagePreview} />
+                  <button type="button" className={styles.removePhotoBtn} onClick={() => setCompletionImage(null)} aria-label={t('removePhoto')}>
+                    <i className="fas fa-times fa-fw" /> {t('removePhoto')}
+                  </button>
+                </div>
+              ) : (
+                <label className={styles.addPhotoBtn}>
+                  <input type="file" accept="image/*" capture="environment" onChange={onCompletionImageChange} className={styles.addPhotoInput} />
+                  <i className="fas fa-camera fa-fw" /> {t('addPhoto')}
+                </label>
+              )}
+            </div>
+          </div>
+          <div className={styles.executionActions}>
+            <button type="button" className={styles.primaryButton} onClick={confirmCompleteWithNotes}>
+              <i className={`${faIcon('check')} ${styles.btnIcon}`} /> {t('confirmComplete')}
+            </button>
+            <button type="button" className={styles.secondaryButton} onClick={cancelCompletionForm}>
+              {t('back')}
             </button>
           </div>
         </div>

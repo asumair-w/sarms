@@ -91,43 +91,50 @@
 }
 
 .langSwitcher {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: center;
-  margin-bottom: 0;
+  display: inline-flex;
+  align-items: stretch;
+  align-self: center;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #ebebeb;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+  margin-bottom: 0.25rem;
 }
 
 .langBtn,
 .langActive {
-  min-height: 40px;
-  padding: 0.4rem 0.875rem;
-  font-size: 0.85rem;
-  font-weight: 500;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  color: #64748b;
+  min-height: 32px;
+  padding: 0.3rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: #444444;
   cursor: pointer;
-  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  transition: background 0.2s, color 0.2s;
   -webkit-tap-highlight-color: transparent;
 }
 
 .langBtn:hover {
-  background: #f1f5f9;
-  color: #475569;
+  background: #e2e8f0;
+  color: #0f172a;
 }
 
 .langActive {
   background: var(--sarms-primary, #5c7b5c);
   color: #fff;
-  border-color: var(--sarms-primary, #5c7b5c);
+}
+
+/* توحيد حجم النص: العربية كالإنكليزي بصرياً */
+.langSwitcher [data-lang="ar"] {
+  font-size: 1.08em;
 }
 
 .title {
   margin: 0;
   font-size: 1.65rem;
   font-weight: 700;
-  color: var(--sarms-text, #333);
+  color: #000;
   letter-spacing: -0.02em;
   text-align: center;
 }
@@ -135,7 +142,7 @@
 .subtitle {
   margin: -0.25rem 0 0;
   font-size: 0.9rem;
-  color: var(--sarms-text-muted, #555);
+  color: #000;
   text-align: center;
 }
 

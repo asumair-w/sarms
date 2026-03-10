@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
-import { Outlet, useLocation, NavLink, useNavigate } from 'react-router-dom'
+import { useState, useEffect, useRef, Fragment } from 'react'
+import { Outlet, useLocation, NavLink, useNavigate, Link } from 'react-router-dom'
 import { useLanguage } from '../context/LanguageContext'
 import { getTranslation } from '../i18n/translations'
 import { ADMIN_SIDEBAR_ITEMS } from '../data/adminNav'
 import styles from './AdminLayout.module.css'
 
 const STORAGE_KEY = 'sarms-sidebar-collapsed'
+const USER_ID_KEY = 'sarms-user-id'
 
 function getStoredCollapsed() {
   if (typeof window === 'undefined') return false
@@ -15,15 +16,42 @@ function getStoredCollapsed() {
 export default function AdminLayout() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { lang } = useLanguage()
+  const { lang, syncLangFromUser } = useLanguage()
   const t = (key) => getTranslation(lang, 'admin', key)
   const currentPath = location.pathname
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getStoredCollapsed)
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false)
+  const [userId, setUserId] = useState(() => (typeof window !== 'undefined' ? sessionStorage.getItem(USER_ID_KEY) : null) || '')
+  const userDropdownRef = useRef(null)
+
+  useEffect(() => {
+    setUserId(typeof window !== 'undefined' ? sessionStorage.getItem(USER_ID_KEY) : null)
+  }, [currentPath])
+
+  useEffect(() => {
+    syncLangFromUser()
+  }, [syncLangFromUser])
 
   useEffect(() => {
     setSidebarOpen(false)
   }, [currentPath])
+
+  useEffect(() => {
+    if (!userDropdownOpen) return
+    function handleClickOutside(e) {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(e.target)) setUserDropdownOpen(false)
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [userDropdownOpen])
+
+  function handleLogout() {
+    setUserDropdownOpen(false)
+    sessionStorage.removeItem('sarms-user-role')
+    sessionStorage.removeItem(USER_ID_KEY)
+    navigate('/login', { replace: true })
+  }
 
   function toggleSidebarCollapse() {
     setSidebarCollapsed((prev) => {
@@ -35,10 +63,10 @@ export default function AdminLayout() {
 
   const currentItem = ADMIN_SIDEBAR_ITEMS.find((i) => i.path === currentPath) ??
     ADMIN_SIDEBAR_ITEMS.find((i) => i.external && currentPath.startsWith(i.path))
-  const currentLabel = currentItem ? t(currentItem.labelKey) : t('navHome')
+  const currentLabel = currentPath === '/admin/settings' ? t('navSettings') : (currentItem ? t(currentItem.labelKey) : t('navHome'))
 
   return (
-    <div className={styles.wrapper}>
+    <div className={`${styles.wrapper} ${sidebarOpen ? styles.wrapperSidebarOpen : ''}`}>
       <header className={styles.topBar}>
         <button
           type="button"
@@ -48,17 +76,56 @@ export default function AdminLayout() {
         >
           <i className={`fas fa-fw ${sidebarOpen ? 'fa-times' : 'fa-bars'}`} />
         </button>
-        <div className={styles.topBarLogoWrap}>
-          <img src="/logo.png" alt="SARMS" className={styles.topBarLogo} />
+        <div className={styles.topBarLeft}>
+          <div className={styles.topBarLogoWrap}>
+            <img src="/logo-sarms-white.png" alt="SARMS" className={styles.topBarLogo} />
+          </div>
+          <nav className={styles.breadcrumb} aria-label="Breadcrumb">
+            <Link to="/admin/reports" className={styles.breadcrumbLink}>{t('layoutTitle')}</Link>
+            <span className={styles.breadcrumbSep} aria-hidden> / </span>
+            <span className={styles.sectionIndicator}>{currentLabel}</span>
+          </nav>
         </div>
-        <h1 className={styles.pageTitle}>{t('layoutTitle')}</h1>
-        <span className={styles.sectionIndicator}>{currentLabel}</span>
+        <div className={styles.topBarRight} ref={userDropdownRef}>
+          <button
+            type="button"
+            className={styles.userMenuBtn}
+            onClick={() => setUserDropdownOpen((o) => !o)}
+            aria-expanded={userDropdownOpen}
+            aria-haspopup="true"
+            aria-label={t('loggedInAs')}
+          >
+            <i className="fas fa-user-circle fa-fw" aria-hidden />
+            <span className={styles.userMenuLabel}>{userId || '—'}</span>
+            <i className={`fas fa-chevron-down fa-fw ${styles.userMenuCaret} ${userDropdownOpen ? styles.userMenuCaretOpen : ''}`} aria-hidden />
+          </button>
+          {userDropdownOpen && (
+            <div className={styles.userDropdown} role="menu">
+              <div className={styles.userDropdownHeader}>
+                <span className={styles.userDropdownLabel}>{t('loggedInAs')}</span>
+                <span className={styles.userDropdownId}>{userId || '—'}</span>
+              </div>
+              <Link to="/admin/settings" className={styles.userDropdownItem} role="menuitem" onClick={() => setUserDropdownOpen(false)}>
+                <i className="fas fa-gear fa-fw" /> {t('navSettings')}
+              </Link>
+              <button type="button" className={styles.userDropdownItem} role="menuitem" onClick={handleLogout}>
+                <i className="fas fa-right-from-bracket fa-fw" /> {t('logOut')}
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       <div
         className={`${styles.overlay} ${sidebarOpen ? styles.overlayVisible : ''}`}
         aria-hidden={!sidebarOpen}
         onClick={() => setSidebarOpen(false)}
+        onPointerDown={(e) => {
+          if (sidebarOpen) {
+            e.preventDefault()
+            setSidebarOpen(false)
+          }
+        }}
       />
 
       <aside className={`${styles.sidebar} ${sidebarOpen ? styles.sidebarOpen : ''} ${sidebarCollapsed ? styles.sidebarCollapsed : ''}`}>
@@ -71,32 +138,44 @@ export default function AdminLayout() {
         >
           <i className={`fas fa-fw fa-chevron-${sidebarCollapsed ? 'right' : 'left'}`} />
         </button>
-        <nav className={styles.sidebarNav}>
-          {ADMIN_SIDEBAR_ITEMS.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              end={item.end !== false}
-              className={({ isActive }) =>
-                isActive ? `${styles.sidebarItem} ${styles.sidebarItemActive}` : styles.sidebarItem
-              }
-            >
-              <i className={`fas fa-${item.faIcon || item.icon} fa-fw ${styles.sidebarIcon}`} />
-              <span className={styles.sidebarLabel}>{t(item.labelKey)}</span>
-            </NavLink>
+        <nav className={styles.sidebarNav} aria-label="Main navigation">
+          {ADMIN_SIDEBAR_ITEMS.map((item, index) => (
+            <Fragment key={item.path}>
+              {index > 0 && <div className={styles.sidebarSectionDivider} aria-hidden />}
+              <NavLink
+                to={item.path}
+                end={item.end !== false}
+                className={({ isActive }) =>
+                  isActive ? `${styles.sidebarItem} ${styles.sidebarItemActive}` : styles.sidebarItem
+                }
+              >
+                <i className={`fas fa-${item.faIcon || item.icon} fa-fw ${styles.sidebarIcon}`} />
+                <span className={styles.sidebarLabel}>{t(item.labelKey)}</span>
+              </NavLink>
+            </Fragment>
           ))}
         </nav>
-        <button
-          type="button"
-          className={styles.logoutBtn}
-          onClick={() => {
-            sessionStorage.removeItem('sarms-user-role')
-            sessionStorage.removeItem('sarms-user-id')
-            navigate('/login', { replace: true })
-          }}
-        >
-          <i className="fas fa-right-from-bracket fa-fw" /> {t('logOut')}
-        </button>
+        <div className={styles.sidebarFooter}>
+          <div className={styles.sidebarSectionDivider} aria-hidden />
+          <NavLink
+            to="/admin/settings"
+            className={({ isActive }) =>
+              isActive ? `${styles.sidebarItem} ${styles.sidebarItemActive} ${styles.sidebarFooterItem}` : `${styles.sidebarItem} ${styles.sidebarFooterItem}`
+            }
+            end
+            title={sidebarCollapsed ? t('navSettings') : undefined}
+          >
+            <i className={`fas fa-gear fa-fw ${styles.sidebarIcon}`} />
+            <span className={styles.sidebarLabel}>{t('navSettings')}</span>
+          </NavLink>
+          <button
+            type="button"
+            className={styles.logoutBtn}
+            onClick={handleLogout}
+          >
+            <i className="fas fa-right-from-bracket fa-fw" /> {t('logOut')}
+          </button>
+        </div>
       </aside>
 
       <main className={styles.main}>

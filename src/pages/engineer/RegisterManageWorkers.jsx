@@ -1,5 +1,7 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { jsPDF } from 'jspdf'
+import html2canvas from 'html2canvas'
 import {
   ROLE_OPTIONS,
   DEPARTMENT_OPTIONS,
@@ -33,7 +35,7 @@ function isInTask(worker, sessions) {
   return !!(sessions && sessions.some((s) => String(s.workerId) === String(worker.id)))
 }
 
-const IS_WORKER_OR_TECH = (role) => role === 'worker' || role === 'technician'
+const IS_WORKER = (role) => role === 'worker'
 
 /** Normalize task status for consistent comparison. */
 function normalizeTaskStatus(status) {
@@ -128,6 +130,7 @@ function RegisterManageWorkers() {
     email: '',
   })
   const [createdWorker, setCreatedWorker] = useState(null)
+  const workersTableRef = useRef(null)
 
   const weekStart = useMemo(() => getWeekStart(), [])
 
@@ -272,6 +275,67 @@ function RegisterManageWorkers() {
     setCreatedWorker(null)
   }
 
+  function exportEmployeesPDF() {
+    const el = workersTableRef.current
+    if (!el) return
+    html2canvas(el, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+    }).then((canvas) => {
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF({
+        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      })
+      const pdfW = pdf.internal.pageSize.getWidth()
+      const pdfH = pdf.internal.pageSize.getHeight()
+      const margin = 10
+      const w = pdfW - margin * 2
+      const h = (canvas.height * w) / canvas.width
+
+      pdf.setFontSize(14)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('Worker List', margin, 12)
+      pdf.setFontSize(9)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text(new Date().toLocaleString(), margin, 18)
+
+      let y = 24
+      pdf.setFontSize(10)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('Filters applied:', margin, y)
+      y += 5
+      const roleLabel = filterRole ? (ROLE_LABEL[filterRole] || filterRole) : 'All'
+      const deptLabel = filterDept ? (DEPT_LABEL[filterDept] || filterDept) : 'All'
+      const skillLabel = filterSkill ? (SKILL_OPTIONS.includes(filterSkill) ? filterSkill : filterSkill) : 'All'
+      const accountLabel = filterStatus === 'active' ? t('active') : filterStatus === 'not_active' ? t('notActive') : t('filterAll')
+      const searchValue = search.trim() || '—'
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(9)
+      const filterLine1 = `Role: ${roleLabel}   ·   Department: ${deptLabel}   ·   Skills: ${skillLabel}   ·   Account: ${accountLabel}`
+      const filterLine2 = `Search: ${searchValue}`
+      const filterLine3 = `Rows: ${filtered.length}`
+      const lineH = 5
+      const split1 = pdf.splitTextToSize(filterLine1, w)
+      split1.forEach((line) => { pdf.text(line, margin, y); y += lineH })
+      pdf.text(filterLine2, margin, y); y += lineH
+      pdf.text(filterLine3, margin, y); y += lineH
+      y += 3
+      pdf.setDrawColor(220, 220, 220)
+      pdf.line(margin, y, margin + w, y)
+      y += 4
+      const headerH = y
+      const imgH = Math.min(h, pdfH - headerH - 4)
+      const imgW = (canvas.width * imgH) / canvas.height
+      const imgX = margin + (w - imgW) / 2
+      pdf.addImage(imgData, 'PNG', imgX, headerH, imgW, imgH)
+      pdf.save(`Workers-${new Date().toISOString().slice(0, 10)}.pdf`)
+    }).catch(() => {})
+  }
+
   const profileBase = isEngineerRoute ? '/engineer/register/worker' : '/admin/register/worker'
 
   return (
@@ -280,55 +344,42 @@ function RegisterManageWorkers() {
       <section className={styles.rankingSection}>
         <h2 className={styles.rankingTitle}><i className="fas fa-trophy fa-fw" /> Worker Ranking</h2>
         <div className={styles.rankingGrid}>
-          <div className={`${styles.rankingCard} ${styles.rankingCardGold}`}>
-            <span className={styles.rankingLabel}>Top Performer (this week)</span>
-            {ranking.topPerformer ? (
-              isEngineerRoute ? (
-                <Link to={`${profileBase}/${ranking.topPerformer.worker.id}`} className={styles.rankingLink}>
-                  {ranking.topPerformer.worker.fullName}
-                </Link>
-              ) : (
-                <span className={styles.rankingName}>{ranking.topPerformer.worker.fullName}</span>
-              )
-            ) : (
+          {ranking.topPerformer ? (
+            <Link to={`${profileBase}/${ranking.topPerformer.worker.id}`} className={`${styles.rankingCard} ${styles.rankingCardGold} ${styles.rankingCardLink}`}>
+              <span className={styles.rankingLabel}>Top Performer (this week)</span>
+              <span className={styles.rankingName}>{ranking.topPerformer.worker.fullName}</span>
+              <span className={styles.rankingMetric}>{ranking.topPerformer.value} completed</span>
+            </Link>
+          ) : (
+            <div className={`${styles.rankingCard} ${styles.rankingCardGold}`}>
+              <span className={styles.rankingLabel}>Top Performer (this week)</span>
               <span className={styles.cellMuted}>—</span>
-            )}
-            {ranking.topPerformer && <span className={styles.rankingMetric}>{ranking.topPerformer.value} completed</span>}
-          </div>
-          <div className={`${styles.rankingCard} ${styles.rankingCardNeutral}`}>
-            <span className={styles.rankingLabel}>Most Overloaded (active tasks)</span>
-            {ranking.mostOverloaded && ranking.mostOverloaded.value > 0 ? (
-              isEngineerRoute ? (
-                <Link to={`${profileBase}/${ranking.mostOverloaded.worker.id}`} className={styles.rankingLink}>
-                  {ranking.mostOverloaded.worker.fullName}
-                </Link>
-              ) : (
-                <span className={styles.rankingName}>{ranking.mostOverloaded.worker.fullName}</span>
-              )
-            ) : (
-              <span className={styles.cellMuted}>—</span>
-            )}
-            {ranking.mostOverloaded && ranking.mostOverloaded.value > 0 && (
+            </div>
+          )}
+          {ranking.mostOverloaded && ranking.mostOverloaded.value > 0 ? (
+            <Link to={`${profileBase}/${ranking.mostOverloaded.worker.id}`} className={`${styles.rankingCard} ${styles.rankingCardNeutral} ${styles.rankingCardLink}`}>
+              <span className={styles.rankingLabel}>Most Overloaded (active tasks)</span>
+              <span className={styles.rankingName}>{ranking.mostOverloaded.worker.fullName}</span>
               <span className={styles.rankingMetric}>{ranking.mostOverloaded.value} active</span>
-            )}
-          </div>
-          <div className={`${styles.rankingCard} ${styles.rankingCardBad}`}>
-            <span className={styles.rankingLabel}>Most Delayed (overdue)</span>
-            {ranking.mostDelayed && ranking.mostDelayed.value > 0 ? (
-              isEngineerRoute ? (
-                <Link to={`${profileBase}/${ranking.mostDelayed.worker.id}`} className={styles.rankingLink}>
-                  {ranking.mostDelayed.worker.fullName}
-                </Link>
-              ) : (
-                <span className={styles.rankingName}>{ranking.mostDelayed.worker.fullName}</span>
-              )
-            ) : (
+            </Link>
+          ) : (
+            <div className={`${styles.rankingCard} ${styles.rankingCardNeutral}`}>
+              <span className={styles.rankingLabel}>Most Overloaded (active tasks)</span>
               <span className={styles.cellMuted}>—</span>
-            )}
-            {ranking.mostDelayed && ranking.mostDelayed.value > 0 && (
+            </div>
+          )}
+          {ranking.mostDelayed && ranking.mostDelayed.value > 0 ? (
+            <Link to={`${profileBase}/${ranking.mostDelayed.worker.id}`} className={`${styles.rankingCard} ${styles.rankingCardBad} ${styles.rankingCardLink}`}>
+              <span className={styles.rankingLabel}>Most Delayed (overdue)</span>
+              <span className={styles.rankingName}>{ranking.mostDelayed.worker.fullName}</span>
               <span className={styles.rankingMetric}>{ranking.mostDelayed.value} overdue</span>
-            )}
-          </div>
+            </Link>
+          ) : (
+            <div className={`${styles.rankingCard} ${styles.rankingCardBad}`}>
+              <span className={styles.rankingLabel}>Most Delayed (overdue)</span>
+              <span className={styles.cellMuted}>—</span>
+            </div>
+          )}
         </div>
       </section>
 
@@ -336,24 +387,24 @@ function RegisterManageWorkers() {
         <input
           type="search"
           className={styles.search}
-          placeholder="Search by name or ID..."
+          placeholder={t('searchByNameOrId')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
         <select className={styles.filter} value={isEngineerRoute && filterRole === 'admin' ? '' : filterRole} onChange={(e) => setFilterRole(e.target.value)}>
-          <option value="">All roles</option>
+          <option value="">{t('allRoles')}</option>
           {roleOptions.map((r) => (
             <option key={r.value} value={r.value}>{r.label}</option>
           ))}
         </select>
         <select className={styles.filter} value={filterDept} onChange={(e) => setFilterDept(e.target.value)}>
-          <option value="">All departments</option>
+          <option value="">{t('allDepartmentsOpt')}</option>
           {DEPARTMENT_OPTIONS.map((d) => (
             <option key={d.value} value={d.value}>{d.label}</option>
           ))}
         </select>
         <select className={styles.filter} value={filterSkill} onChange={(e) => setFilterSkill(e.target.value)}>
-          <option value="">All skills</option>
+          <option value="">{t('allSkills')}</option>
           {SKILL_OPTIONS.map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
@@ -361,14 +412,17 @@ function RegisterManageWorkers() {
         <select className={styles.filter} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
           <option value="">All (account)</option>
           <option value="active">Active</option>
-          <option value="not_active">Not active</option>
+          <option value="not_active">{t('notActive')}</option>
         </select>
         <button type="button" className={styles.addWorkerBtn} onClick={openAdd}>
           <i className="fas fa-user-plus fa-fw" /> Add New Worker
         </button>
+        <button type="button" className={styles.exportPdfBtn} onClick={exportEmployeesPDF} disabled={filtered.length === 0} title="Export table to PDF">
+          <i className="fas fa-file-pdf fa-fw" /> Export PDF
+        </button>
       </div>
 
-      <div className={styles.tableWrap}>
+      <div className={styles.tableWrap} ref={workersTableRef}>
         <table className={styles.table}>
           <thead>
             <tr>
@@ -378,7 +432,7 @@ function RegisterManageWorkers() {
               <th>Role</th>
               <th>Department</th>
               <th>Account</th>
-              <th>In task</th>
+              <th>{t('inTask')}</th>
               <th>Tasks This Week</th>
               <th>Overdue</th>
               <th>Efficiency %</th>
@@ -388,9 +442,9 @@ function RegisterManageWorkers() {
           <tbody>
             {filtered.map((w) => {
               const accountStatus = getAccountStatus(w)
-              const accountLabel = accountStatus === 'active' ? 'Active' : 'Not active'
+              const accountLabel = accountStatus === 'active' ? t('active') : t('notActive')
               const accountCls = accountStatus === 'active' ? styles.badgeActive : styles.badgeNotActive
-              const showInTask = IS_WORKER_OR_TECH(w.role)
+              const showInTask = IS_WORKER(w.role)
               const inTask = showInTask && isInTask(w, sessions)
               const tasksWeek = getTasksThisWeek(tasks || [], w.id).length
               const overdue = getOverdueTasks(tasks || [], w.id, sessions || []).length
@@ -451,7 +505,7 @@ function RegisterManageWorkers() {
             </div>
             <form onSubmit={saveAddWorker} className={styles.form}>
               <label className={styles.label}>Full Name *</label>
-              <input className={styles.input} value={addForm.fullName} onChange={(e) => setAddForm((f) => ({ ...f, fullName: e.target.value }))} placeholder="Full name" required />
+              <input className={styles.input} value={addForm.fullName} onChange={(e) => setAddForm((f) => ({ ...f, fullName: e.target.value }))} placeholder={t('fullName')} required />
               <label className={styles.label}>Role</label>
               <select className={styles.input} value={addForm.role} onChange={(e) => setAddForm((f) => ({ ...f, role: e.target.value }))}>
                 {roleOptions.map((r) => (
@@ -467,12 +521,12 @@ function RegisterManageWorkers() {
               <label className={styles.label}>Account Status</label>
               <select className={styles.input} value={addForm.status} onChange={(e) => setAddForm((f) => ({ ...f, status: e.target.value }))}>
                 <option value="active">Active</option>
-                <option value="inactive">Not active</option>
+                <option value="inactive">{t('notActive')}</option>
               </select>
               <label className={styles.label}>Phone</label>
-              <input type="tel" className={styles.input} value={addForm.phone} onChange={(e) => setAddForm((f) => ({ ...f, phone: e.target.value }))} placeholder="+966 ..." />
+              <input type="tel" className={styles.input} value={addForm.phone} onChange={(e) => setAddForm((f) => ({ ...f, phone: e.target.value }))} placeholder={t('phonePlaceholder')} />
               <label className={styles.label}>Email</label>
-              <input type="email" className={styles.input} value={addForm.email} onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))} placeholder="email@example.com" />
+              <input type="email" className={styles.input} value={addForm.email} onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))} placeholder={t('emailPlaceholder')} />
               <label className={styles.label}>Skills</label>
               <div className={styles.skillCheckboxGrid}>
                 {SKILL_OPTIONS.map((skill) => (
@@ -547,7 +601,7 @@ function RegisterManageWorkers() {
               <label className={styles.label}>Account Status</label>
               <select className={styles.input} value={editForm.status} onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))}>
                 <option value="active">Active</option>
-                <option value="inactive">Not active</option>
+                <option value="inactive">{t('notActive')}</option>
               </select>
               <label className={styles.label}>Skills</label>
               <div className={styles.skillCheckboxGrid}>

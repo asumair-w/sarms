@@ -8,13 +8,16 @@ import {
   Legend,
 } from 'chart.js'
 import { Bar } from 'react-chartjs-2'
-import { INV_GREEN, CHART_YELLOW, CHART_RED } from './analyticsColors'
+import { OLIVE_PRIMARY, OLIVE_PRIMARY_HOVER, OLIVE_LIGHT, OLIVE_LIGHT_HOVER, SOFT_RED, SOFT_RED_HOVER } from './analyticsColors'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
-const COLOR_TASKS = INV_GREEN + 'cc'
-const COLOR_SESSIONS = CHART_YELLOW + 'cc'
-const COLOR_FAULTS = CHART_RED + 'cc'
+const COLOR_TASKS = OLIVE_PRIMARY
+const COLOR_SESSIONS = OLIVE_LIGHT
+const COLOR_FAULTS = SOFT_RED
+const HOVER_TASKS = OLIVE_PRIMARY_HOVER
+const HOVER_SESSIONS = OLIVE_LIGHT_HOVER
+const HOVER_FAULTS = SOFT_RED_HOVER
 
 const options = {
   responsive: true,
@@ -48,9 +51,9 @@ function ZoneDistributionChart({ data, onSegmentClick, zoneIds }) {
   const chartData = {
     labels: labels.length ? labels : ['No data'],
     datasets: [
-      { label: 'Tasks', data: tasks.length ? tasks : [0], backgroundColor: COLOR_TASKS },
-      { label: 'Sessions', data: sessions.length ? sessions : [0], backgroundColor: COLOR_SESSIONS },
-      { label: 'Faults', data: faults.length ? faults : [0], backgroundColor: COLOR_FAULTS },
+      { label: 'Tasks', data: tasks.length ? tasks : [0], backgroundColor: COLOR_TASKS, hoverBackgroundColor: HOVER_TASKS },
+      { label: 'Sessions', data: sessions.length ? sessions : [0], backgroundColor: COLOR_SESSIONS, hoverBackgroundColor: HOVER_SESSIONS },
+      { label: 'Faults', data: faults.length ? faults : [0], backgroundColor: COLOR_FAULTS, hoverBackgroundColor: HOVER_FAULTS },
     ],
   }
 

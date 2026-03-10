@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { jsPDF } from 'jspdf'
+import html2canvas from 'html2canvas'
 import {
   INVENTORY_CATEGORIES,
   INVENTORY_STATUS,
@@ -9,6 +11,8 @@ import {
 import { FAULT_TYPE_PREVENTIVE_ALERT, FAULT_STATUS_OPEN } from '../../data/faults'
 import { getInitialZones } from '../../data/workerFlow'
 import { useAppStore } from '../../context/AppStoreContext'
+import { useLanguage } from '../../context/LanguageContext'
+import { getTranslation } from '../../i18n/translations'
 import { nextMovementId, nextInventoryItemId, nextFaultId } from '../../utils/idGenerators'
 import styles from './InventoryEquipment.module.css'
 
@@ -56,9 +60,10 @@ const CAT_LABELS = Object.fromEntries(INVENTORY_CATEGORIES.map((c) => [c.id, c.l
 const STATUS_LABELS = { [INVENTORY_STATUS.NORMAL]: 'Normal', [INVENTORY_STATUS.LOW]: 'Low', [INVENTORY_STATUS.CRITICAL]: 'Critical' }
 
 export default function InventoryEquipment() {
+  const { lang } = useLanguage()
+  const t = (key) => getTranslation(lang, 'engineer', key)
   const { inventory, inventoryMovements, equipment, updateInventoryItem, addInventoryItem, removeInventoryItem, addInventoryMovement, faults, maintenancePlans, addFault, updateFault, zones: storeZones } = useAppStore()
   const zonesList = (storeZones && storeZones.length > 0) ? storeZones : getInitialZones()
-  const [inventoryOpen, setInventoryOpen] = useState(true)
   const [updateModal, setUpdateModal] = useState(null)
   const [qtyMode, setQtyMode] = useState('set')
   const [qtyValue, setQtyValue] = useState('')
@@ -75,6 +80,7 @@ export default function InventoryEquipment() {
   const [filterNeedsRefillOnly, setFilterNeedsRefillOnly] = useState(false)
   const [filterUpdatedLast7Days, setFilterUpdatedLast7Days] = useState(false)
   const [movementPeriod, setMovementPeriod] = useState('week') // 'week' | 'month'
+  const stockTableRef = useRef(null)
   const inventoryWithStatus = useMemo(
     () => inventory.map((i) => ({ ...i, status: getInventoryStatus(i) })),
     [inventory]
@@ -183,70 +189,63 @@ export default function InventoryEquipment() {
   const categoryLabel = (i) => (i.category === 'other' && (i.customCategory || '')) ? i.customCategory : (CAT_LABELS[i.category] ?? i.category)
 
   function exportInventoryPDF() {
-    const dateStr = new Date().toISOString().slice(0, 10)
-    const generatedAt = new Date().toLocaleString()
-    const filterLines = [
-      `Category: ${filterCategory ? (CAT_LABELS[filterCategory] || filterCategory) : 'All'}`,
-      `Status: ${filterStatus ? (STATUS_LABELS[filterStatus] || filterStatus) : 'All'}`,
-      `Search: ${filterSearch.trim() || '—'}`,
-    ]
-    const rows = filteredInventory.map((i) => `
-      <tr>
-        <td>${escapeHtml(i.name ?? '')}</td>
-        <td>${escapeHtml(categoryLabel(i))}</td>
-        <td>${escapeHtml(String(i.quantity ?? ''))}</td>
-        <td>${escapeHtml(i.unit ?? '')}</td>
-        <td>${escapeHtml(STATUS_LABELS[i.status] ?? i.status ?? '')}</td>
-        <td>${escapeHtml(i.lastUpdated ? new Date(i.lastUpdated).toLocaleString() : '')}</td>
-      </tr>
-    `).join('')
-    const html = `
-<!DOCTYPE html>
-<html dir="ltr">
-<head>
-  <meta charset="utf-8">
-  <title>Inventory Report – ${dateStr}</title>
-  <style>
-    body { font-family: system-ui, sans-serif; padding: 20px; color: #1e293b; }
-    h1 { font-size: 1.5rem; margin: 0 0 0.5rem; }
-    .report-meta { color: #64748b; font-size: 0.9rem; margin-bottom: 0.5rem; }
-    .report-filters { font-size: 0.85rem; color: #475569; margin-bottom: 1rem; padding: 8px 0; border-bottom: 1px solid #e2e8f0; }
-    .report-filters p { margin: 0.25rem 0; }
-    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 0.5rem; }
-    th, td { border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; }
-    th { background: #f1f5f9; font-weight: 600; }
-    tr:nth-child(even) { background: #f8fafc; }
-    .report-footer { margin-top: 1rem; padding-top: 8px; border-top: 1px solid #e2e8f0; font-size: 0.9rem; color: #64748b; }
-    .print-hint { margin-top: 1rem; font-size: 0.8rem; color: #94a3b8; }
-  </style>
-</head>
-<body>
-  <h1>Inventory Report</h1>
-  <p class="report-meta">Generated at: ${escapeHtml(generatedAt)}</p>
-  <div class="report-filters">
-    <p><strong>Filters applied:</strong></p>
-    <p>${escapeHtml(filterLines.join(' · '))}</p>
-  </div>
-  <table>
-    <thead><tr><th>Item name</th><th>Category</th><th>Quantity</th><th>Unit</th><th>Status</th><th>Last updated</th></tr></thead>
-    <tbody>${rows}</tbody>
-  </table>
-  <p class="report-footer">Total items exported: ${filteredInventory.length}</p>
-  <p class="print-hint">Use the browser print dialog and choose &quot;Save as PDF&quot; to save as PDF.</p>
-</body>
-</html>`
-    const win = window.open('', '_blank')
-    if (!win) return
-    win.document.write(html)
-    win.document.close()
-    win.focus()
-    setTimeout(() => { win.print(); win.onafterprint = () => win.close(); }, 250)
-  }
+    const el = stockTableRef.current
+    if (!el) return
+    html2canvas(el, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+    }).then((canvas) => {
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF({
+        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      })
+      const pdfW = pdf.internal.pageSize.getWidth()
+      const pdfH = pdf.internal.pageSize.getHeight()
+      const margin = 10
+      const w = pdfW - margin * 2
+      const h = (canvas.height * w) / canvas.width
 
-  function escapeHtml(s) {
-    const div = document.createElement('div')
-    div.textContent = s
-    return div.innerHTML
+      pdf.setFontSize(14)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('Manage Stock', margin, 12)
+      pdf.setFontSize(9)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text(new Date().toLocaleString(), margin, 18)
+
+      let y = 24
+      pdf.setFontSize(10)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('Filters applied:', margin, y)
+      y += 5
+      const categoryLabelVal = filterCategory ? (CAT_LABELS[filterCategory] || filterCategory) : 'All'
+      const statusLabelVal = filterStatus ? (STATUS_LABELS[filterStatus] || filterStatus) : 'All'
+      const searchValue = filterSearch.trim() || '—'
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(9)
+      const filterLine1 = `Category: ${categoryLabelVal}   ·   Status: ${statusLabelVal}`
+      const filterLine2 = `Search: ${searchValue}`
+      const filterLine3 = `Needs refill only: ${filterNeedsRefillOnly ? 'Yes' : 'No'}   ·   Updated last 7 days: ${filterUpdatedLast7Days ? 'Yes' : 'No'}   ·   Rows: ${filteredInventory.length}`
+      const lineH = 5
+      const split1 = pdf.splitTextToSize(filterLine1, w)
+      split1.forEach((line) => { pdf.text(line, margin, y); y += lineH })
+      pdf.text(filterLine2, margin, y); y += lineH
+      const split3 = pdf.splitTextToSize(filterLine3, w)
+      split3.forEach((line) => { pdf.text(line, margin, y); y += lineH })
+      y += 3
+      pdf.setDrawColor(220, 220, 220)
+      pdf.line(margin, y, margin + w, y)
+      y += 4
+      const headerH = y
+      const imgH = Math.min(h, pdfH - headerH - 4)
+      const imgW = (canvas.width * imgH) / canvas.height
+      const imgX = margin + (w - imgW) / 2
+      pdf.addImage(imgData, 'PNG', imgX, headerH, imgW, imgH)
+      pdf.save(`Manage-Stock-${new Date().toISOString().slice(0, 10)}.pdf`)
+    }).catch(() => {})
   }
 
   function handleSaveEdit(e) {
@@ -425,21 +424,21 @@ export default function InventoryEquipment() {
       <section className={styles.summarySection}>
         <h2 className={styles.summaryTitle}><i className="fas fa-chart-pie fa-fw" /> Summary</h2>
         <div className={styles.summaryCards}>
-          <button type="button" className={`${styles.summaryCard} ${styles.summaryCardStock} ${filterNeedsRefillOnly ? styles.summaryCardActive : ''}`} onClick={() => { setFilterNeedsRefillOnly(true); setFilterUpdatedLast7Days(false); setFilterCategory(''); setFilterStatus(''); setInventoryOpen(true); }}>
+          <button type="button" className={`${styles.summaryCard} ${styles.summaryCardStock} ${filterNeedsRefillOnly ? styles.summaryCardActive : ''}`} onClick={() => { setFilterNeedsRefillOnly(true); setFilterUpdatedLast7Days(false); setFilterCategory(''); setFilterStatus(''); stockTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>
             <span className={styles.summaryCardLabel}>Stock Health</span>
             <div className={styles.summaryCardBody}>
               <div className={styles.summaryRow}><span className={styles.stockCritical}>Critical</span><strong>{summaryCounts.critical}</strong></div>
               <div className={styles.summaryRow}><span className={styles.stockLow}>Low</span><strong>{summaryCounts.low}</strong></div>
-              <div className={styles.summaryRow}><span className={styles.stockRefill}>Needs refill</span><strong>{summaryCounts.needsRefill}</strong></div>
+              <div className={styles.summaryRow}><span className={styles.stockRefill}>{t('needsRefill')}</span><strong>{summaryCounts.needsRefill}</strong></div>
             </div>
           </button>
           <div className={`${styles.summaryCard} ${styles.summaryCardTotalUpdated} ${!filterNeedsRefillOnly && !filterUpdatedLast7Days && !filterCategory && !filterStatus && !filterSearch.trim() ? styles.summaryCardActive : ''} ${filterUpdatedLast7Days ? styles.summaryCardActiveUpdated : ''}`}>
             <span className={styles.summaryCardLabel}>Items</span>
             <div className={styles.summaryCardBody}>
-              <button type="button" className={styles.summaryRowBtn} onClick={() => { clearSummaryFilters(); setInventoryOpen(true); }} title="Show all items">
+              <button type="button" className={styles.summaryRowBtn} onClick={() => { clearSummaryFilters(); stockTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} title="Show all items">
                 <span>Total</span><strong>{summaryCounts.total}</strong>
               </button>
-              <button type="button" className={styles.summaryRowBtn} onClick={() => { setFilterUpdatedLast7Days(true); setFilterNeedsRefillOnly(false); setFilterCategory(''); setFilterStatus(''); setInventoryOpen(true); }} title="Filter by last 7 days">
+              <button type="button" className={styles.summaryRowBtn} onClick={() => { setFilterUpdatedLast7Days(true); setFilterNeedsRefillOnly(false); setFilterCategory(''); setFilterStatus(''); stockTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} title="Filter by last 7 days">
                 <span>Updated (7d)</span><strong>{recentlyUpdatedCount}</strong>
               </button>
             </div>
@@ -449,7 +448,7 @@ export default function InventoryEquipment() {
             <div className={styles.summaryCardBody}>
               <div className={styles.summaryCategoryGrid}>
                 {INVENTORY_CATEGORIES.map((c) => (
-                  <button type="button" key={c.id} className={styles.summaryCategoryChip} onClick={() => { setFilterCategory(c.id); setFilterNeedsRefillOnly(false); setFilterUpdatedLast7Days(false); setFilterStatus(''); setInventoryOpen(true); }} title={`Filter by ${c.label}`}>
+                  <button type="button" key={c.id} className={styles.summaryCategoryChip} onClick={() => { setFilterCategory(c.id); setFilterNeedsRefillOnly(false); setFilterUpdatedLast7Days(false); setFilterStatus(''); stockTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} title={`Filter by ${c.label}`}>
                     <span className={styles.summaryCategoryName}>{c.label}</span>
                     <span className={styles.summaryCategoryCount}>{categoryCounts[c.id] ?? 0}</span>
                   </button>
@@ -468,8 +467,8 @@ export default function InventoryEquipment() {
                   onClick={(e) => e.stopPropagation()}
                   aria-label="Period"
                 >
-                  <option value="week">This week</option>
-                  <option value="month">This month</option>
+                  <option value="week">{t('thisWeek')}</option>
+                  <option value="month">{t('thisMonth')}</option>
                 </select>
               </div>
               {stockMovementStats.hasMovement ? (
@@ -498,14 +497,10 @@ export default function InventoryEquipment() {
       </section>
 
       <section className={styles.section}>
-        <button type="button" className={styles.sectionHeader} onClick={() => setInventoryOpen((o) => !o)}>
+        <div className={`${styles.sectionHeader} ${styles.sectionHeaderStatic}`}>
           <h2 className={styles.sectionTitle}><i className="fas fa-boxes-stacked fa-fw" /> Manage Stock</h2>
-          <span className={styles.expandLabel}>{inventoryOpen ? 'Collapse' : 'Expand'}</span>
-          <span className={styles.chevron}>{inventoryOpen ? '▼' : '▶'}</span>
-        </button>
-        {inventoryOpen && (
-          <>
-            <div className={styles.filtersBar}>
+        </div>
+        <div className={styles.filtersBar}>
               <div className={styles.filtersRow}>
                 <span className={styles.filterLabel}>Category</span>
                 <select
@@ -540,7 +535,7 @@ export default function InventoryEquipment() {
                   type="search"
                   value={filterSearch}
                   onChange={(e) => setFilterSearch(e.target.value)}
-                  placeholder="Name, category, unit…"
+                  placeholder={t('nameCategoryPlaceholder')}
                   className={styles.filterInput}
                 />
               </div>
@@ -555,16 +550,16 @@ export default function InventoryEquipment() {
                 </button>
               </div>
             </div>
-            <div className={styles.tableWrap}>
+            <div className={styles.tableWrap} ref={stockTableRef}>
               <table className={styles.table}>
                 <thead>
                   <tr>
-                    <th>Item name</th>
+                    <th>{t('itemName')}</th>
                     <th>Category</th>
                     <th>Quantity</th>
                     <th>Unit</th>
                     <th>Status</th>
-                    <th>Last updated</th>
+                    <th>{t('lastUpdated')}</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -608,8 +603,6 @@ export default function InventoryEquipment() {
                 </tbody>
               </table>
             </div>
-          </>
-        )}
       </section>
 
       {openActionsId && dropdownAnchor && (() => {
@@ -627,7 +620,7 @@ export default function InventoryEquipment() {
               zIndex: 9999,
             }}
           >
-            <button type="button" className={styles.actionsItem} onClick={() => { openQuantityModal(openItem); closeMenu(); }}>Update quantity</button>
+            <button type="button" className={styles.actionsItem} onClick={() => { openQuantityModal(openItem); closeMenu(); }}>{t('updateQuantity')}</button>
             <button type="button" className={styles.actionsItem} onClick={() => { setEditItem({ ...openItem, customCategory: openItem.customCategory || '' }); closeMenu(); }}>Edit</button>
             <button type="button" className={styles.actionsItem} onClick={() => { setHistoryModalItem(openItem); closeMenu(); }}>View History</button>
             <button type="button" className={`${styles.actionsItem} ${styles.actionsItemDanger}`} onClick={() => { handleDeleteItem(openItem); closeMenu(); }}>Delete</button>
@@ -689,14 +682,14 @@ export default function InventoryEquipment() {
                   type="number"
                   value={qtyMode === 'adjust' ? qtyValue : ''}
                   onChange={(e) => qtyMode === 'adjust' && setQtyValue(e.target.value)}
-                  placeholder="e.g. 10 or -5"
+                  placeholder={t('quantityPlaceholder')}
                   className={styles.input}
                   disabled={qtyMode !== 'adjust'}
                 />
               </div>
               <div className={styles.modalActions}>
                 <button type="button" className={styles.btnSecondary} onClick={() => { setUpdateModal(null); setUpdateReason(INVENTORY_MOVEMENT_REASON.MANUAL_UPDATE); }}>Cancel</button>
-                <button type="submit" className={styles.btnPrimary}>Update quantity</button>
+                <button type="submit" className={styles.btnPrimary}>{t('updateQuantity')}</button>
               </div>
             </form>
           </div>
@@ -710,7 +703,7 @@ export default function InventoryEquipment() {
             <h3 className={styles.modalTitle}>Edit item – {editItem.name}</h3>
             <form onSubmit={handleSaveEdit} className={styles.modalForm}>
               <div className={styles.formRow}>
-                <label>Item name</label>
+                <label>{t('itemName')}</label>
                 <input
                   type="text"
                   value={editItem.name}
@@ -738,7 +731,7 @@ export default function InventoryEquipment() {
                     type="text"
                     value={editItem.customCategory || ''}
                     onChange={(e) => setEditItem((prev) => ({ ...prev, customCategory: e.target.value }))}
-                    placeholder="e.g. Chemicals, Spare parts"
+                    placeholder={t('nameCategoryPlaceholder')}
                     className={styles.input}
                   />
                 </div>
@@ -773,7 +766,7 @@ export default function InventoryEquipment() {
                 />
               </div>
               <div className={styles.formRow}>
-                <label>Warning level</label>
+                <label>{t('warningLevel')}</label>
                 <input
                   type="number"
                   min={0}
@@ -839,10 +832,10 @@ export default function InventoryEquipment() {
       {addItemOpen && (
         <div className={styles.modalOverlay} onClick={() => setAddItemOpen(false)}>
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.modalTitle}>Add item</h3>
+            <h3 className={styles.modalTitle}>{t('addItem')}</h3>
             <form onSubmit={handleAddItem} className={styles.modalForm}>
               <div className={styles.formRow}>
-                <label>Item name</label>
+                <label>{t('itemName')}</label>
                 <input
                   type="text"
                   value={newItem.name}
@@ -866,7 +859,7 @@ export default function InventoryEquipment() {
                     type="text"
                     value={newItem.customCategory}
                     onChange={(e) => setNewItem((n) => ({ ...n, customCategory: e.target.value }))}
-                    placeholder="e.g. Chemicals, Spare parts"
+                    placeholder={t('nameCategoryPlaceholder')}
                     className={styles.input}
                   />
                 </div>
@@ -884,12 +877,12 @@ export default function InventoryEquipment() {
                 <input type="number" min={0} value={newItem.minQty} onChange={(e) => setNewItem((n) => ({ ...n, minQty: Number(e.target.value) || 0 }))} className={styles.input} />
               </div>
               <div className={styles.formRow}>
-                <label>Warning level</label>
+                <label>{t('warningLevel')}</label>
                 <input type="number" min={0} value={newItem.warningQty} onChange={(e) => setNewItem((n) => ({ ...n, warningQty: Number(e.target.value) || 0 }))} className={styles.input} />
               </div>
               <div className={styles.modalActions}>
                 <button type="button" className={styles.btnSecondary} onClick={() => setAddItemOpen(false)}>Cancel</button>
-                <button type="submit" className={styles.btnPrimary}>Add item</button>
+                <button type="submit" className={styles.btnPrimary}>{t('addItem')}</button>
               </div>
             </form>
           </div>

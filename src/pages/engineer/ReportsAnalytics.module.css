@@ -111,7 +111,7 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  min-height: 72px;
+  min-height: 118px;
   padding: 0;
   border: 2px solid #e2e8f0;
   border-radius: 12px;
@@ -120,9 +120,14 @@
   box-sizing: border-box;
 }
 
+/* Total production card: allow unit dropdown to show outside card */
+.summaryKpiCardProduction {
+  overflow: visible;
+}
+
 /* Title strip (same as .summaryCardLabel in Equipment) */
 .summaryKpiCard .metricLabel {
-  padding: 0.5rem 0.75rem 0.35rem;
+  padding: 0.5rem 0.75rem 0.4rem;
   font-size: 0.75rem;
   font-weight: 700;
   color: #64748b;
@@ -134,23 +139,117 @@
   margin: 0;
 }
 
-/* Card body (same as .summaryCardBody in Equipment) */
+/* Card body – fixed layout so numbers align across all cards */
 .summaryKpiCardBody {
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 0.25rem;
-  padding: 0.75rem;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 0.35rem;
+  padding: 0.65rem 0.75rem 0.75rem;
+  min-height: 4.5rem;
 }
 
 .summaryKpiCardBody .metricValue {
   margin: 0;
+  display: block;
+  min-height: 2.25rem;
+  line-height: 1.2;
+  font-size: 1.9rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
 }
 
 .summaryKpiCardBody .metricUnit,
 .summaryKpiCardBody .trendIndicator {
   margin: 0;
+  font-size: 0.8rem;
+}
+
+/* Total production: value and unit on same row, unit on the right and clickable */
+.productionValueRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 2.25rem;
+}
+
+.productionValueRow .metricValue {
+  flex-shrink: 0;
+}
+
+.productionUnitWrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.productionUnitBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--sarms-primary, #4a6b4a);
+  background: transparent;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.productionUnitBtn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.productionUnitBtn:focus {
+  outline: 2px solid var(--sarms-primary, #4a6b4a);
+  outline-offset: 2px;
+}
+
+.productionUnitDropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin: 0.25rem 0 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  min-width: 7rem;
+  z-index: 10;
+}
+
+.productionUnitOption {
+  display: block;
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #334155;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s ease;
+}
+
+.productionUnitOption:hover {
+  background: #f1f5f9;
+}
+
+.productionUnitOptionActive {
+  color: var(--sarms-primary, #4a6b4a);
+  font-weight: 600;
+  background: #f0fdf4;
 }
 
 /* Summary Filter – collapsible, default collapsed */
@@ -215,6 +314,15 @@
   font-size: 0.9rem;
 }
 
+.summaryFilterBody .presetBtnActive,
+.presetBtnActive {
+  background: var(--sarms-primary, #4a6b4a) !important;
+  color: #fff !important;
+  border-color: var(--sarms-primary, #4a6b4a) !important;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
 .summaryFilterBody .filtersGrid {
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 1.25rem 1.5rem;
@@ -276,9 +384,10 @@
 }
 
 .metricValue {
-  font-size: 1.25rem;
-  font-weight: 700;
+  font-size: 1.9rem;
+  font-weight: 800;
   color: #0f172a;
+  letter-spacing: -0.02em;
 }
 
 .metricUnit {
@@ -631,6 +740,118 @@
   }
 }
 
+/* Sessions: 2 charts only – use full width and taller height */
+.explorerChartsSessions {
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  min-height: 0;
+}
+.explorerChartsSessions .chartContainer {
+  height: min(420px, 55vh);
+  min-height: 320px;
+}
+@media (max-width: 639px) {
+  .explorerChartsSessions {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Operations: 2 charts only (Tasks by status + Tasks by zone) – use full width and taller height */
+.explorerChartsOperations {
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  min-height: 0;
+}
+.explorerChartsOperations .chartCard {
+  min-height: 0;
+}
+.explorerChartsOperations .chartContainer {
+  height: min(420px, 55vh);
+  min-height: 320px;
+}
+@media (max-width: 639px) {
+  .explorerChartsOperations {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Production: 2 charts only (this period vs previous + Production by zone) – use full width and taller height */
+.explorerChartsProduction {
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  min-height: 0;
+}
+.explorerChartsProduction .chartCard {
+  min-height: 0;
+}
+.explorerChartsProduction .chartContainer {
+  height: min(420px, 55vh);
+  min-height: 320px;
+}
+@media (max-width: 639px) {
+  .explorerChartsProduction {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Workers: 2 charts only (Tasks per worker + Session status) – use full width and taller height */
+.explorerChartsWorkers {
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  min-height: 0;
+}
+.explorerChartsWorkers .chartCard {
+  min-height: 0;
+}
+.explorerChartsWorkers .chartContainer {
+  height: min(420px, 55vh);
+  min-height: 320px;
+}
+@media (max-width: 639px) {
+  .explorerChartsWorkers {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Equipment: 2 charts only (Faults by category + Most failing equipment) – use full width and taller height */
+.explorerChartsEquipment {
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  min-height: 0;
+}
+.explorerChartsEquipment .chartCard {
+  min-height: 0;
+}
+.explorerChartsEquipment .chartContainer {
+  height: min(420px, 55vh);
+  min-height: 320px;
+}
+@media (max-width: 639px) {
+  .explorerChartsEquipment {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Inventory: 2 panels only (Items by category + Critical & low) – use full width and taller height */
+.explorerChartsInventory {
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  min-height: 0;
+}
+.explorerChartsInventory .chartCard {
+  min-height: 0;
+}
+.explorerChartsInventory .chartContainer {
+  height: min(420px, 55vh);
+  min-height: 320px;
+  overflow-y: auto;
+}
+@media (max-width: 639px) {
+  .explorerChartsInventory {
+    grid-template-columns: 1fr;
+  }
+}
+
 .autoInsightBox {
   display: flex;
   align-items: center;
@@ -759,6 +980,12 @@
 .presetBtn:hover {
   background: #e2e8f0;
   color: #0f172a;
+}
+
+.presetBtn.presetBtnActive:hover {
+  background: var(--sarms-primary-dark, #3d5a3d) !important;
+  color: #fff !important;
+  border-color: var(--sarms-primary-dark, #3d5a3d) !important;
 }
 
 .filterGroup {

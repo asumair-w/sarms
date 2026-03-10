@@ -46,6 +46,31 @@
   font-size: 0.95rem;
 }
 
+.exportPdfBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0.5rem 1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #475569;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.exportPdfBtn:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+.exportPdfBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .addWorkerBtn {
   display: inline-flex;
   align-items: center;
@@ -218,6 +243,18 @@
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+}
+
+.rankingCardLink {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.rankingCardLink:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
 }
 
 /* Good indicators: green highlight */

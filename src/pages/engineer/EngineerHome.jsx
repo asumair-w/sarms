@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useMemo } from 'react'
+import ReactECharts from 'echarts-for-react'
 import { useLanguage } from '../../context/LanguageContext'
 import { getTranslation } from '../../i18n/translations'
 import { SECTION_ACTIONS } from '../../data/engineerNav'
@@ -9,8 +9,17 @@ import { TASK_STATUS } from '../../data/assignTask'
 import { DEPARTMENT_OPTIONS } from '../../data/engineerWorkers'
 import { getInitialZones, getDepartment, getTasksForDepartment } from '../../data/workerFlow'
 import { getInventoryStatus } from '../../data/inventory'
-import { SEVERITY_OPTIONS, FAULT_STATUS_OPEN, FAULT_STATUS_RESOLVED } from '../../data/faults'
+import { SEVERITY_OPTIONS, FAULT_STATUS_OPEN, FAULT_STATUS_RESOLVED, FAULT_TYPE_PREVENTIVE_ALERT } from '../../data/faults'
+import { getSessionStatus } from '../../data/monitorActive'
+import { buildOverviewData } from '../../utils/analyticsOverview'
+import SystemHealthScore from '../../components/analytics/SystemHealthScore'
 import styles from './EngineerHome.module.css'
+
+/** Today as YYYY-MM-DD (local). */
+function getTodayLocal() {
+  const d = new Date()
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+}
 
 /** Monday 00:00:00 of the current week (ISO week). */
 function getWeekStart() {
@@ -22,10 +31,16 @@ function getWeekStart() {
   return monday.getTime()
 }
 
-/** Critical severity: high or critical */
+/** Critical severity: high or critical (case-insensitive). */
 function isCriticalSeverity(severity) {
-  const s = (severity || '').toLowerCase()
+  const s = String(severity || '').toLowerCase().trim()
   return s === 'high' || s === 'critical'
+}
+
+/** Open fault: not resolved/closed/completed. */
+function isFaultOpen(fault) {
+  const s = String(fault?.status ?? FAULT_STATUS_OPEN).toLowerCase().trim()
+  return s !== 'resolved' && s !== 'closed' && s !== 'completed'
 }
 
 /** Normalize task status for chart counts (approved = pending_approval). */
@@ -53,11 +68,24 @@ function safeTaskCreatedAt(task) {
   return Number.isFinite(t) ? t : 0
 }
 
+/** Format duration from startTime to now (e.g. "45 min", "1h 20m"). */
+function formatDuration(startTime) {
+  if (!startTime) return null
+  const start = new Date(startTime).getTime()
+  if (!Number.isFinite(start)) return null
+  const mins = Math.floor((Date.now() - start) / 60000)
+  if (mins < 1) return '<1 min'
+  if (mins < 60) return `${mins} min`
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return m ? `${h}h ${m}m` : `${h}h`
+}
+
 export default function EngineerHome() {
   const navigate = useNavigate()
   const { lang } = useLanguage()
   const t = (key) => getTranslation(lang, 'engineer', key)
-  const { tasks, sessions, zones: storeZones, workers, faults, inventory, equipment } = useAppStore()
+  const { tasks, sessions, zones: storeZones, workers, faults, maintenancePlans, inventory, equipment, records } = useAppStore()
   const zonesList = (storeZones && storeZones.length > 0) ? storeZones : getInitialZones()
   const ZONE_LABEL = useMemo(() => Object.fromEntries(zonesList.map((z) => [z.id, z.label])), [zonesList])
   const equipmentById = useMemo(() => Object.fromEntries((equipment || []).map((e) => [e.id, e])), [equipment])
@@ -87,12 +115,56 @@ export default function EngineerHome() {
     }).length
   }, [tasks, sessions])
   const criticalFaultsCount = useMemo(
-    () => (faults || []).filter((f) => isCriticalSeverity(f.severity) && (f.status || FAULT_STATUS_OPEN) !== FAULT_STATUS_RESOLVED).length,
+    () => (faults || []).filter((f) => isCriticalSeverity(f.severity) && isFaultOpen(f)).length,
     [faults]
   )
   const lowStockCount = useMemo(() => {
     return (inventory || []).filter((item) => getInventoryStatus(item) !== 'normal').length
   }, [inventory])
+
+  /** Overview data for System Health (same logic as General Reports) */
+  const sessionsWithStatus = useMemo(
+    () => (sessions || []).map((s) => ({ ...s, status: getSessionStatus(s, Date.now()) })),
+    [sessions]
+  )
+  const inventoryWithStatus = useMemo(
+    () => (inventory || []).map((i) => ({ ...i, status: getInventoryStatus(i) })),
+    [inventory]
+  )
+  const homeAppliedFilters = useMemo(() => {
+    const to = getTodayLocal()
+    const from = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
+    return { dateFrom: from, dateTo: to }
+  }, [])
+  const overviewData = useMemo(
+    () =>
+      buildOverviewData({
+        filteredTasks: tasks || [],
+        filteredSessions: sessionsWithStatus,
+        filteredFaults: faults || [],
+        filteredRecords: records || [],
+        inventoryWithStatus,
+        equipment: equipment || [],
+        filteredMaintenance: maintenancePlans || [],
+        appliedFilters: homeAppliedFilters,
+        zonesList,
+        ZONE_LABEL,
+        equipmentById,
+      }),
+    [
+      tasks,
+      sessionsWithStatus,
+      faults,
+      records,
+      inventoryWithStatus,
+      equipment,
+      maintenancePlans,
+      homeAppliedFilters,
+      zonesList,
+      ZONE_LABEL,
+      equipmentById,
+    ]
+  )
 
   const pendingApprovalCount = useMemo(
     () => (tasks || []).filter((t) => normalizeTaskStatus(t.status) === TASK_STATUS.PENDING_APPROVAL).length,
@@ -113,17 +185,70 @@ export default function EngineerHome() {
     return { total, completed, pct }
   }, [tasks])
 
-  /* Recent Fault Logs (last 5 by createdAt DESC) */
-  const recentFaults = useMemo(() => {
-    const list = [...(faults || [])].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5)
-    return list.map((f) => ({
-      ...f,
-      zone: equipmentById[f.equipmentId]?.zone ?? '—',
-      severityLabel: SEVERITY_OPTIONS.find((s) => s.id === f.severity)?.label ?? f.severity ?? '—',
-    }))
-  }, [faults, equipmentById])
+  /* Equipment tickets: faults + maintenance/inspection/corrective (from Equipment Tickets). Show open faults + tickets due or overdue. */
+  const todayStr = useMemo(() => getTodayLocal(), [])
+  const equipmentTicketsForHome = useMemo(() => {
+    const list = []
+    ;(faults || []).forEach((f) => {
+      if (f.auto_generated && f.type === FAULT_TYPE_PREVENTIVE_ALERT) return
+      const resolved = (f.status || FAULT_STATUS_OPEN) === FAULT_STATUS_RESOLVED
+      if (resolved) return
+      list.push({
+        id: `f-${f.id}`,
+        source: 'fault',
+        ticketType: 'fault',
+        equipmentName: f.equipmentName || f.description || f.id,
+        zone: equipmentById[f.equipmentId]?.zone ?? '—',
+        severity: f.severity,
+        severityLabel: SEVERITY_OPTIONS.find((s) => s.id === f.severity)?.label ?? f.severity ?? '—',
+        status: 'open',
+        dueDate: null,
+        createdAt: f.createdAt,
+        isOverdue: false,
+      })
+    })
+    ;(maintenancePlans || []).forEach((m) => {
+      if (m.status === 'completed') return
+      const due = m.plannedDate ? String(m.plannedDate).slice(0, 10) : null
+      const isOverdue = due && due < todayStr
+      const isDue = due && due <= todayStr
+      if (!isDue && !isOverdue) return
+      list.push({
+        id: `m-${m.id}`,
+        source: 'maintenance',
+        ticketType: m.type || 'preventive',
+        equipmentName: m.equipmentName || m.equipmentId || '—',
+        zone: equipmentById[m.equipmentId]?.zone ?? '—',
+        severity: null,
+        severityLabel: '—',
+        status: 'scheduled',
+        dueDate: due,
+        createdAt: m.createdAt,
+        isOverdue: !!isOverdue,
+      })
+    })
+    list.sort((a, b) => {
+      const aFault = a.ticketType === 'fault'
+      const bFault = b.ticketType === 'fault'
+      if (aFault && !bFault) return -1
+      if (!aFault && bFault) return 1
+      if (aFault && bFault) return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      if (a.isOverdue && !b.isOverdue) return -1
+      if (!a.isOverdue && b.isOverdue) return 1
+      if (a.dueDate && b.dueDate && a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate)
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    })
+    return list.slice(0, 15)
+  }, [faults, maintenancePlans, equipmentById, todayStr])
 
-  /* Tasks by type – vertical bars (normalize departmentId/taskType to lowercase) */
+  /* SARMS olive palette – ECharts uses hex only */
+  const CHART_HEX = { success: '#5c7b5c', warning: '#c7924a', info: '#4f7c8a', muted: '#7a8580' }
+  const STATUS_PIE_HEX = { chartPending: '#7a8580', chartInProgress: '#4f7c8a', chartCompleted: '#5c7b5c' }
+  const STATUS_PIE_HOVER = { chartPending: '#5e6763', chartInProgress: '#3a606b', chartCompleted: '#385438' }
+  const CHART_GRID = '#e4e9e4'
+  const HOVER_HEX = { success: '#385438', warning: '#a6783c', info: '#3a606b', muted: '#5e6763' }
+
+  /* Tasks by type – vertical bars (Farming, Maintenance, Inventory) – SARMS olive palette */
   const typeChartData = useMemo(() => {
     const byType = {}
     ;(tasks || []).forEach((task) => {
@@ -131,18 +256,20 @@ export default function EngineerHome() {
       const dept = String(raw).toLowerCase().trim() || 'other'
       byType[dept] = (byType[dept] || 0) + 1
     })
-    const colors = ['var(--sarms-chart-success)', 'var(--sarms-chart-warning)', 'var(--sarms-chart-info)']
+    const colors = [CHART_HEX.success, CHART_HEX.warning, CHART_HEX.info]
+    const hoverColors = [HOVER_HEX.success, HOVER_HEX.warning, HOVER_HEX.info]
     const series = DEPARTMENT_OPTIONS.map((d, i) => ({
       label: d.label,
       value: byType[d.value] || 0,
       color: colors[i % colors.length],
+      hoverColor: hoverColors[i % hoverColors.length],
     }))
     const max = Math.max(...series.map((s) => s.value), 1)
     return series.map((s) => ({ ...s, max }))
   }, [tasks])
 
-  /* Tasks by zone – bar chart, adopted palette (no grey) */
-  const ZONE_CHART_COLORS = ['#34d399', '#fde047', '#93c5fd', '#6ee7b7', '#fb923c', '#f87171']
+  /* Tasks by zone – Zone A/B/C/D + Inventory – SARMS olive palette */
+  const ZONE_CHART_COLORS = ['#5c7b5c', '#7fa77f', '#a9bfa9', '#4f7c8a', '#7a8580']
   const zoneChartData = useMemo(() => {
     const byZone = {}
     ;(tasks || []).forEach((t) => {
@@ -174,6 +301,138 @@ export default function EngineerHome() {
     ].filter((d) => d.value > 0)
   }, [tasks])
   const doughnutTotal = useMemo(() => doughnutData.reduce((sum, d) => sum + d.value, 0) || 1, [doughnutData])
+
+  /* ECharts options – optimized for card space, balanced and readable */
+  const chartOptionTasksByType = useMemo(() => ({
+    grid: { left: 16, right: 16, top: 28, bottom: 28, containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: typeChartData.map((d) => d.label),
+      axisLabel: { fontSize: 13, fontWeight: 600, color: '#334155', interval: 0 },
+    },
+    yAxis: {
+      type: 'value',
+      splitLine: { show: true, lineStyle: { color: CHART_GRID } },
+      axisLabel: { fontSize: 12, fontWeight: 500, color: '#475569' },
+    },
+    series: [{
+      type: 'bar',
+      data: typeChartData.map((d) => ({
+        value: d.value,
+        itemStyle: { color: d.color },
+        emphasis: { itemStyle: { color: d.hoverColor } },
+      })),
+      barMaxWidth: 72,
+    }],
+    tooltip: { trigger: 'axis', confine: true },
+  }), [typeChartData])
+
+  const chartOptionWeeklyProgress = useMemo(() => ({
+    series: [{
+      type: 'gauge',
+      radius: '98%',
+      center: ['50%', '52%'],
+      startAngle: 200,
+      endAngle: -20,
+      min: 0,
+      max: 100,
+      progress: { show: true, width: 22, roundCap: true, itemStyle: { color: CHART_HEX.success } },
+      axisLine: { lineStyle: { width: 22, color: [[1, CHART_GRID]] } },
+      axisTick: { show: false },
+      splitLine: { show: false },
+      axisLabel: { show: false },
+      pointer: { show: false },
+      detail: {
+        valueAnimation: true,
+        offsetCenter: [0, '-5%'],
+        fontSize: 34,
+        fontWeight: 'bold',
+        formatter: '{value}%',
+        color: CHART_HEX.success,
+      },
+      title: {
+        offsetCenter: [0, '16%'],
+        fontSize: 15,
+        fontWeight: 600,
+        color: '#334155',
+        formatter: '{name}',
+      },
+      data: [{ value: weeklyProgress.pct, name: `${weeklyProgress.completed} / ${weeklyProgress.total}` }],
+    }],
+  }), [weeklyProgress])
+
+  const chartOptionTaskStatus = useMemo(() => {
+    const data = doughnutData.map((d) => ({
+      value: d.value,
+      name: t(d.labelKey),
+      itemStyle: { color: STATUS_PIE_HEX[d.labelKey] ?? CHART_HEX.muted },
+      emphasis: { itemStyle: { color: STATUS_PIE_HOVER[d.labelKey] ?? HOVER_HEX.muted } },
+    }))
+    const legendData = data.map((d) => d.name)
+    return {
+      tooltip: { trigger: 'item', confine: true },
+      legend: {
+        show: true,
+        orient: 'horizontal',
+        bottom: 4,
+        left: 'center',
+        itemGap: 12,
+        itemWidth: 10,
+        itemHeight: 10,
+        textStyle: { fontSize: 12, fontWeight: 600, color: '#1e293b' },
+        data: legendData,
+      },
+      series: [{
+        type: 'pie',
+        radius: ['52%', '82%'],
+        center: ['50%', '48%'],
+        data,
+        label: { show: false },
+        labelLine: { show: false },
+        emphasis: { itemStyle: { shadowBlur: 8, shadowOffsetX: 0 } },
+      }],
+    }
+  }, [doughnutData, t])
+
+  /* Tasks by zone – Radar chart: same data, different visual */
+  const chartOptionTasksByZone = useMemo(() => {
+    const indicators = zoneChartData.map((d) => ({ name: d.label, max: Math.max(...zoneChartData.map((x) => x.value), 1) }))
+    const values = zoneChartData.map((d) => d.value)
+    return {
+      tooltip: {
+        trigger: 'item',
+        confine: true,
+        formatter: (params) => {
+          const vals = params.data?.value ?? values
+          return indicators.map((ind, i) => `${ind.name} – ${vals[i] ?? 0} Tasks`).join('<br/>')
+        },
+      },
+      radar: {
+        indicator: indicators,
+        center: ['50%', '52%'],
+        radius: '58%',
+        axisName: { fontSize: 11, fontWeight: 600, color: '#334155' },
+        splitArea: { areaStyle: { color: ['rgba(92, 123, 92, 0.08)', 'rgba(92, 123, 92, 0.04)'] } },
+        splitLine: { lineStyle: { color: CHART_GRID } },
+        axisLine: { lineStyle: { color: CHART_GRID } },
+      },
+      series: [{
+        type: 'radar',
+        data: [{
+          value: values,
+          name: '',
+          areaStyle: { color: 'rgba(92, 123, 92, 0.4)' },
+          lineStyle: { color: CHART_HEX.success, width: 2 },
+          itemStyle: { color: CHART_HEX.success },
+          emphasis: {
+            areaStyle: { color: 'rgba(56, 84, 56, 0.5)' },
+            lineStyle: { color: HOVER_HEX.success, width: 2 },
+            itemStyle: { color: HOVER_HEX.success },
+          },
+        }],
+      }],
+    }
+  }, [zoneChartData])
 
   /* Active Operations: same logic as Monitor Active Work – real sessions without completedAt + IN_PROGRESS tasks without a session */
   const realActiveSessions = useMemo(() => (sessions || []).filter((s) => !s.completedAt), [sessions])
@@ -226,19 +485,20 @@ export default function EngineerHome() {
 
   const [activeOpsExpanded, setActiveOpsExpanded] = useState(false)
   const [recentFaultsExpanded, setRecentFaultsExpanded] = useState(false)
+  const [chartsMounted, setChartsMounted] = useState(false)
+  useEffect(() => setChartsMounted(true), [])
 
   const kpiCards = [
     { count: overdueCount, labelKey: 'homeOverdueTasks', path: '/engineer/monitor', icon: 'fa-clock', variant: 'warning' },
     { count: criticalFaultsCount, labelKey: 'homeCriticalFaults', path: '/engineer/faults', icon: 'fa-triangle-exclamation', variant: 'danger' },
     { count: lowStockCount, labelKey: 'homeLowStock', path: '/engineer/inventory', icon: 'fa-cubes', variant: 'info' },
-    ...(isEngineer ? [{ count: pendingApprovalCount, labelKey: 'homeTasksPendingReview', path: '/engineer/assign-task', state: { filterStatus: TASK_STATUS.PENDING_APPROVAL }, icon: 'fa-clipboard-check', variant: 'success' }] : []),
   ]
 
   return (
     <div className={styles.page}>
       <header className={styles.pageHeader}>
-        <h1 className={styles.pageTitle}>{t('layoutTitle')}</h1>
-        <p className={styles.pageSubtitle}>{t('homeSectionsTitle')} · {t('homeAnalyticsCharts')}</p>
+        <h1 className={styles.pageTitle}>{t('pageTitleHome')}</h1>
+        <SystemHealthScore overviewData={overviewData} />
       </header>
 
       {/* KPI row – aligned with Reports/Inventory card style */}
@@ -284,88 +544,53 @@ export default function EngineerHome() {
         </div>
       </section>
 
-      {/* Analytics */}
+      {/* Analytics – Apache ECharts: card = chart container (centered) + title at bottom only */}
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>{t('homeAnalyticsCharts')}</h2>
         <div className={styles.chartsRow}>
-          <div className={styles.chartWrap}>
-            <h3 className={styles.widgetTitle}>{t('homeWeeklyProgress')}</h3>
-            <div className={styles.weeklyProgressWrap}>
-              <span className={styles.weeklyPct}>{weeklyProgress.pct}%</span>
-              <span className={styles.weeklyCount}>{weeklyProgress.completed} / {weeklyProgress.total}</span>
-              <div className={styles.weeklyBarTrack}>
-                <div className={styles.weeklyBarFill} style={{ width: `${weeklyProgress.pct}%` }} />
+          <div className={styles.chartCard}>
+            <div className={styles.chartCardBody}>
+              <div className={styles.chartEchartsWrap}>
+                {chartsMounted && (
+                  <ReactECharts option={chartOptionTasksByType} style={{ width: '100%', height: '100%', minHeight: 220 }} opts={{ renderer: 'canvas' }} notMerge />
+                )}
               </div>
             </div>
-            <p className={styles.chartCaption}>{t('homeWeeklyProgressCaption')}</p>
+            <div className={styles.chartCardTitle}>{t('homeTasksByType')}</div>
           </div>
-          <div className={styles.chartWrap}>
-            <div className={styles.typeVerticalChart}>
-              {typeChartData.map((d) => (
-                <div key={d.label} className={styles.typeVerticalCol}>
-                  <div className={styles.typeVerticalBarWrap}>
-                    <span className={styles.typeVerticalValue}>{d.value}</span>
-                    <div
-                      className={styles.typeVerticalBar}
-                      style={{
-                        height: `${(d.value / d.max) * 100}%`,
-                        backgroundColor: d.color,
-                      }}
-                      title={`${d.label}: ${d.value}`}
-                    />
-                  </div>
-                  <span className={styles.typeVerticalLabel}>{d.label}</span>
+          <div className={styles.chartCard}>
+            <div className={styles.chartCardBody}>
+              <div className={styles.chartCardBodyCol}>
+                <div className={styles.chartEchartsWrap}>
+                  {chartsMounted && (
+                    <ReactECharts option={chartOptionWeeklyProgress} style={{ width: '100%', height: '100%', minHeight: 220 }} opts={{ renderer: 'canvas' }} notMerge />
+                  )}
                 </div>
-              ))}
+                <p className={styles.chartCardCaption}>{t('homeWeeklyProgressCaption')}</p>
+              </div>
             </div>
-            <p className={styles.chartCaption}>{t('homeTasksByType')}</p>
+            <div className={styles.chartCardTitle}>{t('homeWeeklyProgress')}</div>
           </div>
-          <div className={styles.chartWrap}>
-            <div
-              className={styles.doughnutChart}
-              style={{
-                background: doughnutData.length
-                  ? `conic-gradient(${doughnutData.map((d, i) => {
-                      const start = (doughnutData.slice(0, i).reduce((s, x) => s + x.value, 0) / doughnutTotal) * 100
-                      const end = (doughnutData.slice(0, i + 1).reduce((s, x) => s + x.value, 0) / doughnutTotal) * 100
-                      return `${d.color} ${start}% ${end}%`
-                    }).join(', ')})`
-                  : 'var(--sarms-border, #d4d4d4)',
-              }}
-            />
-            <ul className={styles.doughnutLegend}>
-              {doughnutData.map((d) => (
-                <li key={d.labelKey} className={styles.doughnutLegendItem}>
-                  <span className={styles.doughnutLegendDot} style={{ background: d.color }} />
-                  <span>{t(d.labelKey)}</span>
-                  <span className={styles.doughnutLegendValue}>{d.value}</span>
-                </li>
-              ))}
-            </ul>
-            <p className={styles.chartCaption}>{t('homeTaskStatus')}</p>
-          </div>
-          <div className={styles.chartWrap}>
-            <div className={styles.barChart}>
-              {zoneChartData.map((d) => (
-                <div key={d.label} className={styles.barRow}>
-                  <span className={styles.barLabel}>{d.label}</span>
-                  <div className={styles.barTrack}>
-                    <div
-                      className={styles.barFill}
-                      style={{ width: `${(d.value / d.max) * 100}%`, backgroundColor: d.color }}
-                    />
-                  </div>
-                  <span className={styles.barValue}>{d.value}</span>
-                </div>
-              ))}
+          <div className={styles.chartCard}>
+            <div className={styles.chartCardBody}>
+              <div className={styles.chartEchartsWrap}>
+                {chartsMounted && (
+                  <ReactECharts option={chartOptionTaskStatus} style={{ width: '100%', height: '100%', minHeight: 220 }} opts={{ renderer: 'canvas' }} notMerge />
+                )}
+              </div>
             </div>
-            <p className={styles.chartCaption}>{t('homeTasksByZone')}</p>
+            <div className={styles.chartCardTitle}>{t('homeTaskStatus')}</div>
           </div>
-        </div>
-        <div className={styles.moreAnalyticsWrap}>
-          <button type="button" className={styles.moreAnalyticsBtn} onClick={() => navigate('/engineer/reports')}>
-            {t('homeMoreAnalytics')}
-          </button>
+          <div className={styles.chartCard}>
+            <div className={styles.chartCardBody}>
+              <div className={styles.chartEchartsWrap}>
+                {chartsMounted && (
+                  <ReactECharts option={chartOptionTasksByZone} style={{ width: '100%', height: '100%', minHeight: 220 }} opts={{ renderer: 'canvas' }} notMerge />
+                )}
+              </div>
+            </div>
+            <div className={styles.chartCardTitle}>{t('homeTasksByZone')}</div>
+          </div>
         </div>
       </section>
 
@@ -399,9 +624,9 @@ export default function EngineerHome() {
                         <span className={styles.opsDetail}>
                           {[op.department, op.task].filter(Boolean).join(' · ') || '—'} · {(op.zone === 'Inventory' || (op.zone && String(op.zone).startsWith('Zone '))) ? (op.zone || '—') : (op.zone ? `Zone ${op.zone}` : '—')} · {op.linesArea || '—'}
                         </span>
-                        {op.assignedByEngineer != null && (
-                          <span className={styles.opsSource} title={op.assignedByEngineer ? 'Assigned by engineer' : 'Self-started by worker'}>
-                            {op.assignedByEngineer ? 'Assigned' : 'Self'}
+                        {op.startTime && formatDuration(op.startTime) && (
+                          <span className={styles.opsDuration} title={t('homeDuration')}>
+                            {formatDuration(op.startTime)}
                           </span>
                         )}
                       </button>
@@ -424,7 +649,7 @@ export default function EngineerHome() {
         >
           <i className={`fas fa-fw ${recentFaultsExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}`} />
           <h2 className={styles.sectionTitleCollapse}><i className="fas fa-wrench fa-fw" /> {t('homeRecentFaultLogs')}</h2>
-          {recentFaults.length > 0 && <span className={styles.collapseBadge}>{recentFaults.length}</span>}
+          {equipmentTicketsForHome.length > 0 && <span className={styles.collapseBadge}>{equipmentTicketsForHome.length}</span>}
         </button>
         {recentFaultsExpanded && (
           <div className={styles.collapseContent}>
@@ -434,22 +659,30 @@ export default function EngineerHome() {
                   <tr>
                     <th>{t('homeFaultTitle')}</th>
                     <th>{t('homeFaultZone')}</th>
+                    <th>{t('homeTicketType')}</th>
                     <th>{t('homeFaultSeverity')}</th>
+                    <th>{t('homeTicketDue')}</th>
                     <th>{t('homeFaultStatus')}</th>
                     <th>{t('homeFaultCreated')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {recentFaults.length === 0 ? (
-                    <tr><td colSpan={5} className={styles.faultEmpty}>{t('homeNoFaults')}</td></tr>
+                  {equipmentTicketsForHome.length === 0 ? (
+                    <tr><td colSpan={7} className={styles.faultEmpty}>{t('homeNoFaults')}</td></tr>
                   ) : (
-                    recentFaults.map((f) => (
-                      <tr key={f.id} className={styles.faultRow} onClick={() => navigate('/engineer/faults')}>
-                        <td>{f.equipmentName || f.description || f.id}</td>
-                        <td>{f.zone}</td>
-                        <td>{f.severityLabel}</td>
-                        <td>{((f.status || FAULT_STATUS_OPEN) === FAULT_STATUS_RESOLVED) ? t('homeFaultStatusResolved') : t('homeFaultStatusOpen')}</td>
-                        <td>{f.createdAt ? new Date(f.createdAt).toLocaleString() : '—'}</td>
+                    equipmentTicketsForHome.map((row) => (
+                      <tr
+                        key={row.id}
+                        className={`${styles.faultRow} ${row.ticketType === 'fault' ? styles.faultRowFault : row.isOverdue ? styles.faultRowOverdue : ''}`}
+                        onClick={() => navigate('/engineer/faults')}
+                      >
+                        <td>{row.equipmentName}</td>
+                        <td>{row.zone}</td>
+                        <td>{t(row.ticketType === 'fault' ? 'homeTicketTypeFault' : row.ticketType === 'preventive' ? 'homeTicketTypePreventive' : row.ticketType === 'inspection' ? 'homeTicketTypeInspection' : 'homeTicketTypeCorrective')}</td>
+                        <td>{row.severityLabel}</td>
+                        <td>{row.dueDate ? new Date(row.dueDate + 'T12:00:00').toLocaleDateString() : '—'}</td>
+                        <td>{row.ticketType === 'fault' ? t('homeFaultStatusOpen') : t('homeFaultStatusScheduled')}</td>
+                        <td>{row.createdAt ? new Date(row.createdAt).toLocaleString() : '—'}</td>
                       </tr>
                     ))
                   )}

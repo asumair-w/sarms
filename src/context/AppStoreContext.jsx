@@ -1,11 +1,7 @@
 import { createContext, useContext, useReducer, useCallback, useEffect, useRef } from 'react'
-import { getInitialTasks, getInitialRecords } from '../data/assignTask'
-import { getInitialInventory, getInitialEquipment } from '../data/inventory'
-import { getInitialFaults, getInitialMaintenancePlans } from '../data/faults'
-import { getInitialSessions } from '../data/monitorActive'
 import { getInitialZones } from '../data/workerFlow'
 import { TASK_STATUS } from '../data/assignTask'
-import { SEED_WORKERS } from '../data/engineerWorkers'
+import { SEED_WORKERS, getMinimalWorkers } from '../data/engineerWorkers'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 const RECORDS_STORAGE_KEY = 'sarms-records'
@@ -37,9 +33,12 @@ const SARMS_DATA_KEYS = [
 ]
 const WORKER_SESSION_PREFIX = 'sarms-worker-session-'
 
-/** Clears all SARMS data from localStorage (and worker session keys) so next load uses seed data. */
+const SKIP_HYDRATE_KEY = 'sarms-skip-hydrate'
+
+/** Clears all SARMS data from localStorage (and worker session keys). Sets a flag so next load does not re-fill from Supabase. */
 export function clearAllSarmsDataStorage() {
   try {
+    sessionStorage.setItem(SKIP_HYDRATE_KEY, '1')
     SARMS_DATA_KEYS.forEach((key) => localStorage.removeItem(key))
     const keysToRemove = []
     for (let i = 0; i < localStorage.length; i++) {
@@ -58,7 +57,7 @@ function loadRecords() {
       if (Array.isArray(parsed)) return parsed
     }
   } catch (_) {}
-  return getInitialRecords()
+  return []
 }
 
 function loadSessions() {
@@ -69,7 +68,7 @@ function loadSessions() {
       if (Array.isArray(parsed)) return parsed
     }
   } catch (_) {}
-  return getInitialSessions()
+  return []
 }
 
 function loadZones() {
@@ -91,7 +90,7 @@ function loadTasks() {
       if (Array.isArray(parsed) && parsed.length > 0) return parsed
     }
   } catch (_) {}
-  return getInitialTasks()
+  return []
 }
 
 /** Normalize batch list to array of { id, name }. Supports legacy string[] format. */
@@ -131,15 +130,31 @@ function loadDefaultBatchByZone() {
   return {}
 }
 
+/** Technicians are removed from the system; filter them out from any loaded list. */
+function withoutTechnicians(workers) {
+  if (!Array.isArray(workers)) return workers
+  return workers.filter((w) => (w.role || '').toLowerCase() !== 'technician')
+}
+
+/** Default is 15 workers + 1 engineer + 1 admin. If loaded data has more than 1 engineer or more than 1 admin, use minimal seed. */
+function normalizeWorkersList(workers) {
+  if (!Array.isArray(workers) || workers.length === 0) return getMinimalWorkers()
+  const filtered = withoutTechnicians(workers)
+  const engineers = filtered.filter((w) => (w.role || '').toLowerCase() === 'engineer').length
+  const admins = filtered.filter((w) => (w.role || '').toLowerCase() === 'admin').length
+  if (engineers > 1 || admins > 1) return getMinimalWorkers()
+  return filtered
+}
+
 function loadWorkers() {
   try {
     const raw = localStorage.getItem(WORKERS_STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      if (Array.isArray(parsed) && parsed.length > 0) return normalizeWorkersList(parsed)
     }
   } catch (_) {}
-  return SEED_WORKERS.map((w) => ({ ...w, skills: Array.isArray(w.skills) ? w.skills : [] }))
+  return getMinimalWorkers()
 }
 
 function loadInventory() {
@@ -150,7 +165,7 @@ function loadInventory() {
       if (Array.isArray(parsed) && parsed.length > 0) return parsed
     }
   } catch (_) {}
-  return getInitialInventory()
+  return []
 }
 
 function loadInventoryMovements() {
@@ -172,7 +187,7 @@ function loadEquipment() {
       if (Array.isArray(parsed)) return parsed
     }
   } catch (_) {}
-  return getInitialEquipment()
+  return []
 }
 
 function loadFaults() {
@@ -183,7 +198,7 @@ function loadFaults() {
       if (Array.isArray(parsed)) return parsed
     }
   } catch (_) {}
-  return getInitialFaults()
+  return []
 }
 
 function loadMaintenancePlans() {
@@ -194,7 +209,7 @@ function loadMaintenancePlans() {
       if (Array.isArray(parsed)) return parsed
     }
   } catch (_) {}
-  return getInitialMaintenancePlans()
+  return []
 }
 
 /** Build full initial state (used on every provider mount so persisted data is never lost on remount/HMR). */
@@ -398,6 +413,7 @@ function storeReducer(state, action) {
       return { ...state, zones: [...state.zones, action.payload] }
     case 'REMOVE_ZONE': {
       const zoneId = action.payload
+      if ((zoneId || '').toString().toLowerCase() === 'inventory') return state
       const nextBatches = { ...state.batchesByZone }
       delete nextBatches[zoneId]
       return {
@@ -414,7 +430,7 @@ function storeReducer(state, action) {
       return { ...state, defaultBatchByZone: next }
     }
     case 'SET_WORKERS':
-      return { ...state, workers: action.payload }
+      return { ...state, workers: withoutTechnicians(Array.isArray(action.payload) ? action.payload : state.workers) }
     case 'UPDATE_WORKER': {
       const { workerId, updates } = action.payload
       return {
@@ -426,8 +442,20 @@ function storeReducer(state, action) {
     }
     case 'RESET_TO_SEED':
       return getInitialState()
-    case 'HYDRATE':
-      return { ...state, ...action.payload, hydrateDone: true }
+    case 'HYDRATE': {
+      const payload = action.payload || {}
+      const merged = { ...state, hydrateDone: true }
+      for (const key of Object.keys(payload)) {
+        const val = payload[key]
+        if (Array.isArray(val)) {
+          const arr = val.length > 0 ? val : (state[key] ?? [])
+          merged[key] = key === 'workers' ? normalizeWorkersList(arr) : arr
+        } else if (val != null && typeof val === 'object' && !Array.isArray(val) && Object.keys(val).length > 0) {
+          merged[key] = val
+        }
+      }
+      return merged
+    }
     case 'HYDRATE_DONE':
       return { ...state, hydrateDone: true }
     default:
@@ -441,13 +469,21 @@ export function AppStoreProvider({ children }) {
   const [state, dispatch] = useReducer(storeReducer, undefined, getInitialState)
   const supabaseHydrateDone = useRef(false)
 
-  // Hydrate from Supabase once on mount (if configured). When done, HYDRATE_DONE triggers persist effects so initial/seed data is pushed to Supabase.
+  // Hydrate from Supabase once on mount (if configured). Skip when user just did "Clear all data" so they get empty state.
   useEffect(() => {
     if (!isSupabaseConfigured) {
       supabaseHydrateDone.current = true
       dispatch({ type: 'HYDRATE_DONE' })
       return
     }
+    try {
+      if (sessionStorage.getItem(SKIP_HYDRATE_KEY)) {
+        sessionStorage.removeItem(SKIP_HYDRATE_KEY)
+        supabaseHydrateDone.current = true
+        dispatch({ type: 'HYDRATE_DONE' })
+        return
+      }
+    } catch (_) {}
     let cancelled = false
     fetchSupabaseState().then((payload) => {
       supabaseHydrateDone.current = true
@@ -639,7 +675,7 @@ export function useAppStore() {
   return ctx
 }
 
-/** Resolve login userId (e.g. w1) to worker id for task assignment. Checks stored workers then SEED_WORKERS. */
+/** Resolve login userId (e.g. w1) to worker id for task assignment. Checks stored workers then minimal/seed. */
 export function getWorkerIdFromUserId(userId) {
   const key = userId?.trim()?.toLowerCase()
   if (!key) return null
@@ -653,6 +689,9 @@ export function getWorkerIdFromUserId(userId) {
       }
     }
   } catch (_) {}
-  const w = SEED_WORKERS.find((x) => x.employeeId === key)
-  return w?.id ?? null
+  const minimal = getMinimalWorkers()
+  const w = minimal.find((x) => (x.employeeId || '').toLowerCase() === key)
+  if (w) return w.id
+  const fallback = SEED_WORKERS.find((x) => (x.employeeId || '').toLowerCase() === key)
+  return fallback?.id ?? null
 }

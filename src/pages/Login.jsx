@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { validateCredentials, validateUserIdFromQR, getRedirectForRole } from '../auth'
 import { useLanguage } from '../context/LanguageContext'
@@ -15,8 +15,12 @@ const ERROR_KEYS = {
 
 export default function Login() {
   const navigate = useNavigate()
-  const { lang, setLang } = useLanguage()
+  const { lang, setLang, syncLangFromUser } = useLanguage()
   const t = (key) => getTranslation(lang, 'login', key)
+
+  useEffect(() => {
+    syncLangFromUser()
+  }, [syncLangFromUser])
 
   const [userId, setUserId] = useState('')
   const [password, setPassword] = useState('')
@@ -58,10 +62,12 @@ export default function Login() {
     <div className={LoginStyles.page}>
       <div className={LoginStyles.card}>
         <img
-          src="/logo.png"
+          src="/logo-sarms.png"
           alt="SARMS"
           className={LoginStyles.logo}
         />
+        <h1 className={LoginStyles.title}><i className="fas fa-building-user fa-fw" /> {t('title')}</h1>
+        <p className={LoginStyles.subtitle}>{t('subtitle')}</p>
         <div className={LoginStyles.langSwitcher}>
           <button
             type="button"
@@ -69,20 +75,18 @@ export default function Login() {
             onClick={() => setLang('en')}
             aria-pressed={lang === 'en'}
           >
-            English
+            {t('english')}
           </button>
           <button
             type="button"
             className={lang === 'ar' ? LoginStyles.langActive : LoginStyles.langBtn}
             onClick={() => setLang('ar')}
             aria-pressed={lang === 'ar'}
+            data-lang="ar"
           >
-            العربية
+            {t('arabic')}
           </button>
         </div>
-
-        <h1 className={LoginStyles.title}><i className="fas fa-building-user fa-fw" /> {t('title')}</h1>
-        <p className={LoginStyles.subtitle}>{t('subtitle')}</p>
 
         <form onSubmit={handleSubmit} className={LoginStyles.form}>
           <div className={LoginStyles.field}>

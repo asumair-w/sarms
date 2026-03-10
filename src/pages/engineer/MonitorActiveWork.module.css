@@ -60,7 +60,7 @@
   }
 }
 
-/* Combined Session Status card (Active, Delayed, Flagged, Completed in one) – distinct blue */
+/* Combined Session Status card – SARMS soft blue */
 .cardCombined {
   display: flex;
   flex-direction: column;
@@ -68,7 +68,7 @@
   min-height: 72px;
   padding: 0.75rem;
   border-radius: 12px;
-  border: 2px solid #bae6fd;
+  border: 2px solid rgba(79, 124, 138, 0.4);
   background: #fff;
   grid-column: 1 / -1;
 }
@@ -80,17 +80,17 @@
 }
 
 .cardCombined:hover {
-  border-color: #7dd3fc;
+  border-color: #4f7c8a;
 }
 
 .cardCombinedTitle {
   font-size: 0.85rem;
-  color: #0369a1;
+  color: #4f7c8a;
   font-weight: 700;
   margin-bottom: 0.5rem;
   padding-bottom: 0.35rem;
-  border-bottom: 1px solid #e0f2fe;
-  background: #f0f9ff;
+  border-bottom: 1px solid rgba(79, 124, 138, 0.2);
+  background: rgba(79, 124, 138, 0.08);
   margin: -0.75rem -0.75rem 0.5rem -0.75rem;
   padding: 0.5rem 0.75rem 0.35rem;
   border-radius: 10px 10px 0 0;
@@ -116,7 +116,7 @@
 }
 
 .cardCombinedRowActive {
-  background: #f0fdf4;
+  background: rgba(92, 123, 92, 0.08);
 }
 
 .cardCombinedLabel {
@@ -132,15 +132,15 @@
 }
 
 .cardCombinedRowDelayed .cardCombinedValue {
-  color: #b45309;
+  color: #c7924a;
 }
 
 .cardCombinedRowFlagged .cardCombinedValue {
-  color: #b91c1c;
+  color: #b85c5c;
 }
 
 .cardCombinedRowCompleted .cardCombinedValue {
-  color: #15803d;
+  color: #5c7b5c;
 }
 
 /* Shared title strip style – match Session Status card title (all summary cards) */
@@ -174,8 +174,8 @@
 }
 
 .cardActive {
-  border-color: #22c55e;
-  background: #f0fdf4;
+  border-color: #5c7b5c;
+  background: rgba(92, 123, 92, 0.08);
 }
 
 .cardLabel {
@@ -187,29 +187,29 @@
 .cardValue {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #166534;
+  color: #5c7b5c;
 }
 
 .cardDelayed .cardValue {
-  color: #b45309;
+  color: #c7924a;
 }
 
 .cardFlagged .cardValue {
-  color: #b91c1c;
+  color: #b85c5c;
 }
 
 .cardCompleted {
-  border-color: #86efac;
-  background: #f0fdf4;
+  border-color: #a9bfa9;
+  background: rgba(92, 123, 92, 0.08);
 }
 
 .cardCompleted:hover {
-  background: #dcfce7;
-  border-color: #4ade80;
+  background: rgba(92, 123, 92, 0.12);
+  border-color: #5c7b5c;
 }
 
 .cardCompleted .cardValue {
-  color: #15803d;
+  color: #5c7b5c;
 }
 
 /* Performance Risk Overview card – title strip like Session Status */
@@ -219,43 +219,46 @@
 .cardRisk .cardLabel {
   font-size: 0.85rem;
   font-weight: 700;
-  margin: -0.75rem -0.75rem 0.5rem -0.75rem;
+  margin: -0.75rem -0.75rem 0.75rem -0.75rem;
   padding: 0.5rem 0.75rem 0.35rem;
   border-radius: 10px 10px 0 0;
   border-bottom: 1px solid #e2e8f0;
 }
-.cardRiskHigh .cardLabel { background: #fef2f2; color: #991b1b; border-bottom-color: #fecaca; }
-.cardRiskModerate .cardLabel { background: #fffbeb; color: #92400e; border-bottom-color: #fde68a; }
-.cardRiskStable .cardLabel { background: #f0fdf4; color: #166534; border-bottom-color: #bbf7d0; }
+.cardRisk .cardValue {
+  margin-top: 0.35rem;
+}
+.cardRiskHigh .cardLabel { background: rgba(184, 92, 92, 0.12); color: #b85c5c; border-bottom-color: rgba(184, 92, 92, 0.3); }
+.cardRiskModerate .cardLabel { background: rgba(199, 146, 74, 0.12); color: #c7924a; border-bottom-color: rgba(199, 146, 74, 0.3); }
+.cardRiskStable .cardLabel { background: rgba(92, 123, 92, 0.12); color: #5c7b5c; border-bottom-color: rgba(92, 123, 92, 0.3); }
 
 .cardRiskHigh {
-  border-color: #fecaca;
+  border-color: rgba(184, 92, 92, 0.4);
   background: #fff;
 }
 
 .cardRiskHigh:hover {
-  background: #fef2f2;
-  border-color: #f87171;
+  background: rgba(184, 92, 92, 0.08);
+  border-color: #b85c5c;
 }
 
 .cardRiskModerate {
-  border-color: #fde68a;
+  border-color: rgba(199, 146, 74, 0.4);
   background: #fff;
 }
 
 .cardRiskModerate:hover {
-  background: #fffbeb;
-  border-color: #fbbf24;
+  background: rgba(199, 146, 74, 0.08);
+  border-color: #c7924a;
 }
 
 .cardRiskStable {
-  border-color: #bbf7d0;
+  border-color: rgba(92, 123, 92, 0.4);
   background: #fff;
 }
 
 .cardRiskStable:hover {
-  background: #f0fdf4;
-  border-color: #4ade80;
+  background: rgba(92, 123, 92, 0.08);
+  border-color: #5c7b5c;
 }
 
 /* Merged KPI cards – same shape as Session Status: title strip + body, same padding & radius */
@@ -284,9 +287,9 @@
 }
 .mergedKpiCardRecords .mergedKpiCardTitle { background: #f1f5f9; color: #475569; border-bottom-color: #cbd5e1; }
 .mergedKpiCardTime .mergedKpiCardTitle { background: #f8fafc; color: #475569; border-bottom-color: #e2e8f0; }
-.mergedKpiCardTime.mergedKpiCardOk .mergedKpiCardTitle { background: #f0fdf4; color: #166534; border-bottom-color: #bbf7d0; }
-.mergedKpiCardTime.mergedKpiCardWarn .mergedKpiCardTitle { background: #fffbeb; color: #92400e; border-bottom-color: #fde68a; }
-.mergedKpiCardTime.mergedKpiCardHigh .mergedKpiCardTitle { background: #fef2f2; color: #991b1b; border-bottom-color: #fecaca; }
+.mergedKpiCardTime.mergedKpiCardOk .mergedKpiCardTitle { background: rgba(92, 123, 92, 0.12); color: #5c7b5c; border-bottom-color: rgba(92, 123, 92, 0.3); }
+.mergedKpiCardTime.mergedKpiCardWarn .mergedKpiCardTitle { background: rgba(199, 146, 74, 0.12); color: #c7924a; border-bottom-color: rgba(199, 146, 74, 0.3); }
+.mergedKpiCardTime.mergedKpiCardHigh .mergedKpiCardTitle { background: rgba(184, 92, 92, 0.12); color: #b85c5c; border-bottom-color: rgba(184, 92, 92, 0.3); }
 
 /* First merged card: Records & Zone – fixed gray, no dynamic color */
 .mergedKpiCardRecords {
@@ -298,16 +301,16 @@
 .mergedKpiCardRecords .mergedKpiValue,
 .mergedKpiCardRecords .mergedKpiSub { color: #334155; }
 
-/* Second merged card: Total Logged Time + Avg Duration – teal (ok/warn/high override border/background) */
+/* Second merged card: Total Logged Time + Avg Duration – SARMS olive/orange/red */
 .mergedKpiCardTime {
-  border-color: #99f6e4;
+  border-color: rgba(79, 124, 138, 0.35);
   background: #fff;
 }
-.mergedKpiCardTime:hover { border-color: #2dd4bf; }
-.mergedKpiCardTime .mergedKpiLabel { color: #0f766e; }
-.mergedKpiCardTime.mergedKpiCardOk { border-color: #bbf7d0; background: #fff; }
-.mergedKpiCardTime.mergedKpiCardWarn { border-color: #fde68a; background: #fff; }
-.mergedKpiCardTime.mergedKpiCardHigh { border-color: #fecaca; background: #fff; }
+.mergedKpiCardTime:hover { border-color: #4f7c8a; }
+.mergedKpiCardTime .mergedKpiLabel { color: #475569; }
+.mergedKpiCardTime.mergedKpiCardOk { border-color: rgba(92, 123, 92, 0.5); background: #fff; }
+.mergedKpiCardTime.mergedKpiCardWarn { border-color: rgba(199, 146, 74, 0.5); background: #fff; }
+.mergedKpiCardTime.mergedKpiCardHigh { border-color: rgba(184, 92, 92, 0.5); background: #fff; }
 
 .mergedKpiBlock {
   display: flex;
@@ -358,26 +361,26 @@
 }
 
 .mergedKpiZoneBtn:hover .mergedKpiValue {
-  color: var(--sarms-primary, #166534);
+  color: var(--sarms-primary, #5c7b5c);
 }
 
 .mergedKpiCardOk .mergedKpiValue,
-.mergedKpiCardOk .mergedKpiSub { color: #15803d; }
-.mergedKpiCardOk { border-color: #bbf7d0; background: #f0fdf4; }
+.mergedKpiCardOk .mergedKpiSub { color: #5c7b5c; }
+.mergedKpiCardOk { border-color: rgba(92, 123, 92, 0.5); background: rgba(92, 123, 92, 0.06); }
 
-.mergedKpiCardWarn .mergedKpiValue { color: #b45309; }
-.mergedKpiCardWarn { border-color: #fde68a; background: #fffbeb; }
+.mergedKpiCardWarn .mergedKpiValue { color: #c7924a; }
+.mergedKpiCardWarn { border-color: rgba(199, 146, 74, 0.5); background: rgba(199, 146, 74, 0.06); }
 
-.mergedKpiCardHigh .mergedKpiValue { color: #b91c1c; }
-.mergedKpiCardHigh { border-color: #fecaca; background: #fef2f2; }
+.mergedKpiCardHigh .mergedKpiValue { color: #b85c5c; }
+.mergedKpiCardHigh { border-color: rgba(184, 92, 92, 0.5); background: rgba(184, 92, 92, 0.06); }
 
 .cardRisk .cardValue {
   color: #0f172a;
 }
 
-.cardRiskHigh .cardValue { color: #b91c1c; }
-.cardRiskModerate .cardValue { color: #b45309; }
-.cardRiskStable .cardValue { color: #15803d; }
+.cardRiskHigh .cardValue { color: #b85c5c; }
+.cardRiskModerate .cardValue { color: #c7924a; }
+.cardRiskStable .cardValue { color: #5c7b5c; }
 
 .cardRiskLabel {
   font-size: 0.8rem;
@@ -618,18 +621,18 @@
 }
 
 .statusBadge[data-status="on_time"] {
-  background: #dcfce7;
-  color: #166534;
+  background: rgba(92, 123, 92, 0.32);
+  color: #4a634a;
 }
 
 .statusBadge[data-status="delayed"] {
-  background: #ffedd5;
-  color: #b45309;
+  background: rgba(199, 146, 74, 0.32);
+  color: #a6783c;
 }
 
 .statusBadge[data-status="flagged"] {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: rgba(184, 92, 92, 0.32);
+  color: #9e4a4a;
 }
 
 .actionLink {
@@ -638,13 +641,13 @@
   padding: 0;
   font-size: 0.9rem;
   font-weight: 500;
-  color: #16a34a;
+  color: #5c7b5c;
   cursor: pointer;
   text-decoration: underline;
 }
 
 .actionLink:hover {
-  color: #15803d;
+  color: #385438;
 }
 
 .actionLinkComplete {
@@ -653,13 +656,13 @@
   padding: 0;
   font-size: 0.9rem;
   font-weight: 600;
-  color: #15803d;
+  color: #5c7b5c;
   cursor: pointer;
   text-decoration: underline;
 }
 
 .actionLinkComplete:hover {
-  color: #166534;
+  color: #385438;
 }
 
 /* Actions dropdown (grouped) */
@@ -677,15 +680,15 @@
   padding: 0.35rem 0.65rem;
   font-size: 0.85rem;
   font-weight: 600;
-  color: var(--sarms-primary, #16a34a);
-  background: #f0fdf4;
-  border: 1px solid #86efac;
+  color: var(--sarms-primary, #5c7b5c);
+  background: rgba(92, 123, 92, 0.1);
+  border: 1px solid rgba(92, 123, 92, 0.4);
   border-radius: 8px;
   cursor: pointer;
 }
 .actionsBtn:hover {
-  background: #dcfce7;
-  border-color: #4ade80;
+  background: rgba(92, 123, 92, 0.18);
+  border-color: #5c7b5c;
 }
 .actionsCaret {
   font-size: 0.65rem;
