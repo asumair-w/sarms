@@ -3,6 +3,8 @@ import { useLanguage } from '../context/LanguageContext'
 import { getTranslation } from '../i18n/translations'
 import { POWER_BI_STORAGE_KEY } from '../config/powerBi'
 import { clearAllSarmsDataStorage } from '../context/AppStoreContext'
+import { consumeResetSuccessFlag } from '../lib/resetSystem'
+import ResetSystemModal from '../components/ResetSystemModal'
 import styles from './AdminSettings.module.css'
 
 function getStoredPowerBiUrl() {
@@ -19,9 +21,15 @@ export default function AdminSettings() {
   const [powerBiUrl, setPowerBiUrl] = useState('')
   const [powerBiSaved, setPowerBiSaved] = useState(false)
   const [account, setAccount] = useState({ userId: '', role: '' })
+  const [showResetModal, setShowResetModal] = useState(false)
+  const [resetSuccess, setResetSuccess] = useState(false)
 
   useEffect(() => {
     setPowerBiUrl(getStoredPowerBiUrl())
+  }, [])
+
+  useEffect(() => {
+    if (consumeResetSuccessFlag()) setResetSuccess(true)
   }, [])
 
   useEffect(() => {
@@ -48,6 +56,12 @@ export default function AdminSettings() {
   return (
     <div className={styles.page}>
       <h1 className={styles.pageTitle}><i className="fas fa-gear fa-fw" /> {t('settingsTitle')}</h1>
+
+      {resetSuccess && (
+        <div className={styles.resetSuccessBanner} role="status">
+          <i className="fas fa-check-circle fa-fw" /> {t('resetSuccessMessage')}
+        </div>
+      )}
 
       {/* General */}
       <section className={styles.section}>
@@ -112,6 +126,25 @@ export default function AdminSettings() {
         </div>
       </section>
 
+      {/* System Management – Admin only */}
+      {account.role === 'admin' && (
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}><i className="fas fa-database fa-fw" /> {t('systemManagement')}</h2>
+          <p className={styles.sectionDesc}>
+            {t('systemManagementDesc')}
+          </p>
+          <div className={styles.row}>
+            <button
+              type="button"
+              className={styles.resetSystemBtn}
+              onClick={() => setShowResetModal(true)}
+            >
+              <i className="fas fa-exclamation-triangle fa-fw" /> {t('resetSystem')}
+            </button>
+          </div>
+        </section>
+      )}
+
       {/* Account */}
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}><i className="fas fa-user fa-fw" /> {t('account')}</h2>
@@ -134,6 +167,14 @@ export default function AdminSettings() {
           {t('clearAllData')}
         </button>
       </section>
+
+      {showResetModal && (
+        <ResetSystemModal
+          onClose={() => setShowResetModal(false)}
+          isAdmin={account.role === 'admin'}
+          adminUserId={account.userId}
+        />
+      )}
     </div>
   )
 }
