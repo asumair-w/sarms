@@ -110,14 +110,25 @@ function isTaskInProgress(status) {
   return s === TASK_STATUS.IN_PROGRESS
 }
 
-const EXPLORER_MODULES = [
-  { id: 'executive', label: 'Executive overview', icon: 'fa-chart-pie' },
-  { id: 'operations', label: 'Operations', icon: 'fa-list-check' },
-  { id: 'production', label: 'Production', icon: 'fa-chart-line' },
-  { id: 'workers', label: 'Workers', icon: 'fa-users' },
-  { id: 'equipment', label: 'Equipment', icon: 'fa-wrench' },
-  { id: 'inventory', label: 'Inventory', icon: 'fa-boxes-stacked' },
-  { id: 'sessions', label: 'Sessions', icon: 'fa-clock' },
+/** Normalize task status for chart counts (approved = pending_approval). */
+function normalizeTaskStatus(status) {
+  if (!status) return null
+  const s = String(status).toLowerCase().trim()
+  if (s === TASK_STATUS.PENDING_APPROVAL || s === 'approved') return TASK_STATUS.PENDING_APPROVAL
+  if (s === TASK_STATUS.IN_PROGRESS) return TASK_STATUS.IN_PROGRESS
+  if (s === TASK_STATUS.COMPLETED) return TASK_STATUS.COMPLETED
+  if (s === TASK_STATUS.REJECTED) return TASK_STATUS.REJECTED
+  return null
+}
+
+const EXPLORER_MODULE_IDS = [
+  { id: 'executive', labelKey: 'executiveOverview', icon: 'fa-chart-pie' },
+  { id: 'operations', labelKey: 'operations', icon: 'fa-list-check' },
+  { id: 'production', labelKey: 'production', icon: 'fa-chart-line' },
+  { id: 'workers', labelKey: 'workers', icon: 'fa-users' },
+  { id: 'equipment', labelKey: 'equipment', icon: 'fa-wrench' },
+  { id: 'inventory', labelKey: 'inventory', icon: 'fa-boxes-stacked' },
+  { id: 'sessions', labelKey: 'sessions', icon: 'fa-clock' },
 ]
 
 const REPORTS_VIEW_KEY = 'sarms-reports-charts-view'
@@ -128,6 +139,10 @@ export default function ReportsAnalytics() {
   const { lang } = useLanguage()
   const namespace = location.pathname.startsWith('/admin') ? 'admin' : 'engineer'
   const t = (key) => getTranslation(lang, namespace, key)
+  const formatMessage = (str, params) => {
+    if (!params || typeof str !== 'string') return str
+    return str.replace(/\{\{(\w+)\}\}/g, (_, k) => (params[k] != null ? String(params[k]) : `{{${k}}}`))
+  }
   const [chartsView, setChartsView] = useState(() => {
     try { return localStorage.getItem(REPORTS_VIEW_KEY) || 'internal' } catch { return 'internal' }
   })
@@ -862,12 +877,13 @@ export default function ReportsAnalytics() {
       const faultSevLabel = appliedFilters.faultSeverity ? (SEVERITY_OPTIONS.find((s) => s.id === appliedFilters.faultSeverity)?.label || appliedFilters.faultSeverity) : 'All'
       const invCatLabel = appliedFilters.invCategory ? (INVENTORY_CATEGORIES.find((c) => c.id === appliedFilters.invCategory)?.label || appliedFilters.invCategory) : 'All'
       const sessionStatusLabel = appliedFilters.sessionStatus ? (SESSION_STATUS_LABELS[appliedFilters.sessionStatus] || appliedFilters.sessionStatus) : 'All'
-      const moduleLabel = EXPLORER_MODULES.find((m) => m.id === openExplorer)?.label || openExplorer
+      const moduleLabel = EXPLORER_MODULE_IDS.find((m) => m.id === openExplorer)
+      const moduleLabelText = moduleLabel ? t(moduleLabel.labelKey) : openExplorer
       pdf.setFont('helvetica', 'normal')
       pdf.setFontSize(9)
       const filterLine1 = `Date: ${dateRange}   ·   Department: ${deptLabel}   ·   Zone: ${zoneLabelVal}   ·   Worker: ${workerLabel}`
       const filterLine2 = `Equipment: ${equipmentLabel}   ·   Task status: ${taskStatusLabel}   ·   Fault severity: ${faultSevLabel}   ·   Inventory: ${invCatLabel}   ·   Session status: ${sessionStatusLabel}`
-      const filterLine3 = `Current view: ${moduleLabel}`
+      const filterLine3 = `Current view: ${moduleLabelText}`
       const lineH = 5
       const split1 = pdf.splitTextToSize(filterLine1, w)
       split1.forEach((line) => { pdf.text(line, margin, y); y += lineH })
@@ -1015,9 +1031,9 @@ export default function ReportsAnalytics() {
         ], statsY, lineH2)
       }
       if (openExplorer === 'operations') {
-        const pending = filteredTasks.filter((t) => t.status === TASK_STATUS.PENDING_APPROVAL).length
-        const inProg = filteredTasks.filter((t) => t.status === TASK_STATUS.IN_PROGRESS).length
-        const done = filteredTasks.filter((t) => t.status === TASK_STATUS.COMPLETED).length
+        const pending = filteredTasks.filter((t) => normalizeTaskStatus(t.status) === TASK_STATUS.PENDING_APPROVAL).length
+        const inProg = filteredTasks.filter((t) => normalizeTaskStatus(t.status) === TASK_STATUS.IN_PROGRESS).length
+        const done = filteredTasks.filter((t) => normalizeTaskStatus(t.status) === TASK_STATUS.COMPLETED).length
         statsY = writeSegments([
           { text: 'Tasks by status — Pending:  ', color: null },
           { text: pending, color: CLR.gray },
@@ -1096,8 +1112,8 @@ export default function ReportsAnalytics() {
     <div ref={pageCaptureRef} className={styles.page}>
       <header className={styles.pageHeader}>
         <div className={styles.pageHeaderTitleBlock}>
-          <h1 className={styles.pageTitle}>Analytics &amp; Reports</h1>
-          <p className={styles.pageSubtitle}>Centralized analytical command center — operations, production, tasks, faults, workers, equipment, and inventory.</p>
+          <h1 className={styles.pageTitle}>{t('pageTitleReports')}</h1>
+          <p className={styles.pageSubtitle}>{t('pageSubtitleReports')}</p>
         </div>
         <div className={styles.pageHeaderHealth}>
           <SystemHealthScore overviewData={overviewData} />
@@ -1112,96 +1128,96 @@ export default function ReportsAnalytics() {
           onClick={() => setSummaryFilterOpen((o) => !o)}
           aria-expanded={summaryFilterOpen}
         >
-          <span className={styles.summaryFilterTitle}><i className="fas fa-filter fa-fw" /> Summary Filter</span>
+          <span className={styles.summaryFilterTitle}><i className="fas fa-filter fa-fw" /> {t('summaryFilter')}</span>
           <span className={styles.summaryFilterCaret} aria-hidden>{summaryFilterOpen ? '▼' : '▶'}</span>
         </button>
         {summaryFilterOpen && (
           <div className={styles.summaryFilterBody}>
             <div className={styles.datePresets}>
-              <span className={styles.datePresetsLabel}>Quick range:</span>
+              <span className={styles.datePresetsLabel}>{t('quickRange')}</span>
               {['7', '30', 'month', '90'].map((p) => (
                 <button key={p} type="button" className={`${styles.presetBtn} ${activeDatePreset === p ? styles.presetBtnActive : ''}`} onClick={() => setDatePreset(p)} aria-pressed={activeDatePreset === p}>
-                  {p === '7' && 'Last 7 days'}
-                  {p === '30' && 'Last 30 days'}
-                  {p === 'month' && 'This month'}
-                  {p === '90' && 'Last 3 months'}
+                  {p === '7' && t('periodLast7Days')}
+                  {p === '30' && t('periodLast30Days')}
+                  {p === 'month' && t('periodThisMonth')}
+                  {p === '90' && t('last3Months')}
                 </button>
               ))}
             </div>
             <div className={styles.filtersGrid}>
               <div className={styles.filterGroup}>
-                <label>Date from</label>
+                <label>{t('dateFrom')}</label>
                 <input type="date" value={filters.dateFrom} onChange={(e) => { setFilters((f) => ({ ...f, dateFrom: e.target.value })); setActiveDatePreset(null); }} className={styles.input} />
               </div>
               <div className={styles.filterGroup}>
-                <label>Date to</label>
+                <label>{t('dateTo')}</label>
                 <input type="date" value={filters.dateTo} onChange={(e) => { setFilters((f) => ({ ...f, dateTo: e.target.value })); setActiveDatePreset(null); }} className={styles.input} />
               </div>
               <div className={styles.filterGroup}>
-                <label>Department</label>
+                <label>{t('department')}</label>
                 <select value={filters.dept} onChange={(e) => setFilters((f) => ({ ...f, dept: e.target.value }))} className={styles.select}>
-                  <option value="">All departments</option>
+                  <option value="">{t('allDepartments')}</option>
                   {DEPARTMENT_OPTIONS.map((d) => (
                     <option key={d.value} value={d.value}>{d.label}</option>
                   ))}
                 </select>
               </div>
               <div className={styles.filterGroup}>
-                <label>Zone</label>
+                <label>{t('zone')}</label>
                 <select value={filters.zone} onChange={(e) => setFilters((f) => ({ ...f, zone: e.target.value }))} className={styles.select}>
-                  <option value="">All zones</option>
+                  <option value="">{t('allZones')}</option>
                   {zonesList.map((z) => (
                     <option key={z.id} value={z.id}>{z.label}</option>
                   ))}
                 </select>
               </div>
               <div className={styles.filterGroup}>
-                <label>Worker</label>
+                <label>{t('worker')}</label>
                 <select value={filters.worker} onChange={(e) => setFilters((f) => ({ ...f, worker: e.target.value }))} className={styles.select}>
-                  <option value="">All workers</option>
+                  <option value="">{t('allWorkers')}</option>
                   {WORKER_OPTIONS.map((w) => (
                     <option key={w.id} value={w.id}>{w.fullName}</option>
                   ))}
                 </select>
               </div>
               <div className={styles.filterGroup}>
-                <label>Equipment</label>
+                <label>{t('equipment')}</label>
                 <select value={filters.equipment} onChange={(e) => setFilters((f) => ({ ...f, equipment: e.target.value }))} className={styles.select}>
-                  <option value="">All equipment</option>
+                  <option value="">{t('allEquipment')}</option>
                   {EQUIPMENT_OPTIONS.map((e) => (
                     <option key={e.id} value={e.id}>{e.label}</option>
                   ))}
                 </select>
               </div>
               <div className={styles.filterGroup}>
-                <label>Task status</label>
+                <label>{t('taskStatus')}</label>
                 <select value={filters.taskStatus} onChange={(e) => setFilters((f) => ({ ...f, taskStatus: e.target.value }))} className={styles.select}>
-                  <option value="">All statuses</option>
+                  <option value="">{t('allStatuses')}</option>
                   {Object.entries(TASK_STATUS_LABELS).map(([k, label]) => (
                     <option key={k} value={k}>{label}</option>
                   ))}
                 </select>
               </div>
               <div className={styles.filterGroup}>
-                <label>Fault severity</label>
+                <label>{t('faultSeverity')}</label>
                 <select value={filters.faultSeverity} onChange={(e) => setFilters((f) => ({ ...f, faultSeverity: e.target.value }))} className={styles.select}>
-                  <option value="">All severities</option>
+                  <option value="">{t('allSeverities')}</option>
                   {SEVERITY_OPTIONS.map((s) => (
                     <option key={s.id} value={s.id}>{s.label}</option>
                   ))}
                 </select>
               </div>
               <div className={styles.filterGroup}>
-                <label>Inventory category</label>
+                <label>{t('inventoryCategory')}</label>
                 <select value={filters.invCategory} onChange={(e) => setFilters((f) => ({ ...f, invCategory: e.target.value }))} className={styles.select}>
-                  <option value="">All categories</option>
+                  <option value="">{t('allCategories')}</option>
                   {INVENTORY_CATEGORIES.map((c) => (
                     <option key={c.id} value={c.id}>{c.label}</option>
                   ))}
                 </select>
               </div>
               <div className={styles.filterGroup}>
-                <label>Session status</label>
+                <label>{t('sessionStatus')}</label>
                 <select value={filters.sessionStatus} onChange={(e) => setFilters((f) => ({ ...f, sessionStatus: e.target.value }))} className={styles.select}>
                   <option value="">All statuses</option>
                   <option value={SESSION_STATUS.ON_TIME}>On time</option>
@@ -1229,7 +1245,7 @@ export default function ReportsAnalytics() {
       {/* KPI cards below Summary Filter – same spec as Equipment / Monitor */}
       <section className={styles.summaryCardsWrap}>
         <div className={`${styles.summaryKpiCard} ${styles.summaryKpiCardProduction}`}>
-          <span className={styles.metricLabel}>Total production</span>
+          <span className={styles.metricLabel}>{t('totalProduction')}</span>
           <div className={styles.summaryKpiCardBody}>
             <div className={styles.productionValueRow} ref={productionUnitDropdownRef}>
               <span className={styles.metricValue}>{displayedProductionTotal}</span>
@@ -1272,7 +1288,7 @@ export default function ReportsAnalytics() {
           </div>
         </div>
         <div className={styles.summaryKpiCard}>
-          <span className={styles.metricLabel}>Open faults</span>
+          <span className={styles.metricLabel}>{t('openFaults')}</span>
           <div className={styles.summaryKpiCardBody}>
             <span className={styles.metricValue}>{miniMetrics.openFaults}</span>
             {trendComparison != null && (
@@ -1283,7 +1299,7 @@ export default function ReportsAnalytics() {
           </div>
         </div>
         <div className={styles.summaryKpiCard}>
-          <span className={styles.metricLabel}>Delayed tasks</span>
+          <span className={styles.metricLabel}>{t('delayedTasks')}</span>
           <div className={styles.summaryKpiCardBody}>
             <span className={styles.metricValue}>{miniMetrics.delayedTasks}</span>
             {trendComparison != null && (
@@ -1294,19 +1310,19 @@ export default function ReportsAnalytics() {
           </div>
         </div>
         <div className={styles.summaryKpiCard}>
-          <span className={styles.metricLabel}>Critical inventory</span>
+          <span className={styles.metricLabel}>{t('criticalInventory')}</span>
           <div className={styles.summaryKpiCardBody}>
             <span className={styles.metricValue}>{miniMetrics.criticalInventory}</span>
           </div>
         </div>
         <div className={styles.summaryKpiCard}>
-          <span className={styles.metricLabel}>Active sessions</span>
+          <span className={styles.metricLabel}>{t('activeSessions')}</span>
           <div className={styles.summaryKpiCardBody}>
             <span className={styles.metricValue}>{miniMetrics.activeSessions}</span>
           </div>
         </div>
         <div className={styles.summaryKpiCard}>
-          <span className={styles.metricLabel}>Overdue maintenance</span>
+          <span className={styles.metricLabel}>{t('overdueMaintenance')}</span>
           <div className={styles.summaryKpiCardBody}>
             <span className={styles.metricValue}>{currentOverdueMaintenance}</span>
             {trendComparison != null && (
@@ -1333,7 +1349,7 @@ export default function ReportsAnalytics() {
 
       <section className={styles.explorerSection}>
         <div className={styles.explorerSectionHeader}>
-          <h2 className={styles.sectionTitle}>Analytics charts</h2>
+          <h2 className={styles.sectionTitle}>{t('analyticsCharts')}</h2>
           <div className={styles.chartsViewTabs}>
             <button
               type="button"
@@ -1386,14 +1402,20 @@ export default function ReportsAnalytics() {
           <div ref={reportsContentRef}>
             {openExplorer === 'executive' && (
               <>
-                <ExecutiveOverview data={overviewData} onDrillDown={handleDrillDown} zoneIds={zonesList.map((z) => z.id)} />
+                <ExecutiveOverview data={overviewData} t={t} onDrillDown={handleDrillDown} zoneIds={zonesList.map((z) => z.id)} />
                 <div className={styles.autoInsightBox} data-type={autoInsight?.type ?? 'stable'}>
                   <span className={styles.autoInsightIcon}>
                     {autoInsight?.type === 'warning' && <i className="fas fa-exclamation-triangle" />}
                     {autoInsight?.type === 'risk' && <i className="fas fa-times-circle" />}
                     {(autoInsight?.type === 'stable' || !autoInsight?.type) && <i className="fas fa-check-circle" />}
                   </span>
-                  <span className={styles.autoInsightText}>{autoInsight?.message ?? 'Calculating…'}</span>
+                  <span className={styles.autoInsightText}>
+                    {autoInsight?.messageKey
+                      ? (autoInsight.messageParams
+                          ? formatMessage(t(autoInsight.messageKey), autoInsight.messageParams)
+                          : t(autoInsight.messageKey))
+                      : t('calculating')}
+                  </span>
                 </div>
               </>
             )}
@@ -1401,17 +1423,17 @@ export default function ReportsAnalytics() {
           <div className={styles.explorerBlock}>
             <div className={`${styles.explorerCharts} ${styles.explorerChartsOperations}`}>
               <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Tasks by status</h4>
+                <h4 className={styles.chartCardTitle}>{t('tasksByStatus')}</h4>
                 <div className={styles.chartContainer}>
                   <Bar
                     data={{
                       labels: [TASK_STATUS_LABELS[TASK_STATUS.PENDING_APPROVAL], TASK_STATUS_LABELS[TASK_STATUS.IN_PROGRESS], TASK_STATUS_LABELS[TASK_STATUS.COMPLETED]],
                       datasets: [{
-                        label: 'Tasks',
+                        label: t('tasks'),
                         data: [
-                          filteredTasks.filter((t) => t.status === TASK_STATUS.PENDING_APPROVAL).length,
-                          filteredTasks.filter((t) => t.status === TASK_STATUS.IN_PROGRESS).length,
-                          filteredTasks.filter((t) => t.status === TASK_STATUS.COMPLETED).length,
+                          filteredTasks.filter((t) => normalizeTaskStatus(t.status) === TASK_STATUS.PENDING_APPROVAL).length,
+                          filteredTasks.filter((t) => normalizeTaskStatus(t.status) === TASK_STATUS.IN_PROGRESS).length,
+                          filteredTasks.filter((t) => normalizeTaskStatus(t.status) === TASK_STATUS.COMPLETED).length,
                         ],
                         backgroundColor: [COLOR.NEUTRAL, COLOR.SOFT_BLUE, COLOR.GREEN],
                       }],
@@ -1421,13 +1443,13 @@ export default function ReportsAnalytics() {
                 </div>
               </div>
               <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Tasks by zone</h4>
+                <h4 className={styles.chartCardTitle}>{t('tasksByZone')}</h4>
                 <div className={styles.chartContainer}>
                   <Doughnut
                     data={(() => {
                       const zoneCounts = zonesList.map((z) => ({
                         label: ZONE_LABEL[z.id] || z.id,
-                        count: filteredTasks.filter((t) => (t.zoneId || '') === z.id).length,
+                        count: filteredTasks.filter((t) => normalizeTaskStatus(t.status) !== TASK_STATUS.REJECTED && (t.zoneId || '') === z.id).length,
                       }))
                       const sorted = [...zoneCounts].sort((a, b) => b.count - a.count)
                       const loadColors = [COLOR.GREEN, COLOR.LIGHT_GREEN, COLOR.SOFT_BLUE, COLOR.YELLOW, COLOR.NEUTRAL]
@@ -1452,7 +1474,7 @@ export default function ReportsAnalytics() {
           <div className={styles.explorerBlock}>
             <div className={`${styles.explorerCharts} ${styles.explorerChartsProduction}`}>
               <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Production — this period vs previous (by zone)</h4>
+                <h4 className={styles.chartCardTitle}>{t('productionThisPeriodVsPrevious')}</h4>
                 <div className={styles.chartContainer}>
                   <Bar
                     data={{
@@ -1477,7 +1499,7 @@ export default function ReportsAnalytics() {
                 </div>
               </div>
               <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Production by zone</h4>
+                <h4 className={styles.chartCardTitle}>{t('productionByZone')}</h4>
                 <div className={styles.chartContainer}>
                   <Doughnut
                     data={(() => {
@@ -1517,12 +1539,12 @@ export default function ReportsAnalytics() {
           <div className={styles.explorerBlock}>
             <div className={`${styles.explorerCharts} ${styles.explorerChartsWorkers}`}>
               <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Tasks per worker</h4>
+                <h4 className={styles.chartCardTitle}>{t('tasksPerWorker')}</h4>
                 <div className={styles.chartContainer}>
                   <Bar
                     data={(() => {
                       const byWorker = {}
-                      filteredTasks.forEach((t) => {
+                      filteredTasks.filter((t) => normalizeTaskStatus(t.status) !== TASK_STATUS.REJECTED).forEach((t) => {
                         const ids = Array.isArray(t.workerIds) ? t.workerIds : []
                         ids.forEach((wid) => {
                           if (!wid) return
@@ -1535,7 +1557,7 @@ export default function ReportsAnalytics() {
                         .slice(0, 8)
                       if (sorted.length === 0) {
                         return {
-                          labels: ['No task assignments'],
+                          labels: [t('noTaskAssignments')],
                           datasets: [{ label: 'Tasks', data: [0], backgroundColor: COLOR.NEUTRAL, hoverBackgroundColor: HOVER.NEUTRAL }],
                         }
                       }
@@ -1554,11 +1576,11 @@ export default function ReportsAnalytics() {
                 </div>
               </div>
               <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Session status</h4>
+                <h4 className={styles.chartCardTitle}>{t('sessionStatus')}</h4>
                 <div className={styles.chartContainer}>
                   <Doughnut
                     data={{
-                      labels: ['On time', 'Delayed', 'Flagged'],
+                      labels: [t('onTime'), t('delayed'), t('flagged')],
                       datasets: [{
                         data: [
                           filteredSessions.filter((s) => s.status === SESSION_STATUS.ON_TIME).length,
@@ -1582,7 +1604,7 @@ export default function ReportsAnalytics() {
           <div className={styles.explorerBlock}>
             <div className={`${styles.explorerCharts} ${styles.explorerChartsEquipment}`}>
               <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Faults by category</h4>
+                <h4 className={styles.chartCardTitle}>{t('faultsByCategory')}</h4>
                 <div className={styles.chartContainer}>
                   <Doughnut
                     data={(() => {
@@ -1615,7 +1637,7 @@ export default function ReportsAnalytics() {
                 </div>
               </div>
               <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Most failing equipment</h4>
+                <h4 className={styles.chartCardTitle}>{t('mostFailingEquipment')}</h4>
                 <div className={styles.chartContainer}>
                   <Radar
                     data={(() => {
@@ -1695,7 +1717,7 @@ export default function ReportsAnalytics() {
           <div className={styles.explorerBlock}>
             <div className={`${styles.explorerCharts} ${styles.explorerChartsInventory}`}>
               <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Items by category</h4>
+                <h4 className={styles.chartCardTitle}>{t('itemsByCategory')}</h4>
                 <div className={styles.chartContainer}>
                   <Pie
                     data={(() => {
@@ -1721,7 +1743,7 @@ export default function ReportsAnalytics() {
                 </div>
               </div>
               <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Critical & low products</h4>
+                <h4 className={styles.chartCardTitle}>{t('criticalAndLowProducts')}</h4>
                 <div className={styles.chartContainer}>
                   {(() => {
                     const critical = inventoryWithStatus.filter((i) => i.status === INVENTORY_STATUS.CRITICAL)
@@ -1753,7 +1775,7 @@ export default function ReportsAnalytics() {
           <div className={styles.explorerBlock}>
             <div className={`${styles.explorerCharts} ${styles.explorerChartsSessions}`}>
               <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Active sessions by zone</h4>
+                <h4 className={styles.chartCardTitle}>{t('activeSessionsByZone')}</h4>
                 <div className={styles.chartContainer}>
                   <Bar
                     data={{
@@ -1770,7 +1792,7 @@ export default function ReportsAnalytics() {
                 </div>
               </div>
               <div className={styles.chartCard}>
-                <h4 className={styles.chartCardTitle}>Sessions by department</h4>
+                <h4 className={styles.chartCardTitle}>{t('sessionsByDepartment')}</h4>
                 <div className={styles.chartContainer}>
                   <Doughnut
                     data={{
@@ -1796,18 +1818,18 @@ export default function ReportsAnalytics() {
         {/* Tabs below content: Executive overview (default), Operations, Production, … + Export PDF – Internal only */}
         {chartsView === 'internal' && (
         <div className={styles.explorerBar}>
-          {EXPLORER_MODULES.map((m) => (
+          {EXPLORER_MODULE_IDS.map((m) => (
             <button
               key={m.id}
               type="button"
               className={openExplorer === m.id ? `${styles.explorerBtn} ${styles.explorerBtnActive}` : styles.explorerBtn}
               onClick={() => setOpenExplorer(m.id)}
             >
-              <i className={`fas ${m.icon} fa-fw`} /> {m.label}
+              <i className={`fas ${m.icon} fa-fw`} /> {t(m.labelKey)}
             </button>
           ))}
           <button type="button" className={styles.explorerBtnExport} onClick={exportPDF} title="Export report based on current filters and data">
-            <i className="fas fa-file-pdf fa-fw" /> Export PDF
+            <i className="fas fa-file-pdf fa-fw" /> {t('exportPdf')}
           </button>
         </div>
         )}

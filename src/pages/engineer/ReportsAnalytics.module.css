@@ -12,8 +12,11 @@
   flex-direction: column;
   gap: 1rem;
   width: 100%;
+  max-width: 100%;
   padding-bottom: 1.5rem;
   transition: all 0.3s ease;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 @media (min-width: 768px) {
@@ -479,6 +482,9 @@
   border-radius: 12px;
   padding: 1rem;
   border: 1px solid #e2e8f0;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .chartCardTitle {
@@ -491,17 +497,23 @@
 .chartContainer {
   position: relative;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   height: 260px;
+  overflow: hidden;
 }
 
 .explorerSection {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   box-sizing: border-box;
   background: #fff;
   border-radius: 16px;
   padding: 1.25rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   border: 1px solid #e2e8f0;
+  overflow-x: hidden;
 }
 
 .explorerSectionHeader {
@@ -713,6 +725,9 @@
   background: #f8fafc;
   border-radius: 12px;
   border: 1px solid #e2e8f0;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .explorerBlockTitle {
@@ -849,6 +864,61 @@
 @media (max-width: 639px) {
   .explorerChartsInventory {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Tablet: single column for explorer charts so they don’t overflow */
+@media (max-width: 959px) {
+  .explorerCharts,
+  .explorerChartsOperations,
+  .explorerChartsProduction,
+  .explorerChartsWorkers,
+  .explorerChartsEquipment,
+  .explorerChartsSessions,
+  .explorerChartsInventory {
+    grid-template-columns: 1fr !important;
+    gap: 1rem;
+  }
+
+  .explorerChartsOperations .chartContainer,
+  .explorerChartsProduction .chartContainer,
+  .explorerChartsWorkers .chartContainer,
+  .explorerChartsEquipment .chartContainer,
+  .explorerChartsSessions .chartContainer,
+  .explorerChartsInventory .chartContainer {
+    height: min(320px, 45vh);
+    min-height: 220px;
+  }
+}
+
+/* Mobile: compact chart height, prevent overflow */
+@media (max-width: 767px) {
+  .explorerSection {
+    padding: 0.875rem 1rem;
+  }
+
+  .explorerBlock {
+    padding: 0.875rem 1rem;
+  }
+
+  .chartCard {
+    padding: 0.75rem;
+  }
+
+  .chartCardTitle {
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .chartContainer,
+  .explorerChartsOperations .chartContainer,
+  .explorerChartsProduction .chartContainer,
+  .explorerChartsWorkers .chartContainer,
+  .explorerChartsEquipment .chartContainer,
+  .explorerChartsSessions .chartContainer,
+  .explorerChartsInventory .chartContainer {
+    height: min(260px, 40vh) !important;
+    min-height: 200px !important;
   }
 }
 

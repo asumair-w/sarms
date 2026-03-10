@@ -41,7 +41,7 @@ const options = {
   },
 }
 
-function ZoneDistributionChart({ data, onSegmentClick, zoneIds }) {
+function ZoneDistributionChart({ data, t, onSegmentClick, zoneIds }) {
   const labels = data?.labels ?? []
   const tasks = data?.tasks ?? []
   const sessions = data?.sessions ?? []
@@ -51,9 +51,9 @@ function ZoneDistributionChart({ data, onSegmentClick, zoneIds }) {
   const chartData = {
     labels: labels.length ? labels : ['No data'],
     datasets: [
-      { label: 'Tasks', data: tasks.length ? tasks : [0], backgroundColor: COLOR_TASKS, hoverBackgroundColor: HOVER_TASKS },
-      { label: 'Sessions', data: sessions.length ? sessions : [0], backgroundColor: COLOR_SESSIONS, hoverBackgroundColor: HOVER_SESSIONS },
-      { label: 'Faults', data: faults.length ? faults : [0], backgroundColor: COLOR_FAULTS, hoverBackgroundColor: HOVER_FAULTS },
+      { label: t ? t('tasks') : 'Tasks', data: tasks.length ? tasks : [0], backgroundColor: COLOR_TASKS, hoverBackgroundColor: HOVER_TASKS },
+      { label: t ? t('sessions') : 'Sessions', data: sessions.length ? sessions : [0], backgroundColor: COLOR_SESSIONS, hoverBackgroundColor: HOVER_SESSIONS },
+      { label: t ? t('faults') : 'Faults', data: faults.length ? faults : [0], backgroundColor: COLOR_FAULTS, hoverBackgroundColor: HOVER_FAULTS },
     ],
   }
 

@@ -7,6 +7,16 @@ import { SESSION_STATUS } from '../data/monitorActive'
 import { INVENTORY_STATUS } from '../data/inventory'
 import { FAULT_STATUS_OPEN } from '../data/faults'
 
+function normalizeTaskStatus(status) {
+  if (!status) return null
+  const s = String(status).toLowerCase().trim()
+  if (s === TASK_STATUS.PENDING_APPROVAL || s === 'approved') return TASK_STATUS.PENDING_APPROVAL
+  if (s === TASK_STATUS.IN_PROGRESS) return TASK_STATUS.IN_PROGRESS
+  if (s === TASK_STATUS.COMPLETED) return TASK_STATUS.COMPLETED
+  if (s === TASK_STATUS.REJECTED) return TASK_STATUS.REJECTED
+  return null
+}
+
 /**
  * @param {Object} params
  * @param {Array} params.filteredTasks
@@ -36,10 +46,10 @@ export function buildOverviewData({
 }) {
   const today = (appliedFilters?.dateTo || new Date().toISOString().slice(0, 10)).toString().slice(0, 10)
 
-  // 1. Operational status (stacked bar): Pending, In Progress, Completed, Delayed
-  const tasksPending = filteredTasks.filter((t) => t.status === TASK_STATUS.PENDING_APPROVAL).length
-  const tasksInProgress = filteredTasks.filter((t) => t.status === TASK_STATUS.IN_PROGRESS).length
-  const tasksCompleted = filteredTasks.filter((t) => t.status === TASK_STATUS.COMPLETED).length
+  // 1. Operational status: Pending, In Progress, Completed, Delayed (rejected/cancelled excluded from all counts)
+  const tasksPending = filteredTasks.filter((t) => normalizeTaskStatus(t.status) === TASK_STATUS.PENDING_APPROVAL).length
+  const tasksInProgress = filteredTasks.filter((t) => normalizeTaskStatus(t.status) === TASK_STATUS.IN_PROGRESS).length
+  const tasksCompleted = filteredTasks.filter((t) => normalizeTaskStatus(t.status) === TASK_STATUS.COMPLETED).length
   const sessionsActive = filteredSessions.filter((s) => !s.completedAt).length
   const sessionsDelayed = filteredSessions.filter((s) => s.status === SESSION_STATUS.DELAYED).length
   const openFaultsCount = filteredFaults.filter((f) => (f.status || FAULT_STATUS_OPEN) === FAULT_STATUS_OPEN).length
@@ -76,7 +86,7 @@ export function buildOverviewData({
     sessionsByZone[id] = 0
     faultsByZone[id] = 0
   })
-  ;(filteredTasks || []).forEach((t) => {
+  ;(filteredTasks || []).filter((t) => normalizeTaskStatus(t.status) !== TASK_STATUS.REJECTED).forEach((t) => {
     const z = t.zoneId || 'other'
     if (tasksByZone[z] !== undefined) tasksByZone[z] += 1
   })
@@ -159,12 +169,13 @@ const CRITICAL_INV_THRESHOLD = 3
 const OPEN_FAULTS_THRESHOLD = 5
 
 /**
- * Generates a short insight string from overview data for the Auto Insight box.
+ * Generates a short insight from overview data for the Auto Insight box.
+ * Returns messageKey + messageParams so the UI can translate and interpolate.
  * @param {Object} overviewData - result of buildOverviewData
- * @returns {{ type: 'warning'|'risk'|'stable', message: string }}
+ * @returns {{ type: 'warning'|'risk'|'stable', messageKey: string, messageParams?: Object }}
  */
 export function getAutoInsight(overviewData) {
-  if (!overviewData) return { type: 'stable', message: 'System status is being calculated.' }
+  if (!overviewData) return { type: 'stable', messageKey: 'calculating' }
 
   const { riskMetrics, inventoryHealth, equipmentLoad, operationalStatus } = overviewData
   const delayedPct = riskMetrics?.values?.[0] ?? 0
@@ -175,31 +186,28 @@ export function getAutoInsight(overviewData) {
   if (delayedPct >= DELAYED_THRESHOLD || delayedCount > 5) {
     return {
       type: 'warning',
-      message: `Delayed sessions are elevated (${delayedCount} delayed, ${Math.round(delayedPct)}% of sessions). Consider reviewing workload or reassigning tasks.`,
+      messageKey: 'insightDelayedSessions',
+      messageParams: { count: delayedCount, pct: Math.round(delayedPct) },
     }
   }
   if (criticalInv >= CRITICAL_INV_THRESHOLD) {
     return {
       type: 'risk',
-      message: `${criticalInv} inventory item(s) are in critical status. Replenish stock to avoid operational disruption.`,
+      messageKey: 'insightCriticalInventory',
+      messageParams: { count: criticalInv },
     }
   }
   if (openFaults >= OPEN_FAULTS_THRESHOLD) {
     return {
       type: 'warning',
-      message: `${openFaults} open fault(s) require attention. Schedule maintenance or resolve issues to maintain equipment health.`,
+      messageKey: 'insightOpenFaults',
+      messageParams: { count: openFaults },
     }
   }
   if (criticalInv > 0 || openFaults > 0 || delayedCount > 0) {
-    return {
-      type: 'stable',
-      message: 'System is operational with minor items to monitor. No critical alerts at this time.',
-    }
+    return { type: 'stable', messageKey: 'insightStableMinor' }
   }
-  return {
-    type: 'stable',
-    message: 'All systems stable. No delayed sessions, critical inventory, or open faults detected.',
-  }
+  return { type: 'stable', messageKey: 'insightAllStable' }
 }
 
 /**

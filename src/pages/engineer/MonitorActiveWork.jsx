@@ -51,9 +51,9 @@ function isSessionDelayedAtEndOfDay(session, endOfDayMs) {
 }
 
 function getRiskLevel(delayRate) {
-  if (delayRate > 30) return { label: 'High', color: 'high' }
-  if (delayRate >= 15) return { label: 'Moderate', color: 'moderate' }
-  return { label: 'Stable', color: 'stable' }
+  if (delayRate > 30) return { labelKey: 'monitorRiskHigh', color: 'high' }
+  if (delayRate >= 15) return { labelKey: 'monitorRiskModerate', color: 'moderate' }
+  return { labelKey: 'monitorRiskStable', color: 'stable' }
 }
 
 function taskLabelByLang(task, lang) {
@@ -79,6 +79,28 @@ export default function MonitorActiveWork() {
   const navigate = useNavigate()
   const { lang } = useLanguage()
   const t = (key) => getTranslation(lang, 'engineer', key)
+  const getDepartmentDisplayLabel = (deptId) => (lang === 'ar' ? getDepartment(deptId)?.labelAr : getDepartment(deptId)?.labelEn) ?? getDepartment(deptId)?.labelEn ?? deptId
+  /** Task column: show label in current language (from task def by id or by matching label). */
+  const getTaskDisplayLabel = (session) => {
+    const taskDefId = session.taskDefId || session.taskId
+    const byId = getTaskById(taskDefId)
+    if (byId) return taskLabelByLang(byId, lang)
+    const deptId = session.departmentId || session.taskTypeId
+    if (deptId && session.task) {
+      const list = getTasksForDepartment(deptId)
+      const found = list?.find((t) => t.labelEn === session.task || t.labelAr === session.task)
+      if (found) return taskLabelByLang(found, lang)
+    }
+    return session.task ?? '—'
+  }
+  const getSessionStatusDisplayLabel = (status) => {
+    if (!status) return '—'
+    if (status === 'completed') return t('monitorCompleted')
+    if (status === SESSION_STATUS.ON_TIME) return t('monitorOnTime')
+    if (status === SESSION_STATUS.DELAYED) return t('monitorDelayed')
+    if (status === SESSION_STATUS.FLAGGED) return t('monitorFlagged')
+    return SESSION_STATUS_LABELS[status] ?? status
+  }
   const { sessions, updateSession, addSession, removeSession, addRecord, updateTaskStatus, records, zones: storeZones, workers, tasks } = useAppStore()
   const zonesList = (storeZones && storeZones.length > 0) ? storeZones : getInitialZones()
   const ZONE_LABELS = useMemo(() => Object.fromEntries(zonesList.map((z) => [z.id, z.label])), [zonesList])
@@ -279,7 +301,7 @@ export default function MonitorActiveWork() {
     table.style.cssText = 'border-collapse:collapse;width:100%;min-width:1150px;'
     const thead = document.createElement('thead')
     const headerRow = document.createElement('tr')
-    const headers = ['#', 'Worker', 'Zone', 'Lines', 'Date / time', 'Duration', 'Qty', 'Notes']
+    const headers = ['#', t('monitorWorker'), t('assignZone'), t('monitorLines'), t('monitorDateTime'), t('monitorDuration'), t('monitorQuantity'), t('monitorNotesLabel')]
     headers.forEach((h) => {
       const th = document.createElement('th')
       th.textContent = h
@@ -327,6 +349,7 @@ export default function MonitorActiveWork() {
       backgroundColor: '#ffffff',
     }).then((canvas) => {
       document.body.removeChild(wrap)
+      const tEn = (key) => getTranslation('en', 'engineer', key)
       const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
       const margin = 12
       const pageW = pdf.internal.pageSize.getWidth()
@@ -334,11 +357,11 @@ export default function MonitorActiveWork() {
       const w = pageW - margin * 2
       pdf.setFontSize(14)
       pdf.setFont('helvetica', 'bold')
-      pdf.text(t('opsLog'), margin, 10)
+      pdf.text(tEn('opsLog'), margin, 10)
       pdf.setFontSize(9)
       pdf.setFont('helvetica', 'normal')
-      const periodLabel = opsFilterPeriod === '7d' ? t('last7Days') : opsFilterPeriod === '30d' ? t('last30Days') : opsFilterPeriod === 'custom' ? `${opsFilterDateFrom || '—'} to ${opsFilterDateTo || '—'}` : t('allTime')
-      const filterLine = `Generated: ${new Date().toLocaleString()}  |  Zone: ${opsFilterZone ? (ZONE_LABELS[opsFilterZone] || opsFilterZone) : t('allZones')}  |  Worker: ${opsFilterWorker || t('allWorkers')}  |  Period: ${periodLabel}`
+      const periodLabel = opsFilterPeriod === '7d' ? tEn('last7Days') : opsFilterPeriod === '30d' ? tEn('last30Days') : opsFilterPeriod === 'custom' ? `${opsFilterDateFrom || '—'} ${tEn('monitorTo')} ${opsFilterDateTo || '—'}` : tEn('allTime')
+      const filterLine = `${tEn('monitorGenerated')}: ${new Date().toLocaleString()}  |  ${tEn('assignZone')}: ${opsFilterZone ? (ZONE_LABELS[opsFilterZone] || opsFilterZone) : tEn('allZones')}  |  ${tEn('monitorWorker')}: ${opsFilterWorker || tEn('allWorkers')}  |  ${tEn('timePeriod')}: ${periodLabel}`
       const splitLines = pdf.splitTextToSize(filterLine, w)
       let y = 16
       splitLines.forEach((line) => { pdf.text(line, margin, y); y += 5 })
@@ -414,6 +437,7 @@ export default function MonitorActiveWork() {
       /* Tasks with no real session are self-started (worker started from tablet); show Source = Self-started */
       const baseSession = {
         taskId: task.id,
+        taskDefId: task.taskId,
         departmentId: departmentIdNorm || task.departmentId,
         department: dept?.labelEn ?? task.departmentId ?? '—',
         taskTypeId: departmentIdNorm || task.departmentId,
@@ -583,7 +607,7 @@ export default function MonitorActiveWork() {
     const trendDirection = last7Total >= prev7Total ? 'up' : 'down'
     return {
       delayRate,
-      riskLevel: risk.label,
+      riskLabelKey: risk.labelKey,
       riskColor: risk.color,
       trendPercent: trendDirection === 'up' ? trendPercent : -Math.abs(trendPercent),
       trendDirection,
@@ -756,6 +780,7 @@ export default function MonitorActiveWork() {
       logging: false,
       backgroundColor: '#ffffff',
     }).then((canvas) => {
+      const tEn = (key) => getTranslation('en', 'engineer', key)
       const imgData = canvas.toDataURL('image/png')
       const pdf = new jsPDF({
         orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
@@ -769,7 +794,7 @@ export default function MonitorActiveWork() {
       const h = (canvas.height * w) / canvas.width
       pdf.setFontSize(14)
       pdf.setFont('helvetica', 'bold')
-      const reportTitle = clickedCard === 'delayed' ? 'Delayed Tasks' : clickedCard === 'flagged' ? 'Flagged Issues' : clickedCard === 'on_time' ? 'On Time Tasks' : 'Active Workers'
+      const reportTitle = clickedCard === 'delayed' ? tEn('monitorDelayedTasks') : clickedCard === 'flagged' ? tEn('monitorFlaggedIssues') : clickedCard === 'on_time' ? tEn('monitorOnTimeTasks') : tEn('monitorActiveWorkers')
       pdf.text(reportTitle, margin, 12)
       pdf.setFontSize(9)
       pdf.setFont('helvetica', 'normal')
@@ -777,21 +802,21 @@ export default function MonitorActiveWork() {
       let y = 24
       pdf.setFontSize(10)
       pdf.setFont('helvetica', 'bold')
-      pdf.text('Filters applied:', margin, y)
+      pdf.text(tEn('monitorFiltersApplied'), margin, y)
       y += 5
-      const deptLabel = filterDept ? (DEPARTMENT_OPTIONS.find((d) => d.value === filterDept)?.label || filterDept) : 'All'
-      const taskLabel = filterTaskId ? (taskLabelByLang(getTaskById(filterTaskId), lang) || filterTaskId) : 'All'
-      const zoneLabel = filterZone ? (ZONE_LABELS[filterZone] || filterZone) : 'All'
-      const statusLabel = filterStatus ? (SESSION_STATUS_LABELS[filterStatus] || filterStatus) : 'All'
+      const deptLabel = filterDept ? (getDepartment(filterDept)?.labelEn ?? getDepartment(filterDept)?.labelAr ?? filterDept) : tEn('monitorAll')
+      const taskLabel = filterTaskId ? (taskLabelByLang(getTaskById(filterTaskId), 'en') || filterTaskId) : tEn('monitorAll')
+      const zoneLabel = filterZone ? (ZONE_LABELS[filterZone] || filterZone) : tEn('monitorAll')
+      const statusLabel = filterStatus ? (filterStatus === 'completed' ? tEn('monitorCompleted') : filterStatus === SESSION_STATUS.ON_TIME ? tEn('monitorOnTime') : filterStatus === SESSION_STATUS.DELAYED ? tEn('monitorDelayed') : filterStatus === SESSION_STATUS.FLAGGED ? tEn('monitorFlagged') : (SESSION_STATUS_LABELS[filterStatus] ?? filterStatus)) : tEn('monitorAll')
       const workerSearch = searchWorker.trim() || '—'
-      const sortCol = sortBy === 'workerName' ? 'Worker Name' : sortBy === 'department' ? 'Department' : sortBy === 'task' ? 'Task' : sortBy === 'zone' ? 'Zone' : sortBy === 'startTime' ? 'Start Time' : sortBy === 'elapsedMinutes' ? 'Duration' : sortBy === 'status' ? 'Status' : sortBy
+      const sortCol = sortBy === 'workerName' ? tEn('monitorWorkerName') : sortBy === 'department' ? tEn('assignDepartment') : sortBy === 'task' ? tEn('assignTask') : sortBy === 'zone' ? tEn('assignZone') : sortBy === 'startTime' ? tEn('monitorStartTime') : sortBy === 'elapsedMinutes' ? tEn('monitorDuration') : sortBy === 'status' ? tEn('monitorStatus') : sortBy
       const sortDir = sortOrder === 'asc' ? 'asc' : 'desc'
       const sortLabel = sortBy ? `${sortCol} (${sortDir})` : '—'
       pdf.setFont('helvetica', 'normal')
       pdf.setFontSize(9)
-      const filterLine1 = `Department: ${deptLabel}   ·   Task: ${taskLabel}   ·   Zone: ${zoneLabel}   ·   Status: ${statusLabel}`
-      const filterLine2 = `Worker search: ${workerSearch}`
-      const filterLine3 = `Sort: ${sortLabel}   ·   Rows: ${sortedFiltered.length}`
+      const filterLine1 = `${tEn('assignDepartment')}: ${deptLabel}   ·   ${tEn('assignTask')}: ${taskLabel}   ·   ${tEn('assignZone')}: ${zoneLabel}   ·   ${tEn('monitorStatus')}: ${statusLabel}`
+      const filterLine2 = `${tEn('monitorWorkerSearch')}: ${workerSearch}`
+      const filterLine3 = `${tEn('monitorSort')}: ${sortLabel}   ·   ${tEn('monitorRows')}: ${sortedFiltered.length}`
       const lineH = 5
       const split1 = pdf.splitTextToSize(filterLine1, w)
       split1.forEach((line) => { pdf.text(line, margin, y); y += lineH })
@@ -813,16 +838,16 @@ export default function MonitorActiveWork() {
   return (
     <div className={styles.page}>
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}><i className="fas fa-chart-pie fa-fw" /> Summary</h2>
+        <h2 className={styles.sectionTitle}><i className="fas fa-chart-pie fa-fw" /> {t('monitorSummary')}</h2>
         <div className={styles.cards}>
           <div className={styles.cardCombined}>
-            <span className={styles.cardCombinedTitle}>Session Status</span>
+            <span className={styles.cardCombinedTitle}>{t('monitorSessionStatus')}</span>
             <button
               type="button"
               className={`${styles.cardCombinedRow} ${clickedCard === 'tasks' ? styles.cardCombinedRowActive : ''}`}
               onClick={() => setClickedCard(clickedCard === 'tasks' ? null : 'tasks')}
             >
-              <span className={styles.cardCombinedLabel}>Active Tasks</span>
+              <span className={styles.cardCombinedLabel}>{t('monitorActiveTasks')}</span>
               <span className={styles.cardCombinedValue}>{summary.activeTasks}</span>
             </button>
             <button
@@ -830,7 +855,7 @@ export default function MonitorActiveWork() {
               className={`${styles.cardCombinedRow} ${styles.cardCombinedRowDelayed} ${clickedCard === 'delayed' ? styles.cardCombinedRowActive : ''}`}
               onClick={() => setClickedCard(clickedCard === 'delayed' ? null : 'delayed')}
             >
-              <span className={styles.cardCombinedLabel}>Delayed</span>
+              <span className={styles.cardCombinedLabel}>{t('monitorDelayed')}</span>
               <span className={styles.cardCombinedValue}>{summary.delayedTasks}</span>
             </button>
             <button
@@ -838,7 +863,7 @@ export default function MonitorActiveWork() {
               className={`${styles.cardCombinedRow} ${styles.cardCombinedRowFlagged} ${clickedCard === 'flagged' ? styles.cardCombinedRowActive : ''}`}
               onClick={() => setClickedCard(clickedCard === 'flagged' ? null : 'flagged')}
             >
-              <span className={styles.cardCombinedLabel}>Flagged</span>
+              <span className={styles.cardCombinedLabel}>{t('monitorFlagged')}</span>
               <span className={styles.cardCombinedValue}>{summary.flaggedIssues}</span>
             </button>
           </div>
@@ -847,48 +872,48 @@ export default function MonitorActiveWork() {
             className={`${styles.card} ${styles.cardRisk} ${styles[`cardRisk${performanceRisk.riskColor.charAt(0).toUpperCase() + performanceRisk.riskColor.slice(1)}`]}`}
             onClick={() => setRiskModalOpen(true)}
           >
-            <span className={styles.cardLabel}>Performance Risk Overview</span>
+            <span className={styles.cardLabel}>{t('monitorPerformanceRiskOverview')}</span>
             <span className={styles.cardValue}>{performanceRisk.delayRate}%</span>
-            <span className={styles.cardRiskLabel}>{performanceRisk.riskLevel}</span>
+            <span className={styles.cardRiskLabel}>{t(performanceRisk.riskLabelKey)}</span>
             <span className={styles.cardRiskTrend}>
-              {performanceRisk.trendDirection === 'up' ? '↑' : '↓'} {performanceRisk.trendDirection === 'up' ? '+' : ''}{performanceRisk.trendPercent}% vs last week
+              {performanceRisk.trendDirection === 'up' ? '↑' : '↓'} {performanceRisk.trendDirection === 'up' ? '+' : ''}{performanceRisk.trendPercent}% {t('monitorVsLastWeek')}
             </span>
           </button>
           <div className={`${styles.mergedKpiCard} ${styles.mergedKpiCardRecords}`}>
-            <span className={styles.mergedKpiCardTitle}>Records & Zone</span>
+            <span className={styles.mergedKpiCardTitle}>{t('monitorRecordsAndZone')}</span>
             <div className={styles.mergedKpiBlock}>
-              <span className={styles.mergedKpiLabel}>Total Records</span>
+              <span className={styles.mergedKpiLabel}>{t('monitorTotalRecords')}</span>
               <span className={styles.mergedKpiValue}>{kpiTotalRecords.total}</span>
               {kpiTotalRecords.pctChange != null && (
                 <span className={styles.mergedKpiSub}>
-                  {kpiTotalRecords.pctChange >= 0 ? '↑' : '↓'} {kpiTotalRecords.pctChange >= 0 ? '+' : ''}{kpiTotalRecords.pctChange}% vs previous period
+                  {kpiTotalRecords.pctChange >= 0 ? '↑' : '↓'} {kpiTotalRecords.pctChange >= 0 ? '+' : ''}{kpiTotalRecords.pctChange}% {t('monitorVsPreviousPeriod')}
                 </span>
               )}
             </div>
             <div className={styles.mergedKpiBlock}>
-              <span className={styles.mergedKpiLabel}>Most Time-Consuming Zone</span>
+              <span className={styles.mergedKpiLabel}>{t('monitorMostTimeConsumingZone')}</span>
               {kpiTopZone ? (
-                <button type="button" className={styles.mergedKpiZoneBtn} onClick={() => setOpsFilterZone(kpiTopZone.zoneIdForFilter)} title="Filter by this zone">
+                <button type="button" className={styles.mergedKpiZoneBtn} onClick={() => setOpsFilterZone(kpiTopZone.zoneIdForFilter)} title={t('monitorFilterByThisZone')}>
                   <span className={styles.mergedKpiValue}>{kpiTopZone.zone}</span>
                   <span className={styles.mergedKpiSub}>{formatMinutesToHoursMinutes(kpiTopZone.totalMinutes)} ({kpiTopZone.pct}% of total)</span>
                 </button>
               ) : (
                 <>
                   <span className={styles.mergedKpiValue}>—</span>
-                  <span className={styles.mergedKpiSub}>No duration data</span>
+                  <span className={styles.mergedKpiSub}>{t('monitorNoDurationData')}</span>
                 </>
               )}
             </div>
           </div>
           <div className={`${styles.mergedKpiCard} ${styles.mergedKpiCardTime} ${kpiAvgDuration.status === 'ok' ? styles.mergedKpiCardOk : kpiAvgDuration.status === 'warn' ? styles.mergedKpiCardWarn : kpiAvgDuration.status === 'high' ? styles.mergedKpiCardHigh : ''}`}>
-            <span className={styles.mergedKpiCardTitle}>Time & Duration</span>
+            <span className={styles.mergedKpiCardTitle}>{t('monitorTimeAndDuration')}</span>
             <div className={styles.mergedKpiBlock}>
-              <span className={styles.mergedKpiLabel}>Total Logged Time</span>
+              <span className={styles.mergedKpiLabel}>{t('monitorTotalLoggedTime')}</span>
               <span className={styles.mergedKpiValue}>{formatMinutesToHoursMinutes(kpiTotalLoggedTime.totalMinutes)}</span>
-              <span className={styles.mergedKpiSub}>Avg per Worker: {formatMinutesToHoursMinutes(kpiTotalLoggedTime.avgPerWorkerMinutes)}</span>
+              <span className={styles.mergedKpiSub}>{t('monitorAvgPerWorker')}: {formatMinutesToHoursMinutes(kpiTotalLoggedTime.avgPerWorkerMinutes)}</span>
             </div>
             <div className={styles.mergedKpiBlock}>
-              <span className={styles.mergedKpiLabel}>Avg Duration</span>
+              <span className={styles.mergedKpiLabel}>{t('monitorAvgDuration')}</span>
               <span className={styles.mergedKpiValue}>{formatMinutesToHoursMinutes(kpiAvgDuration.avgMinutes)}</span>
               <span className={styles.mergedKpiSub}>
                 {kpiAvgDuration.status === 'ok' ? t('withinExpected') : kpiAvgDuration.status === 'warn' ? t('slightlyAbove') : kpiAvgDuration.status === 'high' ? t('aboveExpected') : '—'}
@@ -901,17 +926,17 @@ export default function MonitorActiveWork() {
       <section className={`${styles.section} ${styles.tableSection}`}>
         <div className={styles.filtersRow}>
           <h2 className={styles.sectionTitle}>
-            {clickedCard === 'delayed' ? 'Delayed Tasks' : clickedCard === 'flagged' ? 'Flagged Issues' : clickedCard === 'on_time' ? 'On Time Tasks' : 'Active Workers'}
+            {clickedCard === 'delayed' ? t('monitorDelayedTasks') : clickedCard === 'flagged' ? t('monitorFlaggedIssues') : clickedCard === 'on_time' ? t('monitorOnTimeTasks') : t('monitorActiveWorkers')}
           </h2>
           <div className={styles.filtersActions}>
             <button type="button" className={styles.exportBtn} onClick={exportActiveWorkersPDF} disabled={sortedFiltered.length === 0}>
-              <i className="fas fa-file-pdf fa-fw" /> Export PDF
+              <i className="fas fa-file-pdf fa-fw" /> {t('monitorExportPdf')}
             </button>
           </div>
         </div>
         <div className={styles.filters}>
           <div className={styles.filterGroup}>
-            <label>Department</label>
+            <label>{t('assignDepartment')}</label>
             <select
               value={filterDept}
               onChange={(e) => {
@@ -919,46 +944,46 @@ export default function MonitorActiveWork() {
                 setFilterTaskId('')
               }}
             >
-              <option value="">All</option>
+              <option value="">{t('monitorAll')}</option>
               {DEPARTMENT_OPTIONS.map((d) => (
                 <option key={d.value} value={d.value}>{d.label}</option>
               ))}
             </select>
           </div>
           <div className={styles.filterGroup}>
-            <label>Task</label>
+            <label>{t('assignTask')}</label>
             <select
               value={filterTaskId}
               onChange={(e) => setFilterTaskId(e.target.value)}
               disabled={!filterDept}
-              title={!filterDept ? 'Select department first' : ''}
+              title={!filterDept ? t('monitorSelectDepartmentFirst') : ''}
             >
-              <option value="">All</option>
+              <option value="">{t('monitorAll')}</option>
               {tasksForFilter.map((task) => (
                 <option key={task.id} value={task.id}>{taskLabelByLang(task, lang)}</option>
               ))}
             </select>
           </div>
           <div className={styles.filterGroup}>
-            <label>Zone</label>
+            <label>{t('assignZone')}</label>
             <select value={filterZone} onChange={(e) => setFilterZone(e.target.value)}>
-              <option value="">All</option>
+              <option value="">{t('monitorAll')}</option>
               {zonesList.map((z) => (
                 <option key={z.id} value={z.id}>{z.label}</option>
               ))}
             </select>
           </div>
           <div className={styles.filterGroup}>
-            <label>Status</label>
+            <label>{t('monitorStatus')}</label>
             <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-              <option value="">All</option>
-              <option value={SESSION_STATUS.ON_TIME}>{SESSION_STATUS_LABELS[SESSION_STATUS.ON_TIME]}</option>
-              <option value={SESSION_STATUS.DELAYED}>{SESSION_STATUS_LABELS[SESSION_STATUS.DELAYED]}</option>
-              <option value={SESSION_STATUS.FLAGGED}>{SESSION_STATUS_LABELS[SESSION_STATUS.FLAGGED]}</option>
+              <option value="">{t('monitorAll')}</option>
+              <option value={SESSION_STATUS.ON_TIME}>{t('monitorOnTime')}</option>
+              <option value={SESSION_STATUS.DELAYED}>{t('monitorDelayed')}</option>
+              <option value={SESSION_STATUS.FLAGGED}>{t('monitorFlagged')}</option>
             </select>
           </div>
           <div className={styles.filterGroup}>
-            <label>Worker (name or ID)</label>
+            <label>{t('monitorWorkerNameOrId')}</label>
             <input
               type="search"
               placeholder={t('searchPlaceholder')}
@@ -971,23 +996,23 @@ export default function MonitorActiveWork() {
           <table className={styles.table}>
             <thead>
               <tr>
-                <th><button type="button" className={styles.thSort} onClick={() => handleSort('workerName')}>Worker Name {sortBy === 'workerName' && (sortOrder === 'asc' ? '↑' : '↓')}</button></th>
-                <th><button type="button" className={styles.thSort} onClick={() => handleSort('department')}>Department {sortBy === 'department' && (sortOrder === 'asc' ? '↑' : '↓')}</button></th>
-                <th><button type="button" className={styles.thSort} onClick={() => handleSort('task')}>Task {sortBy === 'task' && (sortOrder === 'asc' ? '↑' : '↓')}</button></th>
-                <th><button type="button" className={styles.thSort} onClick={() => handleSort('zone')}>Zone {sortBy === 'zone' && (sortOrder === 'asc' ? '↑' : '↓')}</button></th>
-                <th>Lines / Area</th>
-                <th><button type="button" className={styles.thSort} onClick={() => handleSort('startTime')}>Start Time {sortBy === 'startTime' && (sortOrder === 'asc' ? '↑' : '↓')}</button></th>
-                <th><button type="button" className={styles.thSort} onClick={() => handleSort('elapsedMinutes')}>Duration {sortBy === 'elapsedMinutes' && (sortOrder === 'asc' ? '↑' : '↓')}</button></th>
-                <th>Source</th>
-                <th><button type="button" className={styles.thSort} onClick={() => handleSort('status')}>Status {sortBy === 'status' && (sortOrder === 'asc' ? '↑' : '↓')}</button></th>
-                <th>Actions</th>
+                <th><button type="button" className={styles.thSort} onClick={() => handleSort('workerName')}>{t('monitorWorkerName')} {sortBy === 'workerName' && (sortOrder === 'asc' ? '↑' : '↓')}</button></th>
+                <th><button type="button" className={styles.thSort} onClick={() => handleSort('department')}>{t('assignDepartment')} {sortBy === 'department' && (sortOrder === 'asc' ? '↑' : '↓')}</button></th>
+                <th><button type="button" className={styles.thSort} onClick={() => handleSort('task')}>{t('assignTask')} {sortBy === 'task' && (sortOrder === 'asc' ? '↑' : '↓')}</button></th>
+                <th><button type="button" className={styles.thSort} onClick={() => handleSort('zone')}>{t('assignZone')} {sortBy === 'zone' && (sortOrder === 'asc' ? '↑' : '↓')}</button></th>
+                <th>{t('monitorLinesArea')}</th>
+                <th><button type="button" className={styles.thSort} onClick={() => handleSort('startTime')}>{t('monitorStartTime')} {sortBy === 'startTime' && (sortOrder === 'asc' ? '↑' : '↓')}</button></th>
+                <th><button type="button" className={styles.thSort} onClick={() => handleSort('elapsedMinutes')}>{t('monitorDuration')} {sortBy === 'elapsedMinutes' && (sortOrder === 'asc' ? '↑' : '↓')}</button></th>
+                <th>{t('monitorSource')}</th>
+                <th><button type="button" className={styles.thSort} onClick={() => handleSort('status')}>{t('monitorStatus')} {sortBy === 'status' && (sortOrder === 'asc' ? '↑' : '↓')}</button></th>
+                <th>{t('monitorActions')}</th>
               </tr>
             </thead>
             <tbody>
               {sortedFiltered.length === 0 ? (
                 <tr>
                   <td colSpan={10} className={styles.emptyCell}>
-                    No active sessions match the filters.
+                    {t('monitorNoSessionsMatch')}
                   </td>
                 </tr>
               ) : (
@@ -997,21 +1022,21 @@ export default function MonitorActiveWork() {
                       {s.workerName}
                       {s.employeeId && <span className={styles.workerId}> ({s.employeeId})</span>}
                     </td>
-                    <td>{s.department}</td>
-                    <td>{s.task}</td>
+                    <td>{getDepartmentDisplayLabel(s.departmentId) || s.department}</td>
+                    <td>{getTaskDisplayLabel(s)}</td>
                     <td>{s.zone}</td>
                     <td>{s.linesArea}</td>
                     <td>{new Date(s.startTime).toLocaleString()}</td>
                     <td>{formatDuration(s.elapsedMinutes)}</td>
-                    <td>{s.assignedByEngineer ? 'Assigned' : 'Self-started'}</td>
+                    <td>{s.assignedByEngineer ? t('monitorAssigned') : t('monitorSelfStarted')}</td>
                     <td>
                       {s.status === 'completed' ? (
                         <span className={styles.statusBadge} data-status="completed" style={{ background: '#dcfce7', color: '#166534' }}>
-                          Completed
+                          {t('monitorCompleted')}
                         </span>
                       ) : (
                         <span className={styles.statusBadge} data-status={s.status}>
-                          {SESSION_STATUS_LABELS[s.status]}
+                          {getSessionStatusDisplayLabel(s.status)}
                         </span>
                       )}
                     </td>
@@ -1033,7 +1058,7 @@ export default function MonitorActiveWork() {
                             aria-expanded={openActionsSessionId === s.id}
                             aria-haspopup="true"
                           >
-                            Actions <span className={styles.actionsCaret}>{openActionsSessionId === s.id ? '▲' : '▼'}</span>
+                            {t('monitorActions')} <span className={styles.actionsCaret}>{openActionsSessionId === s.id ? '▲' : '▼'}</span>
                           </button>
                         </div>
                       </td>
@@ -1060,15 +1085,15 @@ export default function MonitorActiveWork() {
               zIndex: 9999,
             }}
           >
-            <button type="button" className={styles.actionsItem} onClick={() => { setViewSession(openSession); closeMenu(); }}>View</button>
-            <button type="button" className={styles.actionsItem} onClick={() => { setProfileWorker((workers || []).find((w) => String(w.id) === String(openSession.workerId)) || null); closeMenu(); }}>Profile</button>
+            <button type="button" className={styles.actionsItem} onClick={() => { setViewSession(openSession); closeMenu(); }}>{t('monitorView')}</button>
+            <button type="button" className={styles.actionsItem} onClick={() => { setProfileWorker((workers || []).find((w) => String(w.id) === String(openSession.workerId)) || null); closeMenu(); }}>{t('monitorProfile')}</button>
             {openSession.status !== 'completed' && (
               <>
-                <button type="button" className={styles.actionsItem} onClick={() => { setNoteSession(openSession); setNoteText(''); closeMenu(); }}>Note</button>
+                <button type="button" className={styles.actionsItem} onClick={() => { setNoteSession(openSession); setNoteText(''); closeMenu(); }}>{t('monitorNote')}</button>
                 <button type="button" className={styles.actionsItem} onClick={() => { toggleFlag(openSession.id, openSession); closeMenu(); }}>
-                  {openSession.flagged ? 'Unflag' : 'Flag'}
+                  {openSession.flagged ? t('monitorUnflag') : t('monitorFlag')}
                 </button>
-                <button type="button" className={`${styles.actionsItem} ${styles.actionsItemComplete}`} onClick={() => { markCompleted(openSession.id, openSession); closeMenu(); }}>Complete</button>
+                <button type="button" className={`${styles.actionsItem} ${styles.actionsItemComplete}`} onClick={() => { markCompleted(openSession.id, openSession); closeMenu(); }}>{t('monitorComplete')}</button>
               </>
             )}
           </div>,
@@ -1079,10 +1104,10 @@ export default function MonitorActiveWork() {
       {/* Operations log (moved from Record Production) */}
       <section className={opsLogStyles.operationsLogSection}>
         <div className={opsLogStyles.opsLogHeader}>
-          <h2 className={opsLogStyles.sectionTitle}><i className="fas fa-list-check fa-fw" /> Operations log</h2>
+          <h2 className={opsLogStyles.sectionTitle}><i className="fas fa-list-check fa-fw" /> {t('opsLog')}</h2>
           <div className={opsLogStyles.opsLogHeaderActions}>
             <button type="button" className={opsLogStyles.opsPrintBtn} onClick={exportOpsLogPDF} disabled={filteredOpsLog.length === 0} title="Download as PDF">
-              <i className="fas fa-file-pdf fa-fw" /> Export PDF
+              <i className="fas fa-file-pdf fa-fw" /> {t('monitorExportPdf')}
             </button>
           </div>
         </div>
@@ -1092,7 +1117,7 @@ export default function MonitorActiveWork() {
             value={opsFilterZone}
             onChange={(e) => setOpsFilterZone(e.target.value)}
             className={opsLogStyles.opsFilterSelect}
-            title="Zone"
+            title={t('assignZone')}
           >
             <option value="">{t('allZones')}</option>
             {zonesList.map((z) => (
@@ -1103,7 +1128,7 @@ export default function MonitorActiveWork() {
             value={opsFilterWorker}
             onChange={(e) => setOpsFilterWorker(e.target.value)}
             className={opsLogStyles.opsFilterSelect}
-            title="Worker"
+            title={t('monitorWorker')}
           >
             <option value="">{t('allWorkers')}</option>
             {opsLogWorkers.map((w) => (
@@ -1128,14 +1153,14 @@ export default function MonitorActiveWork() {
                 value={opsFilterDateFrom}
                 onChange={(e) => setOpsFilterDateFrom(e.target.value)}
                 className={opsLogStyles.opsFilterDate}
-                title="From"
+                title={t('monitorFrom')}
               />
               <input
                 type="date"
                 value={opsFilterDateTo}
                 onChange={(e) => setOpsFilterDateTo(e.target.value)}
                 className={opsLogStyles.opsFilterDate}
-                title="To"
+                title={t('monitorTo')}
               />
             </>
           )}
@@ -1148,46 +1173,46 @@ export default function MonitorActiveWork() {
           />
         </div>
         {recentProductionRecords.length === 0 ? (
-          <p className={opsLogStyles.operationsLogEmpty}>No production records yet.</p>
+          <p className={opsLogStyles.operationsLogEmpty}>{t('monitorNoProductionRecords')}</p>
         ) : filteredOpsLog.length === 0 ? (
-          <p className={opsLogStyles.operationsLogEmpty}>No records match the filter.</p>
+          <p className={opsLogStyles.operationsLogEmpty}>{t('monitorNoRecordsMatchFilter')}</p>
         ) : (
           <div className={opsLogStyles.operationsLogList} ref={opsLogListRef}>
             {filteredOpsLog.map((r) => (
               <div key={r.id} className={opsLogStyles.opsCard}>
                 {r.worker && (
                   <div className={opsLogStyles.opsRow}>
-                    <span className={opsLogStyles.opsLabel}>Worker</span>
+                    <span className={opsLogStyles.opsLabel}>{t('monitorWorker')}</span>
                     <span className={opsLogStyles.opsValue}>{r.worker}</span>
                   </div>
                 )}
                 <div className={opsLogStyles.opsRow}>
-                  <span className={opsLogStyles.opsLabel}>Zone</span>
+                  <span className={opsLogStyles.opsLabel}>{t('assignZone')}</span>
                   <span className={opsLogStyles.opsValue}>{r.zone || r.zoneId || '—'}</span>
                 </div>
                 <div className={opsLogStyles.opsRow}>
-                  <span className={opsLogStyles.opsLabel}>Lines</span>
+                  <span className={opsLogStyles.opsLabel}>{t('monitorLines')}</span>
                   <span className={opsLogStyles.opsValue}>{r.linesArea || r.lines || '—'}</span>
                 </div>
                 <div className={opsLogStyles.opsRow}>
-                  <span className={opsLogStyles.opsLabel}>Date / time</span>
+                  <span className={opsLogStyles.opsLabel}>{t('monitorDateTime')}</span>
                   <span className={opsLogStyles.opsValue}>{r.dateTime ? new Date(r.dateTime).toLocaleString() : (r.createdAt ? new Date(r.createdAt).toLocaleString() : '—')}</span>
                 </div>
                 {r.duration != null && (
                   <div className={opsLogStyles.opsRow}>
-                    <span className={opsLogStyles.opsLabel}>Duration</span>
+                    <span className={opsLogStyles.opsLabel}>{t('monitorDuration')}</span>
                     <span className={opsLogStyles.opsValue}>{r.duration} min</span>
                   </div>
                 )}
                 {r.quantity != null && (
                   <div className={opsLogStyles.opsRow}>
-                    <span className={opsLogStyles.opsLabel}>Quantity</span>
+                    <span className={opsLogStyles.opsLabel}>{t('monitorQuantity')}</span>
                     <span className={opsLogStyles.opsValue}>{`${r.quantity} ${r.unit || ''}`.trim()}</span>
                   </div>
                 )}
                 {r.notes && (
                   <div className={opsLogStyles.opsRow}>
-                    <span className={opsLogStyles.opsLabel}>Comment (worker)</span>
+                    <span className={opsLogStyles.opsLabel}>{t('monitorCommentWorker')}</span>
                     <span className={opsLogStyles.opsValue}>{r.notes}</span>
                   </div>
                 )}
@@ -1199,7 +1224,7 @@ export default function MonitorActiveWork() {
                 )}
                 {r.imageData && (
                   <div className={opsLogStyles.opsRow}>
-                    <span className={opsLogStyles.opsLabel}>Photo</span>
+                    <span className={opsLogStyles.opsLabel}>{t('monitorPhoto')}</span>
                     <span className={opsLogStyles.opsValue}>
                       <button type="button" className={opsLogStyles.opsPhotoThumb} onClick={() => setViewImageUrl(r.imageData)}>
                         <img src={r.imageData} alt="" />
@@ -1215,7 +1240,7 @@ export default function MonitorActiveWork() {
                       className={opsLogStyles.opsActionLink}
                       onClick={() => setProfileWorker((workers || []).find((w) => (r.workerId != null && String(w.id) === String(r.workerId)) || (w.fullName || '').trim() === (r.worker || '').trim()) || null)}
                     >
-                      View Profile
+                      {t('monitorViewProfile')}
                     </button>
                   </span>
                 </div>
@@ -1228,7 +1253,7 @@ export default function MonitorActiveWork() {
       {viewImageUrl && (
         <div className={opsLogStyles.imageOverlay} onClick={() => setViewImageUrl(null)} role="dialog" aria-modal="true">
           <img src={viewImageUrl} alt="" className={opsLogStyles.imageOverlayImg} onClick={(e) => e.stopPropagation()} />
-          <button type="button" className={opsLogStyles.imageOverlayClose} onClick={() => setViewImageUrl(null)} aria-label="Close">×</button>
+          <button type="button" className={opsLogStyles.imageOverlayClose} onClick={() => setViewImageUrl(null)} aria-label={t('viewClose')}>×</button>
         </div>
       )}
 
@@ -1240,16 +1265,16 @@ export default function MonitorActiveWork() {
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
             <h3 className={styles.modalTitle}>{t('sessionDetails')}</h3>
             <dl className={styles.dl}>
-              <dt>Worker</dt><dd>{currentSession.workerName}</dd>
-              <dt>Department</dt><dd>{currentSession.department}</dd>
-              <dt>Task</dt><dd>{taskLabelByLang(getTaskById(currentSession.taskId), lang) || currentSession.task}</dd>
-              <dt>Zone</dt><dd>{currentSession.zone}</dd>
-              <dt>Lines / Area</dt><dd>{currentSession.linesArea}</dd>
-              <dt>Start Time</dt><dd>{new Date(currentSession.startTime).toLocaleString()}</dd>
-              <dt>Expected</dt><dd>{currentSession.expectedMinutes} min</dd>
-              <dt>Status</dt><dd><span className={styles.statusBadge} data-status={currentSession.flagged ? SESSION_STATUS.FLAGGED : getSessionStatus(currentSession)}>{SESSION_STATUS_LABELS[currentSession.flagged ? SESSION_STATUS.FLAGGED : getSessionStatus(currentSession)]}</span></dd>
-              <dt>Source</dt><dd>{currentSession.assignedByEngineer ? 'Assigned by engineer' : 'Self-started by worker'}</dd>
-              <dt>Notes</dt>
+              <dt>{t('monitorWorker')}</dt><dd>{currentSession.workerName}</dd>
+              <dt>{t('assignDepartment')}</dt><dd>{getDepartmentDisplayLabel(currentSession.departmentId) || currentSession.department}</dd>
+              <dt>{t('assignTask')}</dt><dd>{taskLabelByLang(getTaskById(currentSession.taskId), lang) || currentSession.task}</dd>
+              <dt>{t('assignZone')}</dt><dd>{currentSession.zone}</dd>
+              <dt>{t('monitorLinesArea')}</dt><dd>{currentSession.linesArea}</dd>
+              <dt>{t('monitorStartTime')}</dt><dd>{new Date(currentSession.startTime).toLocaleString()}</dd>
+              <dt>{t('monitorExpected')}</dt><dd>{currentSession.expectedMinutes} min</dd>
+              <dt>{t('monitorStatus')}</dt><dd><span className={styles.statusBadge} data-status={currentSession.flagged ? SESSION_STATUS.FLAGGED : getSessionStatus(currentSession)}>{getSessionStatusDisplayLabel(currentSession.flagged ? SESSION_STATUS.FLAGGED : getSessionStatus(currentSession))}</span></dd>
+              <dt>{t('monitorSource')}</dt><dd>{currentSession.assignedByEngineer ? t('monitorAssignedByEngineer') : t('monitorSelfStartedByWorker')}</dd>
+              <dt>{t('monitorNotesLabel')}</dt>
               <dd>
                 {currentSession.notes?.length ? (
                   <ul className={styles.notesList}>
@@ -1272,7 +1297,7 @@ export default function MonitorActiveWork() {
       {noteSession && (
         <div className={styles.modalOverlay} onClick={() => { setNoteSession(null); setNoteText(''); }}>
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.modalTitle}>Add note – {noteSession.workerName}</h3>
+            <h3 className={styles.modalTitle}>{t('monitorAddNote')} – {noteSession.workerName}</h3>
             <textarea
               className={styles.noteTextarea}
               value={noteText}
@@ -1281,9 +1306,9 @@ export default function MonitorActiveWork() {
               rows={4}
             />
             <div className={styles.modalActions}>
-              <button type="button" className={styles.btnSecondary} onClick={() => { setNoteSession(null); setNoteText(''); }}>Cancel</button>
+              <button type="button" className={styles.btnSecondary} onClick={() => { setNoteSession(null); setNoteText(''); }}>{t('monitorCancel')}</button>
               <button type="button" className={styles.btnPrimary} onClick={() => addNote(noteSession.id, noteText)} disabled={!noteText.trim()}>
-                Save note
+                {t('monitorSaveNote')}
               </button>
             </div>
           </div>
@@ -1296,25 +1321,25 @@ export default function MonitorActiveWork() {
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
             <div className={styles.modalHeader}>
               <h3 className={styles.modalTitle}><i className="fas fa-user fa-fw" /> {profileWorker.fullName}</h3>
-              <button type="button" className={styles.closeBtn} onClick={() => setProfileWorker(null)} aria-label="Close">×</button>
+              <button type="button" className={styles.closeBtn} onClick={() => setProfileWorker(null)} aria-label={t('viewClose')}>×</button>
             </div>
             <p className={styles.profileSubtitle}>{profileWorker.employeeId} · {profileWorker.department}</p>
             <div className={styles.profileCreds}>
               <div className={styles.profileCredRow}>
-                <span className={styles.profileCredLabel}>Username</span>
+                <span className={styles.profileCredLabel}>{t('monitorUsername')}</span>
                 <strong className={styles.profileCredValue}>{profileWorker.employeeId || '—'}</strong>
               </div>
               <div className={styles.profileCredRow}>
-                <span className={styles.profileCredLabel}>Password</span>
+                <span className={styles.profileCredLabel}>{t('monitorPassword')}</span>
                 <strong className={styles.profileCredValue}>{profileWorker.tempPassword || '—'}</strong>
               </div>
             </div>
             <div className={styles.profileQr}>
-              <span className={styles.profileCredLabel}>QR code (login)</span>
+              <span className={styles.profileCredLabel}>{t('monitorQrCodeLogin')}</span>
               <img src={getQRCodeUrl(profileWorker.employeeId || '', 160)} alt="" className={styles.profileQrImg} />
             </div>
             <div className={styles.modalActions}>
-              <button type="button" className={styles.btnSecondary} onClick={() => setProfileWorker(null)}>Close</button>
+              <button type="button" className={styles.btnSecondary} onClick={() => setProfileWorker(null)}>{t('viewClose')}</button>
             </div>
           </div>
         </div>
@@ -1325,11 +1350,11 @@ export default function MonitorActiveWork() {
         <div className={styles.modalOverlay} onClick={() => setRiskModalOpen(false)}>
           <div className={styles.riskModal} onClick={(e) => e.stopPropagation()}>
             <div className={styles.modalHeader}>
-              <h3 className={styles.modalTitle}><i className="fas fa-chart-line fa-fw" /> Performance Risk Overview</h3>
-              <button type="button" className={styles.closeBtn} onClick={() => setRiskModalOpen(false)} aria-label="Close">×</button>
+              <h3 className={styles.modalTitle}><i className="fas fa-chart-line fa-fw" /> {t('monitorPerformanceRiskOverview')}</h3>
+              <button type="button" className={styles.closeBtn} onClick={() => setRiskModalOpen(false)} aria-label={t('viewClose')}>×</button>
             </div>
             <section className={styles.riskSection}>
-              <h4 className={styles.riskSectionTitle}>7-day delayed tasks</h4>
+              <h4 className={styles.riskSectionTitle}>{t('monitor7DayDelayedTasks')}</h4>
               <div className={styles.riskChartWrap}>
                 <Line
                   data={{
@@ -1362,28 +1387,28 @@ export default function MonitorActiveWork() {
               <div className={styles.bottleneckGrid}>
                 {bottleneckInsights.zone && (
                   <div className={styles.bottleneckCard}>
-                    <span className={styles.bottleneckLabel}>Zone with highest delay rate</span>
+                    <span className={styles.bottleneckLabel}>{t('monitorZoneHighestDelayRate')}</span>
                     <span className={styles.bottleneckName}>{bottleneckInsights.zone.name}</span>
                     <span className={`${styles.bottleneckRate} ${styles[`riskRate${getRiskLevel(bottleneckInsights.zone.rate).color.charAt(0).toUpperCase() + getRiskLevel(bottleneckInsights.zone.rate).color.slice(1)}`]}`}>
                       {bottleneckInsights.zone.rate}%
                     </span>
-                    <span className={styles.bottleneckCount}>{bottleneckInsights.zone.delayed} delayed</span>
+                    <span className={styles.bottleneckCount}>{bottleneckInsights.zone.delayed} {t('monitorDelayed').toLowerCase()}</span>
                   </div>
                 )}
                 {bottleneckInsights.department && (
                   <div className={styles.bottleneckCard}>
-                    <span className={styles.bottleneckLabel}>Department with highest overdue rate</span>
+                    <span className={styles.bottleneckLabel}>{t('monitorDeptHighestOverdueRate')}</span>
                     <span className={styles.bottleneckName}>{bottleneckInsights.department.name}</span>
                     <span className={`${styles.bottleneckRate} ${styles[`riskRate${getRiskLevel(bottleneckInsights.department.rate).color.charAt(0).toUpperCase() + getRiskLevel(bottleneckInsights.department.rate).color.slice(1)}`]}`}>
                       {bottleneckInsights.department.rate}%
                     </span>
-                    <span className={styles.bottleneckCount}>{bottleneckInsights.department.delayed} delayed</span>
+                    <span className={styles.bottleneckCount}>{bottleneckInsights.department.delayed} {t('monitorDelayed').toLowerCase()}</span>
                   </div>
                 )}
               </div>
             </section>
             <div className={styles.modalActions}>
-              <button type="button" className={styles.btnSecondary} onClick={() => setRiskModalOpen(false)}>Close</button>
+              <button type="button" className={styles.btnSecondary} onClick={() => setRiskModalOpen(false)}>{t('viewClose')}</button>
             </div>
           </div>
         </div>

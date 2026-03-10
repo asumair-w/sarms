@@ -59,6 +59,10 @@ export default function LogFaultMaintenance() {
   const location = useLocation()
   const { lang } = useLanguage()
   const t = (key) => getTranslation(lang, 'engineer', key)
+  const getEquipmentStatusDisplayLabel = (status) => (status === EQUIPMENT_STATUS.ACTIVE ? t('eqActive') : status === EQUIPMENT_STATUS.UNDER_MAINTENANCE ? t('eqUnderMaintenance') : status === EQUIPMENT_STATUS.OUT_OF_SERVICE ? t('eqOutOfService') : status || '—')
+  const getTicketTypeDisplayLabel = (id) => (id === 'fault' ? t('eqTicketTypeFault') : id === 'preventive' ? t('eqTicketTypePreventive') : id === 'corrective' ? t('eqTicketTypeCorrective') : id === 'inspection' ? t('eqTicketTypeInspection') : id || '—')
+  const getSeverityDisplayLabel = (id) => (id === 'low' ? t('eqSeverityLow') : id === 'medium' ? t('eqSeverityMedium') : id === 'high' ? t('eqSeverityHigh') : id === 'critical' ? t('eqSeverityCritical') : id || '—')
+  const getFaultCategoryDisplayLabel = (id) => (id === 'mechanical' ? t('eqFaultCatMechanical') : id === 'electrical' ? t('eqFaultCatElectrical') : id === 'operational' ? t('eqFaultCatOperational') : id === 'other' ? t('eqFaultCatOther') : id || '—')
   const { equipment, faults, maintenancePlans, addFault, addMaintenancePlan, updateMaintenancePlan, updateEquipmentItem, addEquipmentItem, removeEquipmentItem, updateFault, zones: storeZones } = useAppStore()
   const zonesList = (storeZones && storeZones.length > 0) ? storeZones : getInitialZones()
 
@@ -464,7 +468,7 @@ export default function LogFaultMaintenance() {
 
       pdf.setFontSize(14)
       pdf.setFont('helvetica', 'bold')
-      pdf.text('Manage Equipment', margin, 12)
+      pdf.text(t('eqManageEquipment'), margin, 12)
       pdf.setFontSize(9)
       pdf.setFont('helvetica', 'normal')
       pdf.text(new Date().toLocaleString(), margin, 18)
@@ -472,18 +476,18 @@ export default function LogFaultMaintenance() {
       let y = 24
       pdf.setFontSize(10)
       pdf.setFont('helvetica', 'bold')
-      pdf.text('Filters applied:', margin, y)
+      pdf.text(t('eqFiltersApplied'), margin, y)
       y += 5
-      const zoneLabelVal = eqFilterZone ? (equipmentZoneLabel(eqFilterZone) || eqFilterZone) : 'All'
-      const statusLabelVal = eqFilterStatus ? (EQUIPMENT_STATUS_LABELS[eqFilterStatus] || eqFilterStatus) : 'All'
+      const zoneLabelVal = eqFilterZone ? (equipmentZoneLabel(eqFilterZone) || eqFilterZone) : t('eqAll')
+      const statusLabelVal = eqFilterStatus ? getEquipmentStatusDisplayLabel(eqFilterStatus) : t('eqAll')
       const searchValue = eqFilterSearch.trim() || '—'
-      const sortColLabel = eqSortBy === 'name' ? t('equipmentName') : eqSortBy === 'zone' ? t('assignedZone') : eqSortBy === 'lastInspection' ? t('nextInspection') : eqSortBy
+      const sortColLabel = eqSortBy === 'name' ? t('equipmentName') : eqSortBy === 'zone' ? t('assignedZone') : eqSortBy === 'lastInspection' ? t('eqNextService') : eqSortBy
       const sortLabel = `${sortColLabel} (${eqSortDir === 'asc' ? 'asc' : 'desc'})`
       pdf.setFont('helvetica', 'normal')
       pdf.setFontSize(9)
-      const filterLine1 = `Zone: ${zoneLabelVal}   ·   Status: ${statusLabelVal}   ·   High failure only: ${eqFilterHighFailure ? 'Yes' : 'No'}`
-      const filterLine2 = `Search: ${searchValue}`
-      const filterLine3 = `Sort: ${sortLabel}   ·   Rows: ${filteredEquipment.length}`
+      const filterLine1 = `${t('eqZone')}: ${zoneLabelVal}   ·   ${t('eqStatus')}: ${statusLabelVal}   ·   ${t('eqHighFailureOnly')}: ${eqFilterHighFailure ? 'Yes' : 'No'}`
+      const filterLine2 = `${t('eqSearch')}: ${searchValue}`
+      const filterLine3 = `${t('eqSort')}: ${sortLabel}   ·   ${t('eqRows')}: ${filteredEquipment.length}`
       const lineH = 5
       const split1 = pdf.splitTextToSize(filterLine1, w)
       split1.forEach((line) => { pdf.text(line, margin, y); y += lineH })
@@ -499,7 +503,7 @@ export default function LogFaultMaintenance() {
       const imgW = (canvas.width * imgH) / canvas.height
       const imgX = margin + (w - imgW) / 2
       pdf.addImage(imgData, 'PNG', imgX, headerH, imgW, imgH)
-      pdf.save(`Manage-Equipment-${new Date().toISOString().slice(0, 10)}.pdf`)
+      pdf.save(`Equipment-${new Date().toISOString().slice(0, 10)}.pdf`)
     }).catch(() => {})
   }
   function handleSaveEditEquipment(e) {
@@ -516,7 +520,7 @@ export default function LogFaultMaintenance() {
     setAddEquipmentOpen(false)
   }
   function handleDeleteEquipment(eq) {
-    if (!window.confirm(`Delete "${eq.name}"? This cannot be undone.`)) return
+    if (!window.confirm(t('eqDeleteConfirm').replace('{name}', eq.name))) return
     removeEquipmentItem(eq.id)
     setOpenActionsId(null)
   }
@@ -655,36 +659,36 @@ export default function LogFaultMaintenance() {
   return (
     <div className={styles.page}>
       <section className={eqStyles.summarySection}>
-        <h2 className={eqStyles.summaryTitle}><i className="fas fa-chart-pie fa-fw" /> Summary</h2>
+        <h2 className={eqStyles.summaryTitle}><i className="fas fa-chart-pie fa-fw" /> {t('eqSummary')}</h2>
         <div className={eqStyles.summaryCards}>
           <button
             type="button"
             className={`${eqStyles.summaryCard} ${eqStyles.summaryCardHighFailure} ${highFailureCount > 0 ? eqStyles.summaryCardHighFailureDanger : eqStyles.summaryCardHighFailureOk}`}
             onClick={() => { setEqFilterHighFailure(true); setEquipmentOpen(true); setTimeout(() => activeTicketsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100) }}
           >
-            <span className={eqStyles.summaryCardLabel}>HIGH FAILURE EQUIPMENT</span>
+            <span className={eqStyles.summaryCardLabel}>{t('eqHighFailureEquipment')}</span>
             <div className={eqStyles.summaryCardBody}>
-              <div className={eqStyles.summaryRow}><span>Devices</span><strong>{highFailureCount}</strong></div>
-              <div className={eqStyles.summaryRowSub}>Threshold: ≥{HIGH_FAILURE_RATE_THRESHOLD} per week (twice per week)</div>
+              <div className={eqStyles.summaryRow}><span>{t('eqDevices')}</span><strong>{highFailureCount}</strong></div>
+              <div className={eqStyles.summaryRowSub}>{t('eqThresholdPerWeek').replace('{n}', HIGH_FAILURE_RATE_THRESHOLD)}</div>
             </div>
           </button>
 
           <button type="button" className={`${eqStyles.summaryCard} ${eqStyles.summaryCardWorkload}`} onClick={() => scrollToTickets('all')}>
-            <span className={eqStyles.summaryCardLabel}>WORKLOAD</span>
+            <span className={eqStyles.summaryCardLabel}>{t('eqWorkload')}</span>
             <div className={eqStyles.summaryCardBody}>
-              <div className={eqStyles.summaryRow}><span>Open Tickets</span><strong>{workloadSummary.openTickets}</strong></div>
-              <div className={eqStyles.summaryRow}><span>Fault</span><strong>{workloadSummary.fault}</strong></div>
-              <div className={eqStyles.summaryRow}><span>Maintenance (Scheduled)</span><strong>{workloadSummary.maintenanceScheduled}</strong></div>
+              <div className={eqStyles.summaryRow}><span>{t('eqOpenTickets')}</span><strong>{workloadSummary.openTickets}</strong></div>
+              <div className={eqStyles.summaryRow}><span>{t('eqFault')}</span><strong>{workloadSummary.fault}</strong></div>
+              <div className={eqStyles.summaryRow}><span>{t('eqMaintenanceScheduled')}</span><strong>{workloadSummary.maintenanceScheduled}</strong></div>
             </div>
           </button>
 
           <button type="button" className={`${eqStyles.summaryCard} ${eqStyles.summaryCardEquipmentStatus}`} onClick={() => scrollToEquipment()}>
-            <span className={eqStyles.summaryCardLabel}>EQUIPMENT STATUS</span>
+            <span className={eqStyles.summaryCardLabel}>{t('eqEquipmentStatus')}</span>
             <div className={eqStyles.summaryCardBody}>
-              <div className={eqStyles.summaryRow}><span>Active</span><strong>{equipmentStatusSummary.active}</strong></div>
-              <div className={eqStyles.summaryRow}><span>Under Maintenance</span><strong>{equipmentStatusSummary.underMaintenance}</strong></div>
-              <div className={eqStyles.summaryRow}><span>Out of Service</span><strong>{equipmentStatusSummary.outOfService}</strong></div>
-              <div className={eqStyles.summaryRowSub}>Equipment with open tickets: {equipmentStatusSummary.withOpenTickets}</div>
+              <div className={eqStyles.summaryRow}><span>{t('eqActive')}</span><strong>{equipmentStatusSummary.active}</strong></div>
+              <div className={eqStyles.summaryRow}><span>{t('eqUnderMaintenance')}</span><strong>{equipmentStatusSummary.underMaintenance}</strong></div>
+              <div className={eqStyles.summaryRow}><span>{t('eqOutOfService')}</span><strong>{equipmentStatusSummary.outOfService}</strong></div>
+              <div className={eqStyles.summaryRowSub}>{t('eqEquipmentWithOpenTickets')}: {equipmentStatusSummary.withOpenTickets}</div>
             </div>
           </button>
 
@@ -693,11 +697,11 @@ export default function LogFaultMaintenance() {
             className={`${eqStyles.summaryCard} ${eqStyles.summaryCardOverdueThisWeek} ${overdueSummary.total > 0 ? eqStyles.summaryCardOverdueDanger : eqStyles.summaryCardOverdueThisWeekOk}`}
             onClick={() => scrollToTickets(overdueSummary.total > 0 ? 'overdue' : 'this_week')}
           >
-            <span className={eqStyles.summaryCardLabel}>DUE & THIS WEEK</span>
+            <span className={eqStyles.summaryCardLabel}>{t('eqDueThisWeek')}</span>
             <div className={eqStyles.summaryCardBody}>
-              <div className={eqStyles.summaryRow}><span>Overdue</span><strong>{overdueSummary.total}</strong></div>
-              <div className={eqStyles.summaryRow}><span>Scheduled this week</span><strong>{thisWeekSummary.scheduled}</strong></div>
-              <div className={eqStyles.summaryRow}><span>Completed this week</span><strong>{thisWeekSummary.completed}</strong></div>
+              <div className={eqStyles.summaryRow}><span>{t('eqOverdue')}</span><strong>{overdueSummary.total}</strong></div>
+              <div className={eqStyles.summaryRow}><span>{t('eqScheduledThisWeek')}</span><strong>{thisWeekSummary.scheduled}</strong></div>
+              <div className={eqStyles.summaryRow}><span>{t('eqCompletedThisWeek')}</span><strong>{thisWeekSummary.completed}</strong></div>
             </div>
           </button>
         </div>
@@ -705,59 +709,59 @@ export default function LogFaultMaintenance() {
 
       <section ref={equipmentSectionRef} className={eqStyles.section}>
         <button type="button" className={eqStyles.sectionHeader} onClick={() => setEquipmentOpen((o) => !o)}>
-          <h2 className={eqStyles.sectionTitle}><i className="fas fa-wrench fa-fw" /> Manage Equipment</h2>
-          <span className={eqStyles.expandLabel}>{equipmentOpen ? 'Collapse' : 'Expand'}</span>
+          <h2 className={eqStyles.sectionTitle}><i className="fas fa-wrench fa-fw" /> {t('eqManageEquipment')}</h2>
+          <span className={eqStyles.expandLabel}>{equipmentOpen ? t('eqCollapse') : t('eqExpand')}</span>
           <span className={eqStyles.chevron}>{equipmentOpen ? '▼' : '▶'}</span>
         </button>
         {equipmentOpen && (
           <>
             <div className={eqStyles.filtersBar}>
               <div className={eqStyles.filtersRow}>
-                <span className={eqStyles.filterLabel}>Zone</span>
-                <select value={eqFilterZone} onChange={(e) => setEqFilterZone(e.target.value)} className={eqStyles.filterSelect} title="Filter by zone">
-                  <option value="">All</option>
+                <span className={eqStyles.filterLabel}>{t('eqZone')}</span>
+                <select value={eqFilterZone} onChange={(e) => setEqFilterZone(e.target.value)} className={eqStyles.filterSelect} title={t('eqZone')}>
+                  <option value="">{t('eqAll')}</option>
                   {zonesList.map((z) => (
                     <option key={z.id} value={z.id}>{z.label || z.name || z.id}</option>
                   ))}
                 </select>
               </div>
               <div className={eqStyles.filtersRow}>
-                <span className={eqStyles.filterLabel}>Status</span>
-                <select value={eqFilterStatus} onChange={(e) => setEqFilterStatus(e.target.value)} className={eqStyles.filterSelect} title="Filter by status">
-                  <option value="">All</option>
-                  <option value={EQUIPMENT_STATUS.ACTIVE}>Active</option>
-                  <option value={EQUIPMENT_STATUS.UNDER_MAINTENANCE}>Under Maintenance</option>
-                  <option value={EQUIPMENT_STATUS.OUT_OF_SERVICE}>Out of Service</option>
+                <span className={eqStyles.filterLabel}>{t('eqStatus')}</span>
+                <select value={eqFilterStatus} onChange={(e) => setEqFilterStatus(e.target.value)} className={eqStyles.filterSelect} title={t('eqStatus')}>
+                  <option value="">{t('eqAll')}</option>
+                  <option value={EQUIPMENT_STATUS.ACTIVE}>{t('eqActive')}</option>
+                  <option value={EQUIPMENT_STATUS.UNDER_MAINTENANCE}>{t('eqUnderMaintenance')}</option>
+                  <option value={EQUIPMENT_STATUS.OUT_OF_SERVICE}>{t('eqOutOfService')}</option>
                 </select>
               </div>
               <div className={eqStyles.filtersRow}>
-                <span className={eqStyles.filterLabel}>Search</span>
+                <span className={eqStyles.filterLabel}>{t('eqSearch')}</span>
                 <input type="search" value={eqFilterSearch} onChange={(e) => setEqFilterSearch(e.target.value)} placeholder={t('nameZonePlaceholder')} className={eqStyles.filterInput} />
               </div>
               {eqFilterHighFailure && (
                 <div className={eqStyles.filterChipWrap}>
-                  <span className={eqStyles.filterChip}>High Failure only</span>
-                  <button type="button" className={eqStyles.filterChipClear} onClick={() => setEqFilterHighFailure(false)} aria-label="Clear High Failure filter">×</button>
+                  <span className={eqStyles.filterChip}>{t('eqHighFailureOnly')}</span>
+                  <button type="button" className={eqStyles.filterChipClear} onClick={() => setEqFilterHighFailure(false)} aria-label={t('eqClearHighFailureFilter')}>×</button>
                 </div>
               )}
               <div className={eqStyles.filtersBarActions}>
                 <button type="button" className={eqStyles.btnPrimary} onClick={() => openCreateTicket(null)}>
-                  <i className="fas fa-plus fa-fw" /> Create Ticket
+                  <i className="fas fa-plus fa-fw" /> {t('eqCreateTicket')}
                 </button>
                 <button type="button" className={eqStyles.btnPrimary} onClick={() => setAddEquipmentOpen(true)}>
-                  <i className="fas fa-plus fa-fw" /> Add Equipment
+                  <i className="fas fa-plus fa-fw" /> {t('eqAddEquipment')}
                 </button>
               </div>
               <div className={eqStyles.filtersBarExport}>
                 <button type="button" className={eqStyles.btnSecondary} onClick={exportEquipmentPDF} disabled={filteredEquipment.length === 0}>
-                  <i className="fas fa-file-pdf fa-fw" /> Export PDF
+                  <i className="fas fa-file-pdf fa-fw" /> {t('eqExportPdf')}
                 </button>
               </div>
             </div>
             {(inspectionDueSoonCount > 0 || inspectionOverdueCount > 0) && (
               <div className={eqStyles.inspectionCounters}>
-                {inspectionDueSoonCount > 0 && <span className={eqStyles.inspectionCounterDueSoon}>Inspections Due Soon: {inspectionDueSoonCount}</span>}
-                {inspectionOverdueCount > 0 && <span className={eqStyles.inspectionCounterOverdue}>Overdue Inspections: {inspectionOverdueCount}</span>}
+                {inspectionDueSoonCount > 0 && <span className={eqStyles.inspectionCounterDueSoon}>{t('eqInspectionsDueSoon')}: {inspectionDueSoonCount}</span>}
+                {inspectionOverdueCount > 0 && <span className={eqStyles.inspectionCounterOverdue}>{t('eqOverdueInspections')}: {inspectionOverdueCount}</span>}
           </div>
             )}
             <div className={eqStyles.tableWrap} ref={equipmentTableRef}>
@@ -767,9 +771,9 @@ export default function LogFaultMaintenance() {
                     <th><button type="button" className={eqStyles.thSort} onClick={() => toggleEqSort('name')}>{t('equipmentName')} {eqSortBy === 'name' ? (eqSortDir === 'asc' ? '↑' : '↓') : ''}</button></th>
                     <th><button type="button" className={eqStyles.thSort} onClick={() => toggleEqSort('zone')}>{t('assignedZone')} {eqSortBy === 'zone' ? (eqSortDir === 'asc' ? '↑' : '↓') : ''}</button></th>
                     <th>{t('operationalStatus')}</th>
-                    <th><button type="button" className={eqStyles.thSort} onClick={() => toggleEqSort('lastInspection')}>Next Service {eqSortBy === 'lastInspection' ? (eqSortDir === 'asc' ? '↑' : '↓') : ''}</button></th>
-                    <th>Last Service</th>
-                    <th>Actions</th>
+                    <th><button type="button" className={eqStyles.thSort} onClick={() => toggleEqSort('lastInspection')}>{t('eqNextService')} {eqSortBy === 'lastInspection' ? (eqSortDir === 'asc' ? '↑' : '↓') : ''}</button></th>
+                    <th>{t('eqLastService')}</th>
+                    <th>{t('eqActions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -778,11 +782,11 @@ export default function LogFaultMaintenance() {
                       <td>
                         {e.name}
                         {highFailureIdsSet.has(e.id) && (
-                          <span className={eqStyles.highFailureIcon} title={`High Failure Rate: ${failureCountByEquipmentId[e.id] ?? 0} in ${FAILURE_WINDOW_DAYS}d (${(failureRateByEquipmentId[e.id] ?? 0).toFixed(1)}/${FAILURE_RATE_PER_DAYS}d)`} aria-label="High failure rate">⚠</span>
+                          <span className={eqStyles.highFailureIcon} title={`${t('eqHighFailureRateWarning')}: ${failureCountByEquipmentId[e.id] ?? 0} in ${FAILURE_WINDOW_DAYS}d (${(failureRateByEquipmentId[e.id] ?? 0).toFixed(1)}/${FAILURE_RATE_PER_DAYS}d)`} aria-label={t('eqHighFailureRateWarning')}>⚠</span>
                         )}
                       </td>
                       <td>{equipmentZoneLabel(e.zone)}</td>
-                      <td><span className={eqStyles.eqBadge} data-status={e.status}>{EQUIPMENT_STATUS_LABELS[e.status]}</span></td>
+                      <td><span className={eqStyles.eqBadge} data-status={e.status}>{getEquipmentStatusDisplayLabel(e.status)}</span></td>
                       <td>{e.lastCheck ?? '—'}</td>
                       <td className={eqStyles.cellServiceCycle}>{e.lastTicketCreated ?? '—'}</td>
                       <td className={eqStyles.cellActions}>
@@ -803,9 +807,9 @@ export default function LogFaultMaintenance() {
                             aria-expanded={openActionsId === e.id}
                             aria-haspopup="true"
                           >
-                            Actions <span className={eqStyles.actionsCaret}>{openActionsId === e.id ? '▲' : '▼'}</span>
+{t('eqActions')} <span className={eqStyles.actionsCaret}>{openActionsId === e.id ? '▲' : '▼'}</span>
                           </button>
-                  </div>
+                        </div>
                       </td>
                     </tr>
               ))}
@@ -817,50 +821,50 @@ export default function LogFaultMaintenance() {
       </section>
 
       <section ref={activeTicketsSectionRef} className={`${styles.section} ${styles.ticketsSection}`}>
-        <h2 className={styles.sectionTitle}><i className="fas fa-ticket fa-fw" /> Equipment Tickets</h2>
+        <h2 className={styles.sectionTitle}><i className="fas fa-ticket fa-fw" /> {t('eqEquipmentTickets')}</h2>
         <h3 className={styles.subTitle}>
-          Active Tickets
+          {t('eqActiveTickets')}
           {activeTicketsFilter !== 'all' && (
             <span className={styles.filterBadge}>
-              {activeTicketsFilter === 'overdue' ? 'Overdue only' : 'This week only'}
-              <button type="button" className={styles.filterBadgeClear} onClick={() => setActiveTicketsFilter('all')} aria-label="Show all">×</button>
+              {activeTicketsFilter === 'overdue' ? t('eqOverdueOnly') : t('eqThisWeekOnly')}
+              <button type="button" className={styles.filterBadgeClear} onClick={() => setActiveTicketsFilter('all')} aria-label={t('eqShowAll')}>×</button>
             </span>
           )}
           {eqFilterHighFailure && (
             <span className={styles.filterBadge}>
-              Fault tickets only
+              {t('eqFaultTicketsOnly')}
             </span>
           )}
         </h3>
         {activeTicketsDisplay.length === 0 ? (
           <p className={styles.hint}>
-            {activeTickets.length === 0 ? 'No active tickets. Use &quot;Create Ticket&quot; to add a fault, maintenance, or inspection.' : eqFilterHighFailure ? 'No fault tickets for high-failure equipment.' : `No tickets match the current filter (${activeTicketsFilter === 'overdue' ? 'overdue' : 'this week'}).`}
+            {activeTickets.length === 0 ? t('eqNoActiveTickets') : eqFilterHighFailure ? t('eqNoFaultTicketsHighFailure') : t('eqNoTicketsMatchFilter')}
           </p>
         ) : (
           <div className={styles.ticketCards}>
-            {activeTicketsDisplay.map((t) => {
-              const dueMs = t.dueDate ? new Date(t.dueDate + 'T12:00:00').getTime() : null
+            {activeTicketsDisplay.map((ticket) => {
+              const dueMs = ticket.dueDate ? new Date(ticket.dueDate + 'T12:00:00').getTime() : null
               const todayMs = new Date(todayStr + 'T12:00:00').getTime()
               const daysRemaining = dueMs != null ? Math.floor((dueMs - todayMs) / 86400000) : null
               const isOverdue = daysRemaining != null && daysRemaining < 0
-              const urgencyClass = t.status === 'completed' ? styles.ticketCardCompleted
-                : t.ticketType === 'fault' ? styles.ticketCardUrgencyFault
+              const urgencyClass = ticket.status === 'completed' ? styles.ticketCardCompleted
+                : ticket.ticketType === 'fault' ? styles.ticketCardUrgencyFault
                 : isOverdue ? styles.ticketCardUrgencyOverdue
                 : daysRemaining != null && daysRemaining <= 2 ? styles.ticketCardUrgencyRed
                 : daysRemaining != null && daysRemaining <= 7 ? styles.ticketCardUrgencyYellow
                 : styles.ticketCardUrgencyGreen
-              const typeClass = t.ticketType === 'fault' ? styles.ticketCardTypeFault : t.ticketType === 'preventive' ? styles.ticketCardTypePreventive : t.ticketType === 'corrective' ? styles.ticketCardTypeCorrective : styles.ticketCardTypeInspection
+              const typeClass = ticket.ticketType === 'fault' ? styles.ticketCardTypeFault : ticket.ticketType === 'preventive' ? styles.ticketCardTypePreventive : ticket.ticketType === 'corrective' ? styles.ticketCardTypeCorrective : styles.ticketCardTypeInspection
               return (
-                <div key={`${t.source}-${t.id}`} className={`${styles.ticketCard} ${urgencyClass}`}>
-                  <div className={styles.ticketCardTitle}>{t.equipmentName}</div>
-                  <span className={`${styles.ticketCardType} ${typeClass}`}>{t.ticketType === 'fault' ? 'Fault' : t.ticketType === 'preventive' ? 'Preventive' : t.ticketType === 'corrective' ? 'Corrective' : 'Inspection'}</span>
-                  <div className={styles.ticketCardMeta}>Status: {t.status === 'open' ? 'Open' : 'Scheduled'}</div>
-                  {t.dueDate && <div className={styles.ticketCardMeta}>Due: {t.dueDate}</div>}
-                  {daysRemaining != null && <div className={styles.ticketCardMeta}>Days remaining: {isOverdue ? `Overdue (${Math.abs(daysRemaining)})` : daysRemaining}</div>}
-                  <div className={styles.ticketCardMeta}>Created: {new Date(t.createdAt).toLocaleDateString()}</div>
-                  {t.severity && <div className={styles.ticketCardMeta}>Severity: {SEVERITY_OPTIONS.find((s) => s.id === t.severity)?.label ?? t.severity}</div>}
+                <div key={`${ticket.source}-${ticket.id}`} className={`${styles.ticketCard} ${urgencyClass}`}>
+                  <div className={styles.ticketCardTitle}>{ticket.equipmentName}</div>
+                  <span className={`${styles.ticketCardType} ${typeClass}`}>{ticket.ticketType === 'fault' ? t('eqTypeFault') : ticket.ticketType === 'preventive' ? t('eqTypePreventive') : ticket.ticketType === 'corrective' ? t('eqTypeCorrective') : t('eqTypeInspection')}</span>
+                  <div className={styles.ticketCardMeta}>{t('eqStatus')}: {ticket.status === 'open' ? t('eqStatusOpen') : t('eqStatusScheduled')}</div>
+                  {ticket.dueDate && <div className={styles.ticketCardMeta}>{t('eqDue')}: {ticket.dueDate}</div>}
+                  {daysRemaining != null && <div className={styles.ticketCardMeta}>{t('eqDaysRemaining')}: {isOverdue ? `${t('eqOverdue')} (${Math.abs(daysRemaining)})` : daysRemaining}</div>}
+                  <div className={styles.ticketCardMeta}>{t('eqCreated')}: {new Date(ticket.createdAt).toLocaleDateString()}</div>
+                  {ticket.severity && <div className={styles.ticketCardMeta}>{t('eqSeverity')}: {getSeverityDisplayLabel(ticket.severity)}</div>}
                   <div className={styles.ticketCardActions}>
-                    <button type="button" className={eqStyles.btnPrimary} onClick={() => { setResolveTicket(t); setResolveForm({ completionNote: '', spareParts: '', resolutionPhoto: null }); }}>Resolve</button>
+                    <button type="button" className={eqStyles.btnPrimary} onClick={() => { setResolveTicket(ticket); setResolveForm({ completionNote: '', spareParts: '', resolutionPhoto: null }); }}>{t('eqResolve')}</button>
                   </div>
                 </div>
               )
@@ -871,45 +875,45 @@ export default function LogFaultMaintenance() {
           <>
             <button type="button" className={styles.collapseHeader} onClick={() => setCompletedTicketsOpen((o) => !o)} aria-expanded={completedTicketsOpen}>
               <span className={styles.collapseCaret} aria-hidden>▼</span>
-              <span>Completed Tickets ({completedTickets.length})</span>
+              <span>{t('eqCompletedTickets')} ({completedTickets.length})</span>
             </button>
             {completedTicketsOpen && (
               <>
                 <div className={styles.completedFilters}>
-                  <label className={styles.completedFilterLabel}>Filter:</label>
-                  <select value={completedFilterEquipment} onChange={(e) => setCompletedFilterEquipment(e.target.value)} className={styles.completedFilterSelect} title="Equipment">
-                    <option value="">All equipment</option>
+                  <label className={styles.completedFilterLabel}>{t('eqFilter')}:</label>
+                  <select value={completedFilterEquipment} onChange={(e) => setCompletedFilterEquipment(e.target.value)} className={styles.completedFilterSelect} title={t('eqEquipmentLabel')}>
+                    <option value="">{t('eqAllEquipment')}</option>
                     {equipment.map((eq) => (
                       <option key={eq.id} value={eq.id}>{eq.name}</option>
                     ))}
                   </select>
-                  <select value={completedFilterType} onChange={(e) => setCompletedFilterType(e.target.value)} className={styles.completedFilterSelect} title="Ticket type">
-                    <option value="">All types</option>
-                    <option value="fault">Fault</option>
-                    <option value="preventive">Preventive</option>
-                    <option value="corrective">Corrective</option>
-                    <option value="inspection">Inspection</option>
+                  <select value={completedFilterType} onChange={(e) => setCompletedFilterType(e.target.value)} className={styles.completedFilterSelect} title={t('eqTicketType')}>
+                    <option value="">{t('eqAllTypes')}</option>
+                    <option value="fault">{t('eqTypeFault')}</option>
+                    <option value="preventive">{t('eqTypePreventive')}</option>
+                    <option value="corrective">{t('eqTypeCorrective')}</option>
+                    <option value="inspection">{t('eqTypeInspection')}</option>
                   </select>
-                  <span className={styles.completedFilterLabel}>Resolved from</span>
+                  <span className={styles.completedFilterLabel}>{t('eqResolvedFrom')}</span>
                   <input type="date" value={completedFilterDateFrom} onChange={(e) => setCompletedFilterDateFrom(e.target.value)} className={styles.completedFilterInput} />
-                  <span className={styles.completedFilterLabel}>to</span>
+                  <span className={styles.completedFilterLabel}>{t('eqTo')}</span>
                   <input type="date" value={completedFilterDateTo} onChange={(e) => setCompletedFilterDateTo(e.target.value)} className={styles.completedFilterInput} />
         </div>
                 <div className={styles.ticketCards}>
                   {completedTicketsFiltered.length === 0 ? (
-                    <p className={styles.hint}>No completed tickets match the current filters.</p>
+                    <p className={styles.hint}>{t('eqNoCompletedMatch')}</p>
                   ) : (
-                    completedTicketsFiltered.map((t) => (
+                    completedTicketsFiltered.map((ticket) => (
                       <button
                         type="button"
-                        key={`${t.source}-${t.id}`}
+                        key={`${ticket.source}-${ticket.id}`}
                         className={`${styles.ticketCard} ${styles.ticketCardCompleted} ${styles.ticketCardClickable}`}
-                        onClick={() => setSelectedCompletedTicket(t)}
+                        onClick={() => setSelectedCompletedTicket(ticket)}
                       >
-                        <div className={styles.ticketCardTitle}>{t.equipmentName}</div>
-                        <span className={`${styles.ticketCardType} ${t.ticketType === 'fault' ? styles.ticketCardTypeFault : t.ticketType === 'preventive' ? styles.ticketCardTypePreventive : t.ticketType === 'corrective' ? styles.ticketCardTypeCorrective : styles.ticketCardTypeInspection}`}>{t.ticketType === 'fault' ? 'Fault' : t.ticketType === 'preventive' ? 'Preventive' : t.ticketType === 'corrective' ? 'Corrective' : 'Inspection'}</span>
-                        <div className={styles.ticketCardMeta}>Resolved: {(t.resolvedAt || t.createdAt) ? new Date(t.resolvedAt || t.createdAt).toLocaleDateString() : '—'}</div>
-                        <span className={styles.ticketCardViewHint}>Click to view details</span>
+                        <div className={styles.ticketCardTitle}>{ticket.equipmentName}</div>
+                        <span className={`${styles.ticketCardType} ${ticket.ticketType === 'fault' ? styles.ticketCardTypeFault : ticket.ticketType === 'preventive' ? styles.ticketCardTypePreventive : ticket.ticketType === 'corrective' ? styles.ticketCardTypeCorrective : styles.ticketCardTypeInspection}`}>{ticket.ticketType === 'fault' ? t('eqTypeFault') : ticket.ticketType === 'preventive' ? t('eqTypePreventive') : ticket.ticketType === 'corrective' ? t('eqTypeCorrective') : t('eqTypeInspection')}</span>
+                        <div className={styles.ticketCardMeta}>{t('eqResolved')}: {(ticket.resolvedAt || ticket.createdAt) ? new Date(ticket.resolvedAt || ticket.createdAt).toLocaleDateString() : '—'}</div>
+                        <span className={styles.ticketCardViewHint}>{t('eqClickToViewDetails')}</span>
           </button>
                     ))
                   )}
@@ -935,10 +939,10 @@ export default function LogFaultMaintenance() {
               zIndex: 9999,
             }}
           >
-            <button type="button" className={eqStyles.actionsItem} onClick={() => { openCreateTicket(openEquipment); closeMenu(); }}><i className="fas fa-plus fa-fw" /> Create Ticket</button>
-            <button type="button" className={eqStyles.actionsItem} onClick={() => { setViewHistoryEquipment(openEquipment); closeMenu(); }}>View History</button>
-            <button type="button" className={eqStyles.actionsItem} onClick={() => { setEditEquipment({ ...openEquipment, zone: (openEquipment.zone || '').toLowerCase() }); closeMenu(); }}>Edit</button>
-            <button type="button" className={`${eqStyles.actionsItem} ${eqStyles.actionsItemDanger}`} onClick={() => { handleDeleteEquipment(openEquipment); closeMenu(); }}>Delete</button>
+            <button type="button" className={eqStyles.actionsItem} onClick={() => { openCreateTicket(openEquipment); closeMenu(); }}><i className="fas fa-plus fa-fw" /> {t('eqCreateTicket')}</button>
+            <button type="button" className={eqStyles.actionsItem} onClick={() => { setViewHistoryEquipment(openEquipment); closeMenu(); }}>{t('eqViewHistory')}</button>
+            <button type="button" className={eqStyles.actionsItem} onClick={() => { setEditEquipment({ ...openEquipment, zone: (openEquipment.zone || '').toLowerCase() }); closeMenu(); }}>{t('eqEdit')}</button>
+            <button type="button" className={`${eqStyles.actionsItem} ${eqStyles.actionsItemDanger}`} onClick={() => { handleDeleteEquipment(openEquipment); closeMenu(); }}>{t('eqDelete')}</button>
           </div>,
           document.body
         )
@@ -948,7 +952,7 @@ export default function LogFaultMaintenance() {
       {editEquipment && (
         <div className={eqStyles.modalOverlay} onClick={() => setEditEquipment(null)}>
           <div className={eqStyles.modal} onClick={(e) => e.stopPropagation()}>
-            <h3 className={eqStyles.modalTitle}>Edit equipment – {editEquipment.name}</h3>
+            <h3 className={eqStyles.modalTitle}>{t('eqEditEquipment')} – {editEquipment.name}</h3>
             <form onSubmit={handleSaveEditEquipment} className={eqStyles.modalForm}>
               <div className={eqStyles.formRow}>
                 <label>{t('equipmentName')}</label>
@@ -964,18 +968,18 @@ export default function LogFaultMaintenance() {
               <div className={eqStyles.formRow}>
                 <label>{t('operationalStatus')}</label>
                 <select value={editEquipment.status || EQUIPMENT_STATUS.ACTIVE} onChange={(e) => setEditEquipment((p) => ({ ...p, status: e.target.value }))} className={eqStyles.input}>
-                  <option value={EQUIPMENT_STATUS.ACTIVE}>Active</option>
-                  <option value={EQUIPMENT_STATUS.UNDER_MAINTENANCE}>Under Maintenance</option>
-                  <option value={EQUIPMENT_STATUS.OUT_OF_SERVICE}>Out of Service</option>
+                  <option value={EQUIPMENT_STATUS.ACTIVE}>{t('eqActive')}</option>
+                  <option value={EQUIPMENT_STATUS.UNDER_MAINTENANCE}>{t('eqUnderMaintenance')}</option>
+                  <option value={EQUIPMENT_STATUS.OUT_OF_SERVICE}>{t('eqOutOfService')}</option>
                 </select>
               </div>
               <div className={eqStyles.formRow}>
-                <label>Last inspection (date)</label>
+                <label>{t('eqLastInspectionDate')}</label>
                 <input type="date" value={editEquipment.lastInspection || ''} onChange={(e) => setEditEquipment((p) => ({ ...p, lastInspection: e.target.value || undefined }))} className={eqStyles.input} />
               </div>
               <div className={eqStyles.modalActions}>
-                <button type="button" className={eqStyles.btnSecondary} onClick={() => setEditEquipment(null)}>Cancel</button>
-                <button type="submit" className={eqStyles.btnPrimary}>Save</button>
+                <button type="button" className={eqStyles.btnSecondary} onClick={() => setEditEquipment(null)}>{t('eqCancel')}</button>
+                <button type="submit" className={eqStyles.btnPrimary}>{t('eqSave')}</button>
               </div>
             </form>
           </div>
@@ -987,14 +991,14 @@ export default function LogFaultMaintenance() {
         <div className={eqStyles.modalOverlay} onClick={() => { setCreateTicketOpen(false); setCreateTicketEquipment(null); }}>
           <div className={eqStyles.modal} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
             <h3 className={eqStyles.modalTitle}>
-              Create Equipment Ticket{createTicketEquipment ? ` – ${createTicketEquipment.name}` : ''}
+              {t('eqCreateEquipmentTicket')}{createTicketEquipment ? ` – ${createTicketEquipment.name}` : ''}
             </h3>
             <form onSubmit={submitCreateTicket} className={eqStyles.modalForm}>
               {!createTicketEquipment && (
                 <div className={eqStyles.formRow}>
-                  <label>Equipment <span className={eqStyles.required}>*</span></label>
+                  <label>{t('eqEquipmentLabel')} <span className={eqStyles.required}>*</span></label>
                   <select value={ticketForm.equipmentId} onChange={(e) => setTicketForm((f) => ({ ...f, equipmentId: e.target.value }))} required className={eqStyles.input}>
-                    <option value="">Select equipment</option>
+                    <option value="">{t('eqSelectEquipment')}</option>
                     {equipment.map((eq) => (
                       <option key={eq.id} value={eq.id}>{eq.name}</option>
                     ))}
@@ -1002,37 +1006,37 @@ export default function LogFaultMaintenance() {
                 </div>
               )}
               <div className={eqStyles.formRow}>
-                <label>Ticket Type <span className={eqStyles.required}>*</span></label>
+                <label>{t('eqTicketType')} <span className={eqStyles.required}>*</span></label>
                 <select value={ticketForm.ticketType} onChange={(e) => setTicketForm((f) => ({ ...f, ticketType: e.target.value }))} required className={eqStyles.input}>
-                  <option value="">Select type</option>
+                  <option value="">{t('eqSelectType')}</option>
                   {TICKET_TYPES.map((ty) => (
-                    <option key={ty.id} value={ty.id}>{ty.label}</option>
+                    <option key={ty.id} value={ty.id}>{getTicketTypeDisplayLabel(ty.id)}</option>
                   ))}
                 </select>
               </div>
               {ticketForm.ticketType === 'fault' && (
                 <>
                   <div className={eqStyles.formRow}>
-                    <label>Fault Category</label>
+                    <label>{t('eqFaultCategory')}</label>
                     <select value={ticketForm.category} onChange={(e) => setTicketForm((f) => ({ ...f, category: e.target.value }))} className={eqStyles.input}>
-                      {FAULT_CATEGORIES.map((c) => (<option key={c.id} value={c.id}>{c.label}</option>))}
+                      {FAULT_CATEGORIES.map((c) => (<option key={c.id} value={c.id}>{getFaultCategoryDisplayLabel(c.id)}</option>))}
                     </select>
                   </div>
                   <div className={eqStyles.formRow}>
-                    <label>Severity</label>
+                    <label>{t('eqSeverityLabel')}</label>
                     <select value={ticketForm.severity} onChange={(e) => setTicketForm((f) => ({ ...f, severity: e.target.value }))} className={eqStyles.input}>
-                      {SEVERITY_OPTIONS.map((s) => (<option key={s.id} value={s.id}>{s.label}</option>))}
+                      {SEVERITY_OPTIONS.map((s) => (<option key={s.id} value={s.id}>{getSeverityDisplayLabel(s.id)}</option>))}
                     </select>
                   </div>
                   <div className={eqStyles.formRow}>
-                    <label>Stop Work?</label>
+                    <label>{t('eqStopWork')}</label>
                     <select value={ticketForm.stopWork ? 'yes' : 'no'} onChange={(e) => setTicketForm((f) => ({ ...f, stopWork: e.target.value === 'yes' }))} className={eqStyles.input}>
-                  <option value="no">No</option>
-                  <option value="yes">Yes</option>
+                  <option value="no">{t('eqNo')}</option>
+                  <option value="yes">{t('eqYes')}</option>
                 </select>
               </div>
                   <div className={eqStyles.formRow}>
-                    <label>Description <span className={eqStyles.required}>*</span></label>
+                    <label>{t('eqDescription')} <span className={eqStyles.required}>*</span></label>
                     <textarea value={ticketForm.description} onChange={(e) => setTicketForm((f) => ({ ...f, description: e.target.value }))} required rows={3} className={eqStyles.input} placeholder={t('describeFault')} />
                   </div>
                 </>
@@ -1040,19 +1044,19 @@ export default function LogFaultMaintenance() {
               {(ticketForm.ticketType === 'preventive' || ticketForm.ticketType === 'corrective') && (
                 <>
                   <div className={eqStyles.formRow}>
-                    <label>Planned Date <span className={eqStyles.required}>*</span></label>
+                    <label>{t('eqPlannedDate')} <span className={eqStyles.required}>*</span></label>
                     <input type="date" value={ticketForm.plannedDate} onChange={(e) => setTicketForm((f) => ({ ...f, plannedDate: e.target.value }))} required className={eqStyles.input} />
                   </div>
                   {ticketForm.ticketType === 'corrective' && (
                     <div className={eqStyles.formRow}>
-                      <label>Priority</label>
+                      <label>{t('eqPriority')}</label>
                       <select value={ticketForm.priority} onChange={(e) => setTicketForm((f) => ({ ...f, priority: e.target.value }))} className={eqStyles.input}>
                         {PRIORITY_OPTIONS.map((p) => (<option key={p.id} value={p.id}>{p.label}</option>))}
                       </select>
                     </div>
                   )}
                   <div className={eqStyles.formRow}>
-                    <label>Notes</label>
+                    <label>{t('eqNotes')}</label>
                     <textarea value={ticketForm.notes} onChange={(e) => setTicketForm((f) => ({ ...f, notes: e.target.value }))} rows={2} className={eqStyles.input} placeholder={t('optionalNotes')} />
                   </div>
                 </>
@@ -1091,8 +1095,8 @@ export default function LogFaultMaintenance() {
                 </>
               )}
               <div className={eqStyles.modalActions}>
-                <button type="button" className={eqStyles.btnSecondary} onClick={() => { setCreateTicketOpen(false); setCreateTicketEquipment(null); }}>Cancel</button>
-                <button type="submit" className={eqStyles.btnPrimary}>Create Ticket</button>
+                <button type="button" className={eqStyles.btnSecondary} onClick={() => { setCreateTicketOpen(false); setCreateTicketEquipment(null); }}>{t('eqCancel')}</button>
+                <button type="submit" className={eqStyles.btnPrimary}>{t('eqCreateTicket')}</button>
               </div>
             </form>
           </div>
@@ -1104,58 +1108,58 @@ export default function LogFaultMaintenance() {
         <div className={eqStyles.modalOverlay} onClick={() => setSelectedCompletedTicket(null)}>
           <div className={eqStyles.modal} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
             <div className={eqStyles.historyModalHeader}>
-              <h3 className={eqStyles.modalTitle}>Completed Ticket – {selectedCompletedTicket.equipmentName}</h3>
-              <button type="button" className={eqStyles.widgetListClose} onClick={() => setSelectedCompletedTicket(null)} aria-label="Close">×</button>
+              <h3 className={eqStyles.modalTitle}>{t('eqCompletedTicketTitle')} – {selectedCompletedTicket.equipmentName}</h3>
+              <button type="button" className={eqStyles.widgetListClose} onClick={() => setSelectedCompletedTicket(null)} aria-label={t('eqClose')}>×</button>
             </div>
             <div className={eqStyles.historyModalBody}>
               <section className={eqStyles.historySection}>
                 <dl className={eqStyles.historyMeta}>
-                  <dt>Ticket type</dt>
-                  <dd>{selectedCompletedTicket.ticketType === 'fault' ? 'Fault' : selectedCompletedTicket.ticketType === 'preventive' ? 'Preventive Maintenance' : selectedCompletedTicket.ticketType === 'corrective' ? 'Corrective Maintenance' : 'Inspection'}</dd>
-                  <dt>Status</dt>
-                  <dd>Completed</dd>
-                  <dt>Created</dt>
+                  <dt>{t('eqTicketType')}</dt>
+                  <dd>{selectedCompletedTicket.ticketType === 'fault' ? t('eqTypeFault') : selectedCompletedTicket.ticketType === 'preventive' ? t('eqPreventiveMaintenance') : selectedCompletedTicket.ticketType === 'corrective' ? t('eqCorrectiveMaintenance') : t('eqTypeInspection')}</dd>
+                  <dt>{t('eqStatus')}</dt>
+                  <dd>{t('eqCompleted')}</dd>
+                  <dt>{t('eqCreated')}</dt>
                   <dd>{selectedCompletedTicket.createdAt ? new Date(selectedCompletedTicket.createdAt).toLocaleString() : '—'}</dd>
                   {selectedCompletedTicket.dueDate && (
                     <>
-                      <dt>Due date</dt>
+                      <dt>{t('eqDueDate')}</dt>
                       <dd>{selectedCompletedTicket.dueDate}</dd>
                     </>
                   )}
-                  <dt>Resolved at</dt>
+                  <dt>{t('eqResolvedAt')}</dt>
                   <dd>{(selectedCompletedTicket.resolvedAt || selectedCompletedTicket.createdAt) ? new Date(selectedCompletedTicket.resolvedAt || selectedCompletedTicket.createdAt).toLocaleString() : '—'}</dd>
                   {selectedCompletedTicket.severity && (
                     <>
-                      <dt>Severity</dt>
-                      <dd>{SEVERITY_OPTIONS.find((s) => s.id === selectedCompletedTicket.severity)?.label ?? selectedCompletedTicket.severity}</dd>
+                      <dt>{t('eqSeverity')}</dt>
+                      <dd>{getSeverityDisplayLabel(selectedCompletedTicket.severity)}</dd>
                     </>
                   )}
                   {(selectedCompletedTicket.description || selectedCompletedTicket.notes) && (
                     <>
-                      <dt>{selectedCompletedTicket.ticketType === 'fault' ? 'Description' : 'Notes'}</dt>
+                      <dt>{selectedCompletedTicket.ticketType === 'fault' ? t('eqDescription') : t('eqNotes')}</dt>
                       <dd className={styles.detailNote}>{selectedCompletedTicket.description || selectedCompletedTicket.notes || '—'}</dd>
                     </>
                   )}
-                  <dt>Completion note</dt>
+                  <dt>{t('eqCompletionNote')}</dt>
                   <dd className={styles.detailNote}>{selectedCompletedTicket.resolutionNote || '—'}</dd>
                   {selectedCompletedTicket.resolutionSpareParts && (
                     <>
-                      <dt>Spare parts used</dt>
+                      <dt>{t('eqSparePartsUsed')}</dt>
                       <dd>{selectedCompletedTicket.resolutionSpareParts}</dd>
                     </>
                   )}
-                  <dt>Photos</dt>
+                  <dt>{t('eqPhotos')}</dt>
                   <dd>
                     {selectedCompletedTicket.resolutionPhoto ? (
                       <img src={selectedCompletedTicket.resolutionPhoto} alt="Resolution" className={styles.resolutionPhoto} />
                     ) : (
-                      <span className={styles.detailMuted}>No photos attached</span>
+                      <span className={styles.detailMuted}>{t('eqNoPhotosAttached')}</span>
                     )}
                   </dd>
                 </dl>
               </section>
               <div className={eqStyles.modalActions}>
-                <button type="button" className={eqStyles.btnSecondary} onClick={() => setSelectedCompletedTicket(null)}>Close</button>
+                <button type="button" className={eqStyles.btnSecondary} onClick={() => setSelectedCompletedTicket(null)}>{t('eqClose')}</button>
               </div>
             </div>
           </div>
@@ -1166,24 +1170,24 @@ export default function LogFaultMaintenance() {
       {resolveTicket && (
         <div className={eqStyles.modalOverlay} onClick={() => { setResolveTicket(null); setResolveForm({ completionNote: '', spareParts: '', resolutionPhoto: null }); }}>
           <div className={eqStyles.modal} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
-            <h3 className={eqStyles.modalTitle}>Resolve Ticket – {resolveTicket.equipmentName}</h3>
+            <h3 className={eqStyles.modalTitle}>{t('eqResolveTicket')} – {resolveTicket.equipmentName}</h3>
             <form onSubmit={submitResolve} className={eqStyles.modalForm}>
               <div className={eqStyles.formRow}>
-                <label>Completion Note <span className={eqStyles.required}>*</span></label>
-                <textarea value={resolveForm.completionNote} onChange={(e) => setResolveForm((f) => ({ ...f, completionNote: e.target.value }))} required rows={4} className={eqStyles.input} placeholder="Describe what was done..." />
+                <label>{t('eqCompletionNote')} <span className={eqStyles.required}>*</span></label>
+                <textarea value={resolveForm.completionNote} onChange={(e) => setResolveForm((f) => ({ ...f, completionNote: e.target.value }))} required rows={4} className={eqStyles.input} placeholder={t('eqDescribeWhatDone')} />
               </div>
               <div className={eqStyles.formRow}>
-                <label>Spare Parts Used (optional)</label>
-                <input type="text" value={resolveForm.spareParts} onChange={(e) => setResolveForm((f) => ({ ...f, spareParts: e.target.value }))} className={eqStyles.input} placeholder="e.g. Belt, bearing" />
+                <label>{t('eqSparePartsUsed')}</label>
+                <input type="text" value={resolveForm.spareParts} onChange={(e) => setResolveForm((f) => ({ ...f, spareParts: e.target.value }))} className={eqStyles.input} placeholder={t('eqSparePartsPlaceholder')} />
               </div>
               <div className={eqStyles.formRow}>
-                <label>Upload Photo (optional)</label>
+                <label>{t('eqUploadPhoto')}</label>
                 <input type="file" accept="image/*" onChange={handleResolvePhotoChange} className={eqStyles.input} />
                 {resolveForm.resolutionPhoto && <img src={resolveForm.resolutionPhoto} alt="Attached" className={styles.resolvePhotoPreview} />}
               </div>
               <div className={eqStyles.modalActions}>
-                <button type="button" className={eqStyles.btnSecondary} onClick={() => { setResolveTicket(null); setResolveForm({ completionNote: '', spareParts: '', resolutionPhoto: null }); }}>Cancel</button>
-                <button type="submit" className={eqStyles.btnPrimary}>Save &amp; Complete</button>
+                <button type="button" className={eqStyles.btnSecondary} onClick={() => { setResolveTicket(null); setResolveForm({ completionNote: '', spareParts: '', resolutionPhoto: null }); }}>{t('eqCancel')}</button>
+                <button type="submit" className={eqStyles.btnPrimary}>{t('eqSaveAndComplete')}</button>
               </div>
             </form>
           </div>
@@ -1195,43 +1199,43 @@ export default function LogFaultMaintenance() {
         <div className={eqStyles.modalOverlay} onClick={() => setViewHistoryEquipment(null)}>
           <div className={eqStyles.historyModal} onClick={(e) => e.stopPropagation()}>
             <div className={eqStyles.historyModalHeader}>
-              <h3 className={eqStyles.modalTitle}>View History – {viewHistoryEquipment.name}</h3>
-              <button type="button" className={eqStyles.widgetListClose} onClick={() => setViewHistoryEquipment(null)} aria-label="Close">×</button>
+              <h3 className={eqStyles.modalTitle}>{t('eqViewHistoryTitle')} – {viewHistoryEquipment.name}</h3>
+              <button type="button" className={eqStyles.widgetListClose} onClick={() => setViewHistoryEquipment(null)} aria-label={t('eqClose')}>×</button>
             </div>
             <div className={eqStyles.historyModalBody}>
               <section className={eqStyles.historySection}>
-                <h4 className={eqStyles.historySectionTitle}>Equipment</h4>
+                <h4 className={eqStyles.historySectionTitle}>{t('eqEquipment')}</h4>
                 <dl className={eqStyles.historyMeta}>
                   <dt>{t('assignedZone')}</dt><dd>{equipmentZoneLabel(viewHistoryEquipment.zone)}</dd>
-                  <dt>{t('operationalStatus')}</dt><dd><span className={eqStyles.eqBadge} data-status={viewHistoryEquipment.status}>{EQUIPMENT_STATUS_LABELS[viewHistoryEquipment.status]}</span></dd>
-                  <dt>Next inspection</dt>
+                  <dt>{t('operationalStatus')}</dt><dd><span className={eqStyles.eqBadge} data-status={viewHistoryEquipment.status}>{getEquipmentStatusDisplayLabel(viewHistoryEquipment.status)}</span></dd>
+                  <dt>{t('eqNextInspection')}</dt>
                   <dd>
-                    {viewHistoryEquipment.inspectionStatus == null ? <span className={eqStyles.inspectionBadgeNone}>Not scheduled</span> : viewHistoryEquipment.inspectionStatus === 'ok' ? <span className={eqStyles.inspectionBadgeOk}>On track</span> : viewHistoryEquipment.inspectionStatus === 'due_soon' ? <span className={eqStyles.inspectionBadgeDueSoon}>Due Soon</span> : <span className={eqStyles.inspectionBadgeOverdue}>Overdue</span>}
+                    {viewHistoryEquipment.inspectionStatus == null ? <span className={eqStyles.inspectionBadgeNone}>{t('eqNotScheduled')}</span> : viewHistoryEquipment.inspectionStatus === 'ok' ? <span className={eqStyles.inspectionBadgeOk}>{t('eqOnTrack')}</span> : viewHistoryEquipment.inspectionStatus === 'due_soon' ? <span className={eqStyles.inspectionBadgeDueSoon}>{t('eqDueSoon')}</span> : <span className={eqStyles.inspectionBadgeOverdue}>{t('eqOverdue')}</span>}
                   </dd>
                 </dl>
               </section>
               {historyData && (
                 <>
                   <section className={eqStyles.historySection}>
-                    <h4 className={eqStyles.historySectionTitle}>Summary (last 90 days)</h4>
+                    <h4 className={eqStyles.historySectionTitle}>{t('eqSummaryLast90Days')}</h4>
                     <dl className={eqStyles.historyMeta}>
-                      <dt>Total fault events</dt><dd>{historyData.totalFaults90}</dd>
-                      <dt>Total maintenance events</dt><dd>{historyData.totalMaintenance90}</dd>
-                      <dt>Last maintenance date</dt><dd>{historyData.lastMaintenanceDate ? new Date(historyData.lastMaintenanceDate).toLocaleDateString() : '—'}</dd>
-                      <dt>Last inspection date</dt><dd>{historyData.lastInspectionDate ? new Date(historyData.lastInspectionDate).toLocaleDateString() : '—'}</dd>
+                      <dt>{t('eqTotalFaultEvents')}</dt><dd>{historyData.totalFaults90}</dd>
+                      <dt>{t('eqTotalMaintenanceEvents')}</dt><dd>{historyData.totalMaintenance90}</dd>
+                      <dt>{t('eqLastMaintenanceDate')}</dt><dd>{historyData.lastMaintenanceDate ? new Date(historyData.lastMaintenanceDate).toLocaleDateString() : '—'}</dd>
+                      <dt>{t('eqLastInspectionDateLabel')}</dt><dd>{historyData.lastInspectionDate ? new Date(historyData.lastInspectionDate).toLocaleDateString() : '—'}</dd>
                     </dl>
-                    {historyData.faults30Count >= 3 && <div className={eqStyles.historyWarning}>⚠ High Failure Rate ({historyData.faults30Count} events in 30 days)</div>}
+                    {historyData.faults30Count >= 3 && <div className={eqStyles.historyWarning}>⚠ {t('eqHighFailureRateWarning')} ({historyData.faults30Count} events in 30 days)</div>}
                   </section>
                   <section className={eqStyles.historySection}>
-                    <h4 className={eqStyles.historySectionTitle}>Timeline (last 10 events)</h4>
+                    <h4 className={eqStyles.historySectionTitle}>{t('eqTimeline')}</h4>
                     <div className={eqStyles.historyTimeline}>
-                      {historyData.timeline.length === 0 ? <p className={eqStyles.historyEmpty}>No events</p> : historyData.timeline.map((ev, idx) => (
+                      {historyData.timeline.length === 0 ? <p className={eqStyles.historyEmpty}>{t('eqNoEvents')}</p> : historyData.timeline.map((ev, idx) => (
                         <div key={idx} className={ev.type === 'fault' ? eqStyles.historyEventFault : ev.type === 'maintenance' || ev.type === 'maintenance_completed' ? eqStyles.historyEventMaintenance : eqStyles.historyEventInspection}>
                           <span className={eqStyles.historyEventDate}>{ev.date ? new Date(ev.date).toLocaleDateString() : '—'}</span>
-                          <span className={eqStyles.historyEventType}>{ev.type === 'fault' ? 'Fault' : ev.type === 'maintenance_completed' ? 'Completed' : ev.type === 'maintenance' ? 'Maintenance' : 'Inspection'}</span>
-                          {ev.severity != null && <span className={eqStyles.historyEventMeta}>{SEVERITY_OPTIONS.find((s) => s.id === ev.severity)?.label ?? ev.severity}</span>}
-                          {ev.status != null && <span className={eqStyles.historyEventMeta}>{ev.status === FAULT_STATUS_RESOLVED ? 'Resolved' : 'Open'}</span>}
-                          {ev.resolutionNote && <span className={eqStyles.historyEventMeta}>Resolution: {ev.resolutionNote}</span>}
+                          <span className={eqStyles.historyEventType}>{ev.type === 'fault' ? t('eqTypeFault') : ev.type === 'maintenance_completed' ? t('eqCompleted') : ev.type === 'maintenance' ? t('eqMaintenance') : t('eqTypeInspection')}</span>
+                          {ev.severity != null && <span className={eqStyles.historyEventMeta}>{getSeverityDisplayLabel(ev.severity)}</span>}
+                          {ev.status != null && <span className={eqStyles.historyEventMeta}>{ev.status === FAULT_STATUS_RESOLVED ? t('eqResolved') : t('eqOpen')}</span>}
+                          {ev.resolutionNote && <span className={eqStyles.historyEventMeta}>{t('eqResolution')}: {ev.resolutionNote}</span>}
                           {ev.notes && <span className={eqStyles.historyEventMeta}>{ev.notes}</span>}
                           {ev.description && <span className={eqStyles.historyEventDesc}>{ev.description}</span>}
                         </div>
@@ -1265,18 +1269,18 @@ export default function LogFaultMaintenance() {
               <div className={eqStyles.formRow}>
                 <label>{t('operationalStatus')}</label>
                 <select value={newEquipment.status} onChange={(e) => setNewEquipment((p) => ({ ...p, status: e.target.value }))} className={eqStyles.input}>
-                  <option value={EQUIPMENT_STATUS.ACTIVE}>Active</option>
-                  <option value={EQUIPMENT_STATUS.UNDER_MAINTENANCE}>Under Maintenance</option>
-                  <option value={EQUIPMENT_STATUS.OUT_OF_SERVICE}>Out of Service</option>
+                  <option value={EQUIPMENT_STATUS.ACTIVE}>{t('eqActive')}</option>
+                  <option value={EQUIPMENT_STATUS.UNDER_MAINTENANCE}>{t('eqUnderMaintenance')}</option>
+                  <option value={EQUIPMENT_STATUS.OUT_OF_SERVICE}>{t('eqOutOfService')}</option>
                 </select>
               </div>
               <div className={eqStyles.formRow}>
-                <label>Last inspection (date, optional)</label>
+                <label>{t('eqLastInspectionOptional')}</label>
                 <input type="date" value={newEquipment.lastInspection || ''} onChange={(e) => setNewEquipment((p) => ({ ...p, lastInspection: e.target.value || undefined }))} className={eqStyles.input} />
               </div>
               <div className={eqStyles.modalActions}>
-                <button type="button" className={eqStyles.btnSecondary} onClick={() => setAddEquipmentOpen(false)}>Cancel</button>
-                <button type="submit" className={eqStyles.btnPrimary}>Add</button>
+                <button type="button" className={eqStyles.btnSecondary} onClick={() => setAddEquipmentOpen(false)}>{t('eqCancel')}</button>
+                <button type="submit" className={eqStyles.btnPrimary}>{t('eqAdd')}</button>
               </div>
             </form>
           </div>

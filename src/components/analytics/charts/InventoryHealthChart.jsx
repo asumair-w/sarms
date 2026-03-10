@@ -19,13 +19,14 @@ const options = {
   },
 }
 
-export default function InventoryHealthChart({ data, onSegmentClick }) {
+export default function InventoryHealthChart({ data, t, onSegmentClick }) {
   const normal = data?.normal ?? 0
   const low = data?.low ?? 0
   const critical = data?.critical ?? 0
+  const sliceLabels = t ? [t('chartNormal'), t('chartLow'), t('chartCritical')] : ['Normal', 'Low', 'Critical']
 
   const chartData = {
-    labels: ['Normal', 'Low', 'Critical'],
+    labels: sliceLabels,
     datasets: [
       {
         data: [normal, low, critical],
@@ -42,7 +43,7 @@ export default function InventoryHealthChart({ data, onSegmentClick }) {
     onClick: (event, elements, chart) => {
       if (!onSegmentClick || elements.length === 0) return
       const el = elements[0]
-      const label = chart.data.labels?.[el.index] ?? ['Normal', 'Low', 'Critical'][el.index]
+      const label = chart.data.labels?.[el.index] ?? sliceLabels[el.index]
       onSegmentClick({ label: label ?? '' })
     },
   }

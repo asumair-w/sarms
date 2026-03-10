@@ -321,10 +321,11 @@ export default function RecordProduction() {
 
       pdf.setFontSize(14)
       pdf.setFont('helvetica', 'bold')
-      pdf.text('Harvest Log', margin, 10)
+      pdf.text(t('rpHarvestLog'), margin, 10)
       pdf.setFontSize(9)
       pdf.setFont('helvetica', 'normal')
-      const filterLine = `Generated: ${new Date().toLocaleString()}  |  Filters: Zone ${harvestFilterZone ? (ZONE_LABELS[harvestFilterZone] || harvestFilterZone) : 'All'}  |  Period ${harvestFilterPeriod === '7d' ? 'Last 7 days' : harvestFilterPeriod === '30d' ? 'Last 30 days' : harvestFilterPeriod === 'custom' ? `${harvestDateFrom || '—'} to ${harvestDateTo || '—'}` : 'All time'}${harvestFilterSearch.trim() ? `  |  Search: ${harvestFilterSearch.trim()}` : ''}`
+      const periodLabel = harvestFilterPeriod === '7d' ? t('rpLast7Days') : harvestFilterPeriod === '30d' ? t('rpLast30Days') : harvestFilterPeriod === 'custom' ? `${harvestDateFrom || '—'} ${t('monitorTo')} ${harvestDateTo || '—'}` : t('allTime')
+      const filterLine = `${t('rpGenerated')}: ${new Date().toLocaleString()}  |  ${t('rpFilters')}: ${t('rpZone')} ${harvestFilterZone ? (ZONE_LABELS[harvestFilterZone] || harvestFilterZone) : t('monitorAll')}  |  ${t('rpPeriod')} ${periodLabel}${harvestFilterSearch.trim() ? `  |  ${t('searchPlaceholder')}: ${harvestFilterSearch.trim()}` : ''}`
       const splitLines = pdf.splitTextToSize(filterLine, w)
       let y = 16
       splitLines.forEach((line) => { pdf.text(line, margin, y); y += 5 })
@@ -445,18 +446,18 @@ export default function RecordProduction() {
   return (
     <div className={styles.page}>
       <section className={styles.kpiSection}>
-        <h2 className={styles.sectionTitle}><i className="fas fa-chart-pie fa-fw" /> Summary</h2>
+        <h2 className={styles.sectionTitle}><i className="fas fa-chart-pie fa-fw" /> {t('rpSummary')}</h2>
         <div className={`${invStyles.summaryCards} ${styles.summaryCardsThree}`}>
           <div className={`${invStyles.summaryCard} ${invStyles.summaryCardHarvest}`}>
-            <span className={invStyles.summaryCardLabel}>Harvest</span>
+            <span className={invStyles.summaryCardLabel}>{t('rpHarvest')}</span>
             <div className={invStyles.summaryCardBody} onClick={(e) => e.stopPropagation()}>
               <div className={invStyles.summaryHarvestHead}>
                 <select value={summaryHarvestMonth} onChange={(e) => setSummaryHarvestMonth(e.target.value)} className={invStyles.summaryHarvestSelect} onClick={(e) => e.stopPropagation()}>
-                  <option value="this">{t('thisMonth')}</option>
-                  <option value="last">{t('lastMonth')}</option>
-                  <option value="7d">Last 7 days</option>
+                  <option value="this">{t('rpThisMonth')}</option>
+                  <option value="last">{t('rpLastMonth')}</option>
+                  <option value="7d">{t('rpLast7Days')}</option>
                   <option value="all">{t('allTime')}</option>
-                  <option value="custom">Custom month</option>
+                  <option value="custom">{t('rpCustomMonth')}</option>
                 </select>
                 {summaryHarvestMonth === 'custom' && (
                   <input
@@ -465,16 +466,16 @@ export default function RecordProduction() {
                     onChange={(e) => setSummaryHarvestCustom(e.target.value)}
                     onClick={(e) => e.stopPropagation()}
                     className={invStyles.summaryHarvestMonthInput}
-                    title={t('chooseMonth')}
+                    title={t('rpChooseMonth')}
                   />
                 )}
               </div>
-              <div className={invStyles.summaryRow}><span>Records</span><strong>{harvestRecordsInSummaryPeriod.length}</strong></div>
-              <div className={invStyles.summaryRowSub}>Top: {harvestTopProduct ? `${formatQuantity(harvestTopProduct.total)} ${harvestTopProduct.unit}` : '—'}</div>
+              <div className={invStyles.summaryRow}><span>{t('rpRecords')}</span><strong>{harvestRecordsInSummaryPeriod.length}</strong></div>
+              <div className={invStyles.summaryRowSub}>{t('rpTop')}: {harvestTopProduct ? `${formatQuantity(harvestTopProduct.total)} ${harvestTopProduct.unit}` : '—'}</div>
             </div>
           </div>
           <div className={`${invStyles.summaryCard} ${styles.summaryKpiCard}`}>
-            <span className={invStyles.summaryCardLabel}>Total Production</span>
+            <span className={invStyles.summaryCardLabel}>{t('rpTotalProduction')}</span>
             <div className={invStyles.summaryCardBody}>
               {Object.keys(kpiTotalProduction.byUnit).length > 0 ? (
                 <>
@@ -491,7 +492,7 @@ export default function RecordProduction() {
               )}
               {kpiTrendPct != null && kpiPreviousTotalProduction != null && kpiTotalProduction.dominantTotal > 0 && (
                 <div className={`${styles.summaryKpiTrend} ${kpiTrendPct >= 0 ? styles.summaryKpiTrendUp : styles.summaryKpiTrendDown}`}>
-                  {kpiTrendPct >= 0 ? '↑' : '↓'} {kpiTrendPct >= 0 ? '+' : ''}{kpiTrendPct}% vs previous period ({kpiTotalProduction.dominantUnit})
+                  {kpiTrendPct >= 0 ? '↑' : '↓'} {kpiTrendPct >= 0 ? '+' : ''}{kpiTrendPct}% {t('rpVsPreviousPeriod')} ({kpiTotalProduction.dominantUnit})
                 </div>
               )}
             </div>
@@ -501,7 +502,7 @@ export default function RecordProduction() {
             className={`${invStyles.summaryCard} ${styles.summaryKpiCard} ${styles.summaryKpiCardZone} ${styles.summaryCardClickable}`}
             onClick={() => setZoneDetailOpen(true)}
           >
-            <span className={invStyles.summaryCardLabel}>Production by Zone</span>
+            <span className={invStyles.summaryCardLabel}>{t('rpProductionByZone')}</span>
             <div className={invStyles.summaryCardBody}>
               {kpiTopZones.length > 0 ? (
                 <>
@@ -518,10 +519,10 @@ export default function RecordProduction() {
                       <strong>{kpiTopZones[2].zoneLabel} ({formatQuantity(kpiTopZones[2].total)} {kpiTopZones[2].unit})</strong>
                     </div>
                   )}
-                  <div className={styles.zoneCardHint}>Click to view all zones & units</div>
+                  <div className={styles.zoneCardHint}>{t('rpClickToViewZones')}</div>
                 </>
               ) : (
-                <div className={invStyles.summaryRowSub}>No records in period</div>
+                <div className={invStyles.summaryRowSub}>{t('rpNoRecordsInPeriod')}</div>
               )}
             </div>
           </button>
@@ -535,8 +536,8 @@ export default function RecordProduction() {
           onClick={() => setHarvestSectionOpen((o) => !o)}
           aria-expanded={harvestSectionOpen}
         >
-          <h2 className={styles.sectionTitle}><i className="fas fa-wheat-awn fa-fw" /> Record harvest</h2>
-          <span className={styles.expandLabel}>{harvestSectionOpen ? 'Collapse' : 'Expand'}</span>
+          <h2 className={styles.sectionTitle}><i className="fas fa-wheat-awn fa-fw" /> {t('rpRecordHarvest')}</h2>
+          <span className={styles.expandLabel}>{harvestSectionOpen ? t('rpCollapse') : t('rpExpand')}</span>
           <span className={styles.chevron}>{harvestSectionOpen ? '▼' : '▶'}</span>
         </button>
         {harvestSectionOpen && (
@@ -544,7 +545,7 @@ export default function RecordProduction() {
         <form onSubmit={handleSave} className={styles.form}>
           <div className={styles.row}>
             <div className={styles.field}>
-              <label>Zone</label>
+              <label>{t('rpZone')}</label>
               <select
                 value={form.zoneId}
                 onChange={(e) => setForm((f) => ({ ...f, zoneId: e.target.value }))}
@@ -558,7 +559,7 @@ export default function RecordProduction() {
               </select>
             </div>
             <div className={styles.field}>
-              <label>Lines / Area range</label>
+              <label>{t('rpLinesAreaRange')}</label>
               <input
                 type="text"
                 value={form.linesArea}
@@ -570,7 +571,7 @@ export default function RecordProduction() {
           </div>
           <div className={styles.row}>
             <div className={styles.field}>
-              <label>Date &amp; time</label>
+              <label>{t('rpDateTime')}</label>
               <input
                 type="datetime-local"
                 value={form.dateTime}
@@ -592,7 +593,7 @@ export default function RecordProduction() {
               />
             </div>
             <div className={styles.field}>
-              <label>Unit</label>
+              <label>{t('rpUnit')}</label>
               <select
                 value={form.unit}
                 onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
@@ -606,7 +607,7 @@ export default function RecordProduction() {
           </div>
 
           <div className={styles.formBlock}>
-            <label className={styles.label}>Comment (optional)</label>
+            <label className={styles.label}>{t('rpCommentOptional')}</label>
             <textarea
               value={form.notes}
               onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
@@ -617,7 +618,7 @@ export default function RecordProduction() {
           </div>
 
           <div className={styles.formBlock}>
-            <label className={styles.label}>Image (optional)</label>
+            <label className={styles.label}>{t('rpImageOptional')}</label>
             <input
               type="file"
               accept="image/*"
@@ -628,7 +629,7 @@ export default function RecordProduction() {
               <div className={styles.imagePreviewWrap}>
                 <img src={form.imageData} alt="" className={styles.imagePreview} />
                 <button type="button" className={styles.removeImageBtn} onClick={() => setForm((f) => ({ ...f, imageData: '' }))}>
-                  Remove image
+                  {t('rpRemoveImage')}
                 </button>
               </div>
             )}
@@ -636,17 +637,17 @@ export default function RecordProduction() {
 
           <div className={styles.actions}>
             <button type="button" className={styles.btnSecondary} onClick={handleCancel}>
-              Cancel
+              {t('rpCancel')}
             </button>
             <button type="submit" className={styles.btnPrimary}>
-              Save
+              {t('rpSave')}
             </button>
           </div>
         </form>
 
         {saved && (
           <div className={styles.savedBanner}>
-            Saved: {saved.id} – {new Date(saved.dateTime).toLocaleString()}
+            {t('rpSaved')}: {saved.id} – {new Date(saved.dateTime).toLocaleString()}
           </div>
         )}
         </div>
@@ -655,14 +656,14 @@ export default function RecordProduction() {
 
       <section className={styles.section}>
         <div className={`${styles.sectionHeader} ${styles.sectionHeaderStatic}`}>
-          <h2 className={styles.sectionTitle}><i className="fas fa-wheat-awn fa-fw" /> Harvest Log</h2>
+          <h2 className={styles.sectionTitle}><i className="fas fa-wheat-awn fa-fw" /> {t('rpHarvestLog')}</h2>
         </div>
         <div className={invStyles.harvestFilters}>
               <select
                 value={harvestFilterZone}
                 onChange={(e) => setHarvestFilterZone(e.target.value)}
                 className={invStyles.filterSelect}
-                title="Filter by zone"
+                title={t('rpFilterByZone')}
               >
                 <option value="">{t('allZones')}</option>
                 {zonesList.map((z) => (
@@ -676,8 +677,8 @@ export default function RecordProduction() {
                 title={t('timePeriod')}
               >
                 <option value="all">{t('allTime')}</option>
-                <option value="7d">Last 7 days</option>
-                <option value="30d">Last 30 days</option>
+                <option value="7d">{t('rpLast7Days')}</option>
+                <option value="30d">{t('rpLast30Days')}</option>
                 <option value="custom">{t('customRange')}</option>
               </select>
               {harvestFilterPeriod === 'custom' && (
@@ -707,27 +708,27 @@ export default function RecordProduction() {
               />
               <div className={invStyles.filtersBarExport}>
                 <button type="button" className={invStyles.btnSecondary} onClick={exportHarvestLogPDF} disabled={filteredHarvestRecords.length === 0} title="Download as PDF">
-                  <i className="fas fa-file-pdf fa-fw" /> Export PDF
+                  <i className="fas fa-file-pdf fa-fw" /> {t('rpExportPdf')}
                 </button>
               </div>
             </div>
             {filteredHarvestRecords.length === 0 ? (
               <p className={invStyles.harvestEmpty}>
-                {harvestRecords.length === 0 ? 'No harvest inventory yet. Add them from Record Production (Harvest Record form).' : 'No records match the filter.'}
+                {harvestRecords.length === 0 ? t('rpNoHarvestInventoryYet') : t('rpNoRecordsMatchFilter')}
               </p>
             ) : (
               <div className={invStyles.harvestTableWrap} ref={harvestTableRef}>
                 <table className={invStyles.table}>
                   <thead>
                     <tr>
-                      <th>Zone</th>
-                      <th>Lines / Area</th>
-                      <th>Date &amp; time</th>
-                      <th>Quantity</th>
-                      <th>Unit</th>
-                      <th>Comment</th>
-                      <th>Photo</th>
-                      <th aria-label="Edit" />
+                      <th>{t('rpZone')}</th>
+                      <th>{t('rpLinesAreaRange')}</th>
+                      <th>{t('rpDateTime')}</th>
+                      <th>{t('rpQuantity')}</th>
+                      <th>{t('rpUnit')}</th>
+                      <th>{t('rpComment')}</th>
+                      <th>{t('rpPhoto')}</th>
+                      <th aria-label={t('rpEdit')} />
                     </tr>
                   </thead>
                   <tbody>
@@ -747,7 +748,7 @@ export default function RecordProduction() {
                           ) : '—'}
                         </td>
                         <td className={styles.harvestActions}>
-                          <button type="button" className={styles.btnEdit} onClick={() => openEditHarvest(r)} title="Edit">
+                          <button type="button" className={styles.btnEdit} onClick={() => openEditHarvest(r)} title={t('rpEdit')}>
                             <i className="fas fa-pen fa-fw" />
                           </button>
                         </td>
@@ -768,11 +769,11 @@ export default function RecordProduction() {
       {editHarvestRecord && editForm && (
         <div className={styles.modalOverlay} onClick={() => { setEditHarvestRecord(null); setEditForm(null) }} role="dialog" aria-modal="true">
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.modalTitle}>Edit harvest record</h3>
+            <h3 className={styles.modalTitle}>{t('rpEditHarvestRecord')}</h3>
             <form onSubmit={handleSaveEditHarvest} className={styles.form}>
               <div className={styles.row}>
                 <div className={styles.field}>
-                  <label>Zone</label>
+                  <label>{t('rpZone')}</label>
                   <select
                     value={editForm.zoneId}
                     onChange={(e) => setEditForm((f) => ({ ...f, zoneId: e.target.value }))}
@@ -786,7 +787,7 @@ export default function RecordProduction() {
                   </select>
                 </div>
                 <div className={styles.field}>
-                  <label>Lines / Area range</label>
+                  <label>{t('rpLinesAreaRange')}</label>
                   <input
                     type="text"
                     value={editForm.linesArea}
@@ -798,7 +799,7 @@ export default function RecordProduction() {
               </div>
               <div className={styles.row}>
                 <div className={styles.field}>
-                  <label>Date &amp; time</label>
+                  <label>{t('rpDateTime')}</label>
                   <input
                     type="datetime-local"
                     value={editForm.dateTime}
@@ -808,7 +809,7 @@ export default function RecordProduction() {
                   />
                 </div>
                 <div className={styles.field}>
-                  <label>Quantity</label>
+                  <label>{t('rpQuantity')}</label>
                   <input
                     type="number"
                     min={0}
@@ -820,7 +821,7 @@ export default function RecordProduction() {
                   />
                 </div>
                 <div className={styles.field}>
-                  <label>Unit</label>
+                  <label>{t('rpUnit')}</label>
                   <select
                     value={editForm.unit}
                     onChange={(e) => setEditForm((f) => ({ ...f, unit: e.target.value }))}
@@ -833,7 +834,7 @@ export default function RecordProduction() {
                 </div>
               </div>
               <div className={styles.formBlock}>
-                <label className={styles.label}>Comment (optional)</label>
+                <label className={styles.label}>{t('rpCommentOptional')}</label>
                 <textarea
                   value={editForm.notes}
                   onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
@@ -842,12 +843,12 @@ export default function RecordProduction() {
                 />
               </div>
               <div className={styles.modalActions}>
-                <button type="button" className={styles.btnDeleteInModal} onClick={handleDeleteHarvestFromEdit} title="Delete this record">
-                  <i className="fas fa-trash-alt fa-fw" /> Delete record
+                <button type="button" className={styles.btnDeleteInModal} onClick={handleDeleteHarvestFromEdit} title={t('rpDeleteRecord')}>
+                  <i className="fas fa-trash-alt fa-fw" /> {t('rpDeleteRecord')}
                 </button>
                 <div className={styles.modalActionsRight}>
                   <button type="button" className={styles.btnSecondary} onClick={() => { setEditHarvestRecord(null); setEditForm(null) }}>
-                    Cancel
+                    {t('rpCancel')}
                   </button>
                   <button type="submit" className={styles.btnPrimary}>{t('saveChanges')}</button>
                 </div>
@@ -860,7 +861,7 @@ export default function RecordProduction() {
       {zoneDetailOpen && (
         <div className={styles.modalOverlay} onClick={() => setZoneDetailOpen(false)} role="dialog" aria-modal="true" aria-labelledby="zone-detail-title">
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <h3 id="zone-detail-title" className={styles.modalTitle}>Production by zone (all units)</h3>
+            <h3 id="zone-detail-title" className={styles.modalTitle}>{t('rpProductionByZoneAllUnits')}</h3>
             {productionByZoneAllUnits.length > 0 ? (
               <ul className={styles.zoneDetailList}>
                 {productionByZoneAllUnits.map((z) => (

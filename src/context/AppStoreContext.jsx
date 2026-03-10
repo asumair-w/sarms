@@ -1,7 +1,10 @@
 import { createContext, useContext, useReducer, useCallback, useEffect, useRef } from 'react'
 import { getInitialZones } from '../data/workerFlow'
-import { TASK_STATUS } from '../data/assignTask'
+import { TASK_STATUS, getInitialTasks, getInitialRecords } from '../data/assignTask'
 import { SEED_WORKERS, getMinimalWorkers } from '../data/engineerWorkers'
+import { getInitialInventory, getInitialEquipment } from '../data/inventory'
+import { getInitialFaults, getInitialMaintenancePlans } from '../data/faults'
+import { getInitialSessions } from '../data/monitorActive'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 const RECORDS_STORAGE_KEY = 'sarms-records'
@@ -210,6 +213,32 @@ function loadMaintenancePlans() {
     }
   } catch (_) {}
   return []
+}
+
+/** Full dummy/seed state for "Reset to seed" – tasks, inventory, equipment, faults, sessions, records, workers, zones, batches. */
+function getSeedState() {
+  const zones = getInitialZones()
+  const batchesByZone = {}
+  const defaultBatchByZone = {}
+  zones.forEach((z) => {
+    batchesByZone[z.id] = [{ id: '1', name: 'Batch 1' }]
+    defaultBatchByZone[z.id] = '1'
+  })
+  return {
+    tasks: getInitialTasks(),
+    records: getInitialRecords(),
+    sessions: getInitialSessions(),
+    zones,
+    batchesByZone,
+    defaultBatchByZone,
+    workers: SEED_WORKERS.map((w) => ({ ...w, skills: Array.isArray(w.skills) ? w.skills : [] })),
+    inventory: getInitialInventory(),
+    inventoryMovements: [],
+    equipment: getInitialEquipment(),
+    faults: getInitialFaults(),
+    maintenancePlans: getInitialMaintenancePlans(),
+    hydrateDone: true,
+  }
 }
 
 /** Build full initial state (used on every provider mount so persisted data is never lost on remount/HMR). */
@@ -441,7 +470,7 @@ function storeReducer(state, action) {
       }
     }
     case 'RESET_TO_SEED':
-      return getInitialState()
+      return action.payload ? { ...action.payload, hydrateDone: true } : getInitialState()
     case 'HYDRATE': {
       const payload = action.payload || {}
       const merged = { ...state, hydrateDone: true }
@@ -626,8 +655,7 @@ export function AppStoreProvider({ children }) {
     dispatch({ type: 'UPDATE_WORKER', payload: { workerId, updates } }), [])
 
   const resetToSeed = useCallback(() => {
-    clearAllSarmsDataStorage()
-    dispatch({ type: 'RESET_TO_SEED' })
+    dispatch({ type: 'RESET_TO_SEED', payload: getSeedState() })
   }, [])
 
   const value = {

@@ -461,7 +461,17 @@ export default function AssignTask() {
   }
 
   const departmentLabel = Object.fromEntries(DEPARTMENT_OPTIONS.map((d) => [d.value, d.label]))
-
+  const getDepartmentDisplayLabel = (deptId) => (lang === 'ar' ? getDepartment(deptId)?.labelAr : getDepartment(deptId)?.labelEn) ?? departmentLabel[deptId] ?? deptId
+  const getStatusDisplayLabel = (status) => {
+    if (!status) return '—'
+    const s = String(status).toLowerCase()
+    if (s === TASK_STATUS.PENDING_APPROVAL || s === 'approved') return t('chartPending')
+    if (s === TASK_STATUS.IN_PROGRESS) return t('chartInProgress')
+    if (s === TASK_STATUS.COMPLETED) return t('chartCompleted')
+    if (s === TASK_STATUS.REJECTED) return t('chartRejected')
+    return TASK_STATUS_LABELS[status] ?? status
+  }
+  /** Zone/batch labels: always show as stored in system (no translation). */
   const tasksForDepartment = useMemo(
     () => getTasksForDepartment(assignForm.departmentId),
     [assignForm.departmentId]
@@ -618,7 +628,7 @@ export default function AssignTask() {
     <div className={styles.page}>
       {/* 1. Operations Management Indicators (Top KPIs) – always visible */}
       <section className={styles.kpiSection}>
-        <h2 className={styles.kpiSectionTitle}><i className="fas fa-chart-line fa-fw" /> Operations Management</h2>
+        <h2 className={styles.kpiSectionTitle}><i className="fas fa-chart-line fa-fw" /> {t('assignOperationsManagement')}</h2>
         <div className={styles.kpiGrid}>
           <button
             type="button"
@@ -626,7 +636,7 @@ export default function AssignTask() {
             onClick={() => setKpiFilter(kpiFilter === TASK_STATUS.PENDING_APPROVAL ? null : TASK_STATUS.PENDING_APPROVAL)}
           >
             <span className={styles.kpiValue}>{allPendingCount}</span>
-            <span className={styles.kpiLabel}><i className="fas fa-clock fa-fw" /> Pending</span>
+            <span className={styles.kpiLabel}><i className="fas fa-clock fa-fw" /> {t('assignPending')}</span>
           </button>
           <button
             type="button"
@@ -634,7 +644,7 @@ export default function AssignTask() {
             onClick={() => setKpiFilter(kpiFilter === TASK_STATUS.IN_PROGRESS ? null : TASK_STATUS.IN_PROGRESS)}
           >
             <span className={styles.kpiValue}>{allInProgressCount}</span>
-            <span className={styles.kpiLabel}><i className="fas fa-spinner fa-fw" /> In Progress</span>
+            <span className={styles.kpiLabel}><i className="fas fa-spinner fa-fw" /> {t('assignInProgress')}</span>
           </button>
           <button
             type="button"
@@ -642,7 +652,7 @@ export default function AssignTask() {
             onClick={() => setKpiFilter(kpiFilter === TASK_STATUS.COMPLETED ? null : TASK_STATUS.COMPLETED)}
           >
             <span className={styles.kpiValue}>{allCompletedCount}</span>
-            <span className={styles.kpiLabel}><i className="fas fa-circle-check fa-fw" /> Completed</span>
+            <span className={styles.kpiLabel}><i className="fas fa-circle-check fa-fw" /> {t('assignCompleted')}</span>
           </button>
           <button
             type="button"
@@ -650,19 +660,19 @@ export default function AssignTask() {
             onClick={() => setKpiFilter(kpiFilter === 'zones' ? null : 'zones')}
           >
             <span className={styles.kpiValue}>{totalZones}</span>
-            <span className={styles.kpiLabel}><i className="fas fa-map-location-dot fa-fw" /> Total Zones</span>
+            <span className={styles.kpiLabel}><i className="fas fa-map-location-dot fa-fw" /> {t('assignTotalZones')}</span>
           </button>
         </div>
         {kpiFilter && (
           <div className={styles.kpiQuickList}>
             <div className={styles.kpiQuickListHeader}>
               <span>
-                {kpiFilter === TASK_STATUS.PENDING_APPROVAL && (allPendingCount ? `${allPendingCount} Pending (all zones)` : 'Pending (all zones)')}
-                {kpiFilter === TASK_STATUS.IN_PROGRESS && (allInProgressCount ? `${allInProgressCount} In Progress (all zones)` : 'In Progress (all zones)')}
-                {kpiFilter === TASK_STATUS.COMPLETED && (allCompletedCount ? `${allCompletedCount} Completed (all zones)` : 'Completed (all zones)')}
-                {kpiFilter === 'zones' && `${totalZones} Zones`}
+                {kpiFilter === TASK_STATUS.PENDING_APPROVAL && (allPendingCount ? `${allPendingCount} ${t('assignPendingAllZones')}` : t('assignPendingAllZones'))}
+                {kpiFilter === TASK_STATUS.IN_PROGRESS && (allInProgressCount ? `${allInProgressCount} ${t('assignInProgressAllZones')}` : t('assignInProgressAllZones'))}
+                {kpiFilter === TASK_STATUS.COMPLETED && (allCompletedCount ? `${allCompletedCount} ${t('assignCompletedAllZones')}` : t('assignCompletedAllZones'))}
+                {kpiFilter === 'zones' && `${totalZones} ${t('assignZonesCount')}`}
               </span>
-              <button type="button" className={styles.kpiQuickListClose} onClick={() => setKpiFilter(null)} aria-label="Close">
+              <button type="button" className={styles.kpiQuickListClose} onClick={() => setKpiFilter(null)} aria-label={t('viewClose')}>
                 <i className="fas fa-times" />
               </button>
             </div>
@@ -681,50 +691,50 @@ export default function AssignTask() {
                 <table className={styles.taskTable}>
                   <thead>
                     <tr>
-                      <th><i className="fas fa-map-pin fa-fw" /> Zone</th>
-                      <th><i className="fas fa-briefcase fa-fw" /> Operation</th>
-                      <th><i className="fas fa-building fa-fw" /> Department</th>
-                      <th><i className="fas fa-user-group fa-fw" /> Assigned Worker(s)</th>
-                      <th><i className="fas fa-align-left fa-fw" /> Lines</th>
-                      <th><i className="fas fa-info-circle fa-fw" /> Status</th>
-                      <th><i className="fas fa-clock fa-fw" /> Timestamp</th>
-                      <th><i className="fas fa-hand fa-fw" /> Accept / Reject</th>
+                      <th><i className="fas fa-map-pin fa-fw" /> {t('assignZone')}</th>
+                      <th><i className="fas fa-briefcase fa-fw" /> {t('assignOperation')}</th>
+                      <th><i className="fas fa-building fa-fw" /> {t('assignDepartment')}</th>
+                      <th><i className="fas fa-user-group fa-fw" /> {t('assignAssignedWorkers')}</th>
+                      <th><i className="fas fa-align-left fa-fw" /> {t('assignLines')}</th>
+                      <th><i className="fas fa-info-circle fa-fw" /> {t('assignStatus')}</th>
+                      <th><i className="fas fa-clock fa-fw" /> {t('assignTimestamp')}</th>
+                      <th />
                     </tr>
                   </thead>
                   <tbody>
-                    {kpiQuickList.map((t) => (
-                      <tr key={t.id}>
-                        <td>{getZoneDisplayLabel(t.zoneId)}</td>
-                        <td>{(taskLabelByLang(getTaskById(t.taskId), lang) || TASK_TYPE_LABEL[t.taskType] || getDepartment(t.departmentId)?.labelEn) ?? 'Task'}</td>
-                        <td>{departmentLabel[t.departmentId] ?? TASK_TYPE_LABEL[t.taskType] ?? t.taskType}</td>
-                        <td>{workerNames(t.workerIds, assignableList)}</td>
-                        <td>{t.linesArea || '—'}</td>
+{kpiQuickList.map((row) => (
+                      <tr key={row.id}>
+                        <td>{getZoneDisplayLabel(row.zoneId)}</td>
+                        <td>{(taskLabelByLang(getTaskById(row.taskId), lang) || TASK_TYPE_LABEL[row.taskType] || getDepartment(row.departmentId)?.labelEn) ?? t('assignTask')}</td>
+                        <td>{getDepartmentDisplayLabel(row.departmentId)}</td>
+                        <td>{workerNames(row.workerIds, assignableList)}</td>
+                        <td>{row.linesArea || '—'}</td>
                         <td>
-                          <span className={styles.statusBadge} data-status={t.status}>
-                            {TASK_STATUS_LABELS[t.status] ?? t.status ?? '—'}
+                          <span className={styles.statusBadge} data-status={row.status}>
+                            {getStatusDisplayLabel(row.status)}
                           </span>
                         </td>
-                        <td>{t.createdAt ? new Date(t.createdAt).toLocaleString() : '—'}</td>
+                        <td>{row.createdAt ? new Date(row.createdAt).toLocaleString() : '—'}</td>
                         <td className={styles.acceptRejectCell}>
-                          {(t.status === TASK_STATUS.PENDING_APPROVAL || t.status === 'approved') && (
+                          {(row.status === TASK_STATUS.PENDING_APPROVAL || row.status === 'approved') && (
                             <>
-                              <button type="button" className={styles.actionLinkAccept} onClick={() => openAcceptDurationModal(t.id)}>
-                                <i className="fas fa-check fa-fw" /> Accept
+                              <button type="button" className={styles.actionLinkAccept} onClick={() => openAcceptDurationModal(row.id)}>
+                                <i className="fas fa-clock fa-fw" /> {t('assignSetDuration')}
                               </button>
-                              <button type="button" className={styles.actionLinkReject} onClick={() => rejectTask(t.id)}>
-                                <i className="fas fa-times fa-fw" /> Reject
+                              <button type="button" className={styles.actionLinkReject} onClick={() => rejectTask(row.id)}>
+                                <i className="fas fa-times fa-fw" /> {t('assignCancel')}
                               </button>
                             </>
                           )}
                         </td>
-                      </tr>
-                    ))}
+                    </tr>
+                  ))}
                   </tbody>
                 </table>
               </div>
             )}
             {kpiFilter !== 'zones' && kpiQuickList.length === 0 && (
-              <p className={styles.kpiQuickListEmpty}>No tasks in this category across all zones.</p>
+              <p className={styles.kpiQuickListEmpty}>{t('assignNoTasksInCategory')}</p>
             )}
           </div>
         )}
@@ -733,10 +743,10 @@ export default function AssignTask() {
       {/* 2. Zones Section + Add Zone */}
       <section className={styles.zoneSection}>
         <div className={styles.zoneSectionHeader}>
-          <h2 className={styles.sectionTitle}><i className="fas fa-map fa-fw" /> ZONES</h2>
+          <h2 className={styles.sectionTitle}><i className="fas fa-map fa-fw" /> {t('assignZones')}</h2>
           <div className={styles.zoneHeaderActions}>
             <button type="button" className={styles.addZoneBtn} onClick={openAddZone}>
-              <i className="fas fa-plus fa-fw" /> Add Zone
+              <i className="fas fa-plus fa-fw" /> {t('assignAddZone')}
             </button>
             {(zones || []).length > 1 && !isInventoryZone(selectedZone ?? (zones || [])[0]?.id) && (
               <button
@@ -744,7 +754,7 @@ export default function AssignTask() {
                 className={styles.deleteZoneBtn}
                 onClick={() => { setDeleteZoneOpen(true); setZoneToDelete(selectedZone ?? (zones || []).find((z) => !isInventoryZone(z.id))?.id ?? (zones || [])[0]?.id ?? ''); }}
               >
-                <i className="fas fa-trash-can fa-fw" /> Delete Zone
+                <i className="fas fa-trash-can fa-fw" /> {t('assignDeleteZone')}
               </button>
             )}
           </div>
@@ -766,7 +776,7 @@ export default function AssignTask() {
       {addZoneOpen && (
         <div className={styles.modalOverlay} onClick={() => setAddZoneOpen(false)}>
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.modalTitle}><i className="fas fa-map fa-fw" /> Add Zone</h3>
+            <h3 className={styles.modalTitle}><i className="fas fa-map fa-fw" /> {t('assignAddZone')}</h3>
             <form onSubmit={confirmAddZone}>
               <div className={styles.formRow}>
                 <label>{t('zoneName')}</label>
@@ -779,8 +789,8 @@ export default function AssignTask() {
                 />
               </div>
               <div className={styles.modalActions}>
-                <button type="button" className={styles.btnSecondary} onClick={() => setAddZoneOpen(false)}>Cancel</button>
-                <button type="submit" className={styles.btnPrimary} disabled={!newZoneName.trim()}>Add Zone</button>
+                <button type="button" className={styles.btnSecondary} onClick={() => setAddZoneOpen(false)}>{t('assignCancel')}</button>
+                <button type="submit" className={styles.btnPrimary} disabled={!newZoneName.trim()}>{t('assignAddZone')}</button>
               </div>
             </form>
           </div>
@@ -790,13 +800,13 @@ export default function AssignTask() {
       {zoneToDelete && (
         <div className={styles.modalOverlay} onClick={() => setZoneToDelete(null)}>
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.modalTitle}><i className="fas fa-trash-can fa-fw" /> Delete Zone</h3>
+            <h3 className={styles.modalTitle}><i className="fas fa-trash-can fa-fw" /> {t('assignDeleteZone')}</h3>
             <p className={styles.modalMessage}>
-              Delete zone &quot;{ZONE_LABEL[zoneToDelete] ?? zoneToDelete}&quot;? Tasks in this zone will keep their zone reference but the zone will no longer appear in the list.
+              {t('assignDeleteZoneConfirm').replace('{name}', ZONE_LABEL[zoneToDelete] ?? zoneToDelete)}
             </p>
             <div className={styles.modalActions}>
-              <button type="button" className={styles.btnSecondary} onClick={() => setZoneToDelete(null)}>Cancel</button>
-              <button type="button" className={styles.btnDanger} onClick={confirmDeleteZone}>Delete Zone</button>
+              <button type="button" className={styles.btnSecondary} onClick={() => setZoneToDelete(null)}>{t('assignCancel')}</button>
+              <button type="button" className={styles.btnDanger} onClick={confirmDeleteZone}>{t('assignDeleteZone')}</button>
             </div>
           </div>
         </div>
@@ -805,13 +815,13 @@ export default function AssignTask() {
       {batchToDelete && (
         <div className={styles.modalOverlay} onClick={() => setBatchToDelete(null)}>
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.modalTitle}><i className="fas fa-trash-can fa-fw" /> Delete Batch</h3>
+            <h3 className={styles.modalTitle}><i className="fas fa-trash-can fa-fw" /> {t('assignDeleteBatch')}</h3>
             <p className={styles.modalMessage}>
-              Delete batch &quot;{batchesForZone.find((b) => b.id === batchToDelete)?.name ?? batchToDelete}&quot; for {ZONE_LABEL[selectedZone] ?? selectedZone}? Tasks in this batch will keep their batch reference.
+              {t('assignDeleteBatchConfirm').replace('{name}', batchesForZone.find((b) => b.id === batchToDelete)?.name ?? batchToDelete).replace('{zone}', getZoneDisplayLabel(selectedZone))}
             </p>
             <div className={styles.modalActions}>
-              <button type="button" className={styles.btnSecondary} onClick={() => setBatchToDelete(null)}>Cancel</button>
-              <button type="button" className={styles.btnDanger} onClick={confirmDeleteBatch}>Delete Batch</button>
+              <button type="button" className={styles.btnSecondary} onClick={() => setBatchToDelete(null)}>{t('assignCancel')}</button>
+              <button type="button" className={styles.btnDanger} onClick={confirmDeleteBatch}>{t('assignDeleteBatch')}</button>
             </div>
           </div>
         </div>
@@ -822,7 +832,7 @@ export default function AssignTask() {
         <div className={styles.modalOverlay} onClick={() => setAddBatchOpen(false)}>
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
             <h3 className={styles.modalTitle}>{t('newBatch')}</h3>
-            <p className={styles.modalText}>Name this batch. It will be selected after creation.</p>
+            <p className={styles.modalText}>{t('assignNameThisBatch')}</p>
             <form onSubmit={confirmAddBatch}>
               <input
                 type="text"
@@ -833,7 +843,7 @@ export default function AssignTask() {
                 autoFocus
               />
               <div className={styles.modalActions}>
-                <button type="button" className={styles.btnSecondary} onClick={() => { setAddBatchOpen(false); setNewBatchName(''); }}>Cancel</button>
+                <button type="button" className={styles.btnSecondary} onClick={() => { setAddBatchOpen(false); setNewBatchName(''); }}>{t('assignCancel')}</button>
                 <button type="submit" className={styles.btnPrimary}>{t('createBatch')}</button>
               </div>
             </form>
@@ -846,7 +856,7 @@ export default function AssignTask() {
         <div className={styles.mergedBlock}>
           <div className={styles.batchesSectionHeader}>
             <h2 className={styles.sectionTitle}>
-              <i className="fas fa-layer-group fa-fw" /> {batchesForZone.find((b) => b.id === selectedBatch)?.name ?? selectedBatch} – {ZONE_LABEL[selectedZone] ?? selectedZone}
+              <i className="fas fa-layer-group fa-fw" /> {batchesForZone.find((b) => b.id === selectedBatch)?.name ?? selectedBatch} – {getZoneDisplayLabel(selectedZone)}
             </h2>
             <div className={styles.batchHeaderActions}>
               <button type="button" className={styles.addBatchBtn} onClick={addBatch}>
@@ -858,7 +868,7 @@ export default function AssignTask() {
                   className={styles.deleteBatchBtn}
                   onClick={() => { setDeleteBatchOpen(true); setBatchToDelete(selectedBatch); }}
                 >
-                  <i className="fas fa-trash-can fa-fw" /> Delete batch
+                  <i className="fas fa-trash-can fa-fw" /> {t('assignDeleteBatch')}
                 </button>
               )}
             </div>
@@ -870,10 +880,10 @@ export default function AssignTask() {
                 type="button"
                 className={selectedBatch === b.id ? `${styles.batchTab} ${styles.batchTabActive}` : styles.batchTab}
                 onClick={() => setSelectedBatch(b.id)}
-                title={defaultBatchByZone[selectedZone] === b.id ? 'Default batch (new tasks go here)' : undefined}
+                title={defaultBatchByZone[selectedZone] === b.id ? t('assignDefaultBatchTitle') : undefined}
               >
                 {b.name}
-                {defaultBatchByZone[selectedZone] === b.id && <span className={styles.batchDefaultBadge} title="Default"> ★</span>}
+                {defaultBatchByZone[selectedZone] === b.id && <span className={styles.batchDefaultBadge} title={t('assignDefault')}> ★</span>}
               </button>
             ))}
           </div>
@@ -882,13 +892,13 @@ export default function AssignTask() {
               type="button"
               className={styles.setDefaultBatchBtn}
               onClick={() => setDefaultBatch(selectedZone, selectedBatch)}
-              title="New assignments will go to this batch"
+              title={t('assignDefaultBatchTitle')}
             >
-              <i className="fas fa-star fa-fw" /> Set as default batch
+              <i className="fas fa-star fa-fw" /> {t('assignSetAsDefaultBatch')}
             </button>
           </div>
           <div className={styles.operationPath}>
-            <span className={styles.operationPathLabel}><i className="fas fa-route fa-fw" /> Operation path</span>
+            <span className={styles.operationPathLabel}><i className="fas fa-route fa-fw" /> {t('assignOperationPath')}</span>
             <div className={styles.operationPathSteps}>
               {OPERATION_PATH_STEPS.map((step) => (
                 <span
@@ -896,14 +906,14 @@ export default function AssignTask() {
                   className={styles.operationPathChip}
                   style={{ background: step.color, color: '#fff' }}
                 >
-                  {step.label} ({statsByStatus[step.id] ?? 0})
+                  {step.id === TASK_STATUS.PENDING_APPROVAL ? t('assignPending') : step.id === TASK_STATUS.IN_PROGRESS ? t('assignInProgress') : t('assignCompleted')} ({statsByStatus[step.id] ?? 0})
                 </span>
               ))}
             </div>
           </div>
           <div className={styles.workspaceToolbar}>
             <button type="button" className={styles.assignBtn} onClick={openAssign}>
-              <i className="fas fa-tasks fa-fw" /> Assign Task
+              <i className="fas fa-tasks fa-fw" /> {t('assignAssignTask')}
             </button>
           </div>
         </div>
@@ -917,17 +927,17 @@ export default function AssignTask() {
               className={styles.greenhouseToggle}
               onClick={() => setGreenhouseExpanded((e) => !e)}
             >
-              <i className={`fas fa-fw ${greenhouseExpanded ? 'fa-chevron-up' : 'fa-chevron-down'}`} /> {greenhouseExpanded ? 'Collapse' : 'Expand'}
+              <i className={`fas fa-fw ${greenhouseExpanded ? 'fa-chevron-up' : 'fa-chevron-down'}`} /> {greenhouseExpanded ? t('assignCollapse') : t('assignExpand')}
             </button>
             <h2 className={styles.greenhouseTitle}>
-              <i className="fas fa-seedling fa-fw" /> Greenhouse Overview – {ZONE_LABEL[selectedZone]} · {batchesForZone.find((b) => b.id === selectedBatch)?.name ?? selectedBatch}
+              <i className="fas fa-seedling fa-fw" /> {t('assignGreenhouseOverview')} – {getZoneDisplayLabel(selectedZone)} · {batchesForZone.find((b) => b.id === selectedBatch)?.name ?? selectedBatch}
             </h2>
           </div>
           {greenhouseExpanded && (
             <>
               {isInventoryZone(selectedZone) ? (
                 <div className={styles.greenhouseNoLines}>
-                  <p>Inventory has no lines. This overview is for growing zones only.</p>
+                  <p>{t('assignInventoryNoLines')}</p>
                 </div>
               ) : (
                 <>
@@ -935,7 +945,7 @@ export default function AssignTask() {
                     {OPERATION_PATH_STEPS.map((step) => (
                       <span key={step.id} className={styles.legendItem}>
                         <span className={styles.legendDot} style={{ background: step.color }} />
-                        {step.label}
+                        {step.id === TASK_STATUS.PENDING_APPROVAL ? t('assignPending') : step.id === TASK_STATUS.IN_PROGRESS ? t('assignInProgress') : t('assignCompleted')}
                       </span>
                     ))}
                   </div>
@@ -958,7 +968,7 @@ export default function AssignTask() {
                             <div
                               key={`L-${rowIndex}`}
                               className={`${styles.lineCell} ${styles.lineCellMerged} ${statusClass}`}
-                              title={task ? `Row ${rowNum} – ${TASK_STATUS_LABELS[task.status]}` : `Row ${rowNum}`}
+                              title={task ? `${t('assignRow')} ${rowNum} – ${getStatusDisplayLabel(task.status)}` : `${t('assignRow')} ${rowNum}`}
                             >
                               {rowNum}
                             </div>
@@ -967,7 +977,7 @@ export default function AssignTask() {
                       </div>
                     </div>
                     <div className={styles.greenhouseAisle}>
-                      <span className={styles.aisleLabel}>Aisle</span>
+                      <span className={styles.aisleLabel}>{t('assignAisle')}</span>
                     </div>
                     <div className={styles.greenhouseSide}>
                       <span className={styles.sideLabel}>{t('rightSide')}</span>
@@ -988,7 +998,7 @@ export default function AssignTask() {
                             <div
                               key={`R-${rowIndex}`}
                               className={`${styles.lineCell} ${styles.lineCellMerged} ${statusClass}`}
-                              title={task ? `Row ${displayNum} – ${TASK_STATUS_LABELS[task.status]}` : `Row ${displayNum}`}
+                              title={task ? `${t('assignRow')} ${displayNum} – ${getStatusDisplayLabel(task.status)}` : `${t('assignRow')} ${displayNum}`}
                             >
                               {displayNum}
                             </div>
@@ -1013,10 +1023,10 @@ export default function AssignTask() {
               className={styles.greenhouseToggle}
               onClick={() => setFilterAndWorkersExpanded((e) => !e)}
             >
-              <i className={`fas fa-fw ${filterAndWorkersExpanded ? 'fa-chevron-up' : 'fa-chevron-down'}`} /> {filterAndWorkersExpanded ? 'Collapse' : 'Expand'}
+              <i className={`fas fa-fw ${filterAndWorkersExpanded ? 'fa-chevron-up' : 'fa-chevron-down'}`} /> {filterAndWorkersExpanded ? t('assignCollapse') : t('assignExpand')}
             </button>
             <h2 className={styles.greenhouseTitle}>
-              <i className="fas fa-filter fa-fw" /> Filter & Workers in this zone
+              <i className="fas fa-filter fa-fw" /> {t('assignFilterAndWorkers')}
             </h2>
           </div>
           {filterAndWorkersExpanded && (
@@ -1037,12 +1047,12 @@ export default function AssignTask() {
                   value={batchTableFilterStatus}
                   onChange={(e) => setBatchTableFilterStatus(e.target.value)}
                   className={filterRowStyles.opsFilterSelect}
-                  title="Status"
+                  title={t('assignStatus')}
                 >
                   <option value="">{t('allStatusesOpt')}</option>
-                  <option value={TASK_STATUS.PENDING_APPROVAL}>Pending</option>
-                  <option value={TASK_STATUS.IN_PROGRESS}>In Progress</option>
-                  <option value={TASK_STATUS.COMPLETED}>Completed</option>
+                  <option value={TASK_STATUS.PENDING_APPROVAL}>{t('assignPending')}</option>
+                  <option value={TASK_STATUS.IN_PROGRESS}>{t('assignInProgress')}</option>
+                  <option value={TASK_STATUS.COMPLETED}>{t('assignCompleted')}</option>
                 </select>
                 <select
                   value={batchTableFilterDepartment}
@@ -1052,7 +1062,7 @@ export default function AssignTask() {
                 >
                   <option value="">{t('allDepartmentsOpt')}</option>
                   {DEPARTMENT_OPTIONS.map((d) => (
-                    <option key={d.value} value={d.value}>{d.label}</option>
+                    <option key={d.value} value={d.value}>{getDepartmentDisplayLabel(d.value)}</option>
                   ))}
                 </select>
                 <select
@@ -1092,10 +1102,10 @@ export default function AssignTask() {
                   className={filterRowStyles.opsFilterSearch}
                 />
               </div>
-              <h3 className={styles.filterWorkersSubtitle}><i className="fas fa-users fa-fw" /> Workers Who Worked in This Zone</h3>
+              <h3 className={styles.filterWorkersSubtitle}><i className="fas fa-users fa-fw" /> {t('assignWorkersWhoWorked')}</h3>
               <div className={styles.workersList}>
                 {zoneWorkers.length === 0 ? (
-                  <p className={styles.workersEmpty}>No workers assigned to this zone yet.</p>
+                  <p className={styles.workersEmpty}>{t('assignNoWorkersInZone')}</p>
                 ) : (
                   zoneWorkers.map((w) => (
                     <div key={w.id} className={styles.workerCard}>
@@ -1112,42 +1122,42 @@ export default function AssignTask() {
         <div className={styles.mergedDivider} />
 
         <div className={styles.mergedBlock}>
-          <h2 className={styles.sectionTitle}><i className="fas fa-list-check fa-fw" /> All Operations for the Selected Batch</h2>
+          <h2 className={styles.sectionTitle}><i className="fas fa-list-check fa-fw" /> {t('assignAllOperationsForBatch')}</h2>
           <p className={styles.batchTableSubtitle}>{getZoneDisplayLabel(selectedZone)} · {batchesForZone.find((b) => b.id === selectedBatch)?.name ?? selectedBatch}</p>
           <div className={styles.taskTableWrap}>
             <table className={styles.taskTable}>
               <thead>
                 <tr>
-                  <th><i className="fas fa-briefcase fa-fw" /> Operation</th>
-                  <th><i className="fas fa-building fa-fw" /> Department</th>
-                  <th><i className="fas fa-user-group fa-fw" /> Assigned Worker(s)</th>
-                  <th><i className="fas fa-align-left fa-fw" /> Lines</th>
-                  <th><i className="fas fa-info-circle fa-fw" /> Status</th>
-                  <th><i className="fas fa-clock fa-fw" /> Timestamp</th>
-                  <th><i className="fas fa-hand fa-fw" /> Accept / Reject</th>
+                  <th><i className="fas fa-briefcase fa-fw" /> {t('assignOperation')}</th>
+                  <th><i className="fas fa-building fa-fw" /> {t('assignDepartment')}</th>
+                  <th><i className="fas fa-user-group fa-fw" /> {t('assignAssignedWorkers')}</th>
+                  <th><i className="fas fa-align-left fa-fw" /> {t('assignLines')}</th>
+                  <th><i className="fas fa-info-circle fa-fw" /> {t('assignStatus')}</th>
+                  <th><i className="fas fa-clock fa-fw" /> {t('assignTimestamp')}</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
-                {tasksForBatchTable.map((t) => (
-                  <tr key={t.id}>
-                    <td>{(taskLabelByLang(getTaskById(t.taskId), lang) || TASK_TYPE_LABEL[t.taskType] || getDepartment(t.departmentId)?.labelEn) ?? 'Task'}</td>
-                    <td>{departmentLabel[t.departmentId] ?? TASK_TYPE_LABEL[t.taskType] ?? t.taskType}</td>
-                    <td>{workerNames(t.workerIds, assignableList)}</td>
-                    <td>{t.linesArea || '—'}</td>
+                {tasksForBatchTable.map((row) => (
+                  <tr key={row.id}>
+                    <td>{(taskLabelByLang(getTaskById(row.taskId), lang) || TASK_TYPE_LABEL[row.taskType] || getDepartment(row.departmentId)?.labelEn) ?? t('assignTask')}</td>
+                    <td>{getDepartmentDisplayLabel(row.departmentId)}</td>
+                    <td>{workerNames(row.workerIds, assignableList)}</td>
+                    <td>{row.linesArea || '—'}</td>
                     <td>
-                      <span className={styles.statusBadge} data-status={t.status}>
-                        {TASK_STATUS_LABELS[t.status] ?? t.status ?? '—'}
+                      <span className={styles.statusBadge} data-status={row.status}>
+                        {getStatusDisplayLabel(row.status)}
                       </span>
                     </td>
-                    <td>{t.createdAt ? new Date(t.createdAt).toLocaleString() : '—'}</td>
+                    <td>{row.createdAt ? new Date(row.createdAt).toLocaleString() : '—'}</td>
                     <td className={styles.acceptRejectCell}>
-                      {(t.status === TASK_STATUS.PENDING_APPROVAL || t.status === 'approved') && (
+                      {(row.status === TASK_STATUS.PENDING_APPROVAL || row.status === 'approved') && (
                         <>
-                          <button type="button" className={styles.actionLinkAccept} onClick={() => openAcceptDurationModal(t.id)}>
-                            <i className="fas fa-check fa-fw" /> Accept
+                          <button type="button" className={styles.actionLinkAccept} onClick={() => openAcceptDurationModal(row.id)}>
+                            <i className="fas fa-clock fa-fw" /> {t('assignSetDuration')}
                           </button>
-                          <button type="button" className={styles.actionLinkReject} onClick={() => rejectTask(t.id)}>
-                            <i className="fas fa-times fa-fw" /> Reject
+                          <button type="button" className={styles.actionLinkReject} onClick={() => rejectTask(row.id)}>
+                            <i className="fas fa-times fa-fw" /> {t('assignCancel')}
                           </button>
                         </>
                       )}
@@ -1256,8 +1266,8 @@ export default function AssignTask() {
       {acceptDurationTaskId && (
         <div className={styles.modalOverlay} onClick={() => setAcceptDurationTaskId(null)}>
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.modalTitle}><i className="fas fa-clock fa-fw" /> Set expected duration</h3>
-            <p className={styles.modalMessage}>Choose how long this task is expected to take (used for On time / Delayed status).</p>
+            <h3 className={styles.modalTitle}><i className="fas fa-clock fa-fw" /> {t('assignSetExpectedDuration')}</h3>
+            <p className={styles.modalMessage}>{t('assignDurationHint')}</p>
             <div className={styles.durationPresets}>
               {DURATION_PRESETS.map(({ hours, minutes }) => (
                 <button
@@ -1271,7 +1281,7 @@ export default function AssignTask() {
               ))}
             </div>
             <div className={styles.durationCustom}>
-              <label className={styles.durationLabel}>Custom (minutes)</label>
+              <label className={styles.durationLabel}>{t('assignCustomMinutes')}</label>
               <input
                 type="number"
                 min={1}
@@ -1283,10 +1293,10 @@ export default function AssignTask() {
             </div>
             <div className={styles.modalActions}>
               <button type="button" className={styles.btnSecondary} onClick={() => setAcceptDurationTaskId(null)}>
-                Cancel
+                {t('assignCancel')}
               </button>
               <button type="button" className={styles.btnPrimary} onClick={() => acceptTaskWithDuration(acceptDurationMinutes)}>
-                <i className="fas fa-check fa-fw" /> Accept task
+                <i className="fas fa-clock fa-fw" /> {t('assignSetDuration')}
               </button>
             </div>
           </div>

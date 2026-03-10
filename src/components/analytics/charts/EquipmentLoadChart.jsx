@@ -21,6 +21,12 @@ import {
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend)
 
 const LABELS = ['Open faults', 'Scheduled maintenance', 'Overdue maintenance', 'Active equipment %']
+
+function getEquipmentLabels(t) {
+  if (!t) return LABELS
+  return [t('openFaults'), t('scheduledMaintenance'), t('overdueMaintenance'), t('activeEquipmentPct')]
+}
+
 const COLORS = [SOFT_RED, SOFT_BLUE, MUTED_ORANGE, OLIVE_PRIMARY]
 const HOVER_COLORS = [SOFT_RED_HOVER, SOFT_BLUE_HOVER, MUTED_ORANGE_HOVER, OLIVE_PRIMARY_HOVER]
 
@@ -52,12 +58,12 @@ const options = {
   },
 }
 
-export default function EquipmentLoadChart({ data, onSegmentClick }) {
+export default function EquipmentLoadChart({ data, t, onSegmentClick }) {
   const openFaults = data?.openFaults ?? 0
   const scheduledMaintenance = data?.scheduledMaintenance ?? 0
   const overdueMaintenance = data?.overdueMaintenance ?? 0
   const activeEquipmentPct = data?.activeEquipmentPct ?? 0
-  const labels = data?.labels ?? LABELS
+  const labels = t ? getEquipmentLabels(t) : (data?.labels ?? LABELS)
 
   const values = [openFaults, scheduledMaintenance, overdueMaintenance, Math.round(activeEquipmentPct)]
   const maxVal = Math.max(100, ...values)

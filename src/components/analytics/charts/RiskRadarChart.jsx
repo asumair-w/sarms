@@ -18,6 +18,18 @@ const LABELS = [
   'Low worker efficiency %',
   'Overdue maintenance %',
 ]
+
+function getRiskLabels(t) {
+  if (!t) return LABELS
+  return [
+    t('riskDelayedTasksPct'),
+    t('riskCriticalFaultsPct'),
+    t('riskCriticalInventoryPct'),
+    t('riskLowEfficiencyPct'),
+    t('riskOverdueMaintenancePct'),
+  ]
+}
+
 const COLOR_RISK = SOFT_RED
 const COLOR_FILL = 'rgba(184,92,92,0.2)'
 const COLOR_POINTS = SOFT_RED_HOVER
@@ -38,15 +50,15 @@ const options = {
   },
 }
 
-export default function RiskRadarChart({ data, onSegmentClick }) {
-  const labels = data?.labels ?? LABELS
+export default function RiskRadarChart({ data, t, onSegmentClick }) {
+  const labels = t ? getRiskLabels(t) : (data?.labels ?? LABELS)
   const values = data?.values ?? [0, 0, 0, 0, 0]
 
   const chartData = {
     labels,
     datasets: [
       {
-        label: 'System risk',
+        label: t ? t('systemRisk') : 'System risk',
         data: values,
         borderColor: COLOR_RISK,
         backgroundColor: COLOR_FILL,

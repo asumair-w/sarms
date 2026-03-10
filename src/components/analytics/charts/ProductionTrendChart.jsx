@@ -33,7 +33,7 @@ const options = {
   },
 }
 
-export default function ProductionTrendChart({ data, onSegmentClick }) {
+export default function ProductionTrendChart({ data, t, onSegmentClick }) {
   const dates = data?.dates ?? []
   const values = data?.values ?? []
 
@@ -41,7 +41,7 @@ export default function ProductionTrendChart({ data, onSegmentClick }) {
     labels: dates.length ? dates : ['No data'],
     datasets: [
       {
-        label: 'Production',
+        label: t ? t('production') : 'Production',
         data: values.length ? values : [0],
         borderColor: OLIVE_PRIMARY,
         backgroundColor: OLIVE_LIGHT,

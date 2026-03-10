@@ -7,7 +7,7 @@ import { SECTION_ACTIONS } from '../../data/engineerNav'
 import { useAppStore } from '../../context/AppStoreContext'
 import { TASK_STATUS } from '../../data/assignTask'
 import { DEPARTMENT_OPTIONS } from '../../data/engineerWorkers'
-import { getInitialZones, getDepartment, getTasksForDepartment } from '../../data/workerFlow'
+import { getInitialZones, getDepartment, getTasksForDepartment, getTaskById } from '../../data/workerFlow'
 import { getInventoryStatus } from '../../data/inventory'
 import { SEVERITY_OPTIONS, FAULT_STATUS_OPEN, FAULT_STATUS_RESOLVED, FAULT_TYPE_PREVENTIVE_ALERT } from '../../data/faults'
 import { getSessionStatus } from '../../data/monitorActive'
@@ -59,6 +59,12 @@ function isTaskInProgress(status) {
   if (status == null || status === '') return false
   const s = String(status).toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_').trim()
   return s === TASK_STATUS.IN_PROGRESS
+}
+
+/** Tasks that count for "active" charts (not rejected/cancelled). */
+function isActiveForCharts(status) {
+  const canonical = normalizeTaskStatus(status)
+  return canonical !== TASK_STATUS.REJECTED && canonical != null
 }
 
 /** Safe parse date for weekly filter; returns 0 if invalid. */
@@ -171,13 +177,13 @@ export default function EngineerHome() {
     [tasks]
   )
 
-  /* Weekly Progress: Monday to now (only tasks with valid createdAt in current week) */
+  /* Weekly Progress: Monday to now (only active tasks in current week – exclude rejected) */
   const weeklyProgress = useMemo(() => {
     const weekStart = getWeekStart()
     const now = Date.now()
     const weekTasks = (tasks || []).filter((t) => {
       const created = safeTaskCreatedAt(t)
-      return created >= weekStart && created <= now
+      return created >= weekStart && created <= now && isActiveForCharts(t.status)
     })
     const completed = weekTasks.filter((t) => normalizeTaskStatus(t.status) === TASK_STATUS.COMPLETED).length
     const total = weekTasks.length
@@ -248,10 +254,10 @@ export default function EngineerHome() {
   const CHART_GRID = '#e4e9e4'
   const HOVER_HEX = { success: '#385438', warning: '#a6783c', info: '#3a606b', muted: '#5e6763' }
 
-  /* Tasks by type – vertical bars (Farming, Maintenance, Inventory) – SARMS olive palette */
+  /* Tasks by type – vertical bars (Farming, Maintenance, Inventory) – only active tasks, exclude rejected */
   const typeChartData = useMemo(() => {
     const byType = {}
-    ;(tasks || []).forEach((task) => {
+    ;(tasks || []).filter((t) => isActiveForCharts(t.status)).forEach((task) => {
       const raw = task.departmentId || task.taskType || 'other'
       const dept = String(raw).toLowerCase().trim() || 'other'
       byType[dept] = (byType[dept] || 0) + 1
@@ -268,11 +274,11 @@ export default function EngineerHome() {
     return series.map((s) => ({ ...s, max }))
   }, [tasks])
 
-  /* Tasks by zone – Zone A/B/C/D + Inventory – SARMS olive palette */
+  /* Tasks by zone – Zone A/B/C/D + Inventory – only active tasks, exclude rejected */
   const ZONE_CHART_COLORS = ['#5c7b5c', '#7fa77f', '#a9bfa9', '#4f7c8a', '#7a8580']
   const zoneChartData = useMemo(() => {
     const byZone = {}
-    ;(tasks || []).forEach((t) => {
+    ;(tasks || []).filter((t) => isActiveForCharts(t.status)).forEach((t) => {
       const raw = t.zoneId ?? ''
       const zoneKey = String(raw).toLowerCase().trim() || 'other'
       byZone[zoneKey] = (byZone[zoneKey] || 0) + 1
@@ -287,12 +293,12 @@ export default function EngineerHome() {
     return series.map((s) => ({ ...s, max }))
   }, [tasks, zonesList, ZONE_LABEL])
 
-  /* Task status doughnut – count by normalized status (approved = pending_approval) */
+  /* Task status doughnut – Pending, In Progress, Completed only (rejected/cancelled excluded, not shown) */
   const doughnutData = useMemo(() => {
     const s = { [TASK_STATUS.PENDING_APPROVAL]: 0, [TASK_STATUS.IN_PROGRESS]: 0, [TASK_STATUS.COMPLETED]: 0 }
     ;(tasks || []).forEach((task) => {
       const canonical = normalizeTaskStatus(task.status)
-      if (canonical && s[canonical] !== undefined) s[canonical] = (s[canonical] || 0) + 1
+      if (canonical && canonical !== TASK_STATUS.REJECTED && s[canonical] !== undefined) s[canonical] = (s[canonical] || 0) + 1
     })
     return [
       { labelKey: 'chartPending', value: s[TASK_STATUS.PENDING_APPROVAL], color: 'var(--sarms-chart-muted)' },
@@ -440,6 +446,29 @@ export default function EngineerHome() {
     () => new Set(realActiveSessions.map((s) => String(s.taskId)).filter(Boolean)),
     [realActiveSessions]
   )
+  const enrichedRealSessions = useMemo(() => {
+    return (realActiveSessions || []).map((session) => {
+      const task = (tasks || []).find((t) => String(t.id) === String(session.taskId))
+      const dept = getDepartment(task?.departmentId)
+      const taskLabel = task ? getTaskById(task.taskId) : null
+      const zoneIdNorm = task?.zoneId != null ? String(task.zoneId).toLowerCase() : ''
+      const zoneLabel = ZONE_LABEL[zoneIdNorm] ?? (zoneIdNorm === 'inventory' ? 'Inventory' : zoneIdNorm ? `Zone ${zoneIdNorm.toUpperCase()}` : '—')
+      const worker = (workers || []).find((w) => String(w.id) === String(session.workerId))
+      return {
+        id: session.id,
+        workerId: session.workerId,
+        workerName: worker?.fullName ?? '—',
+        departmentId: dept?.id ?? (task?.departmentId || '').toLowerCase(),
+        taskId: taskLabel?.id ?? task?.taskId ?? '',
+        zoneId: zoneIdNorm || (task?.zoneId ?? ''),
+        department: dept?.labelEn ?? task?.departmentId ?? '—',
+        task: taskLabel?.labelEn ?? task?.taskId ?? '—',
+        zone: zoneLabel,
+        linesArea: task?.linesArea ?? '—',
+        startTime: session.startTime,
+      }
+    })
+  }, [realActiveSessions, tasks, workers, ZONE_LABEL])
   const virtualSessionsFromTasks = useMemo(() => {
     const list = []
     ;(tasks || []).forEach((task) => {
@@ -453,7 +482,7 @@ export default function EngineerHome() {
       const workerIds = Array.isArray(task.workerIds) ? task.workerIds : []
       const departmentIdNorm = (task.departmentId || task.taskType || '').toLowerCase()
       const baseSession = {
-        taskId: task.id,
+        taskId: taskLabel?.id ?? task.taskId ?? '',
         departmentId: departmentIdNorm || task.departmentId,
         department: dept?.labelEn ?? task.departmentId ?? '—',
         task: taskLabel?.labelEn ?? task.taskId ?? '—',
@@ -479,8 +508,8 @@ export default function EngineerHome() {
     return list
   }, [tasks, taskIdsWithActiveSession, workers, ZONE_LABEL])
   const activeOperationsList = useMemo(
-    () => [...realActiveSessions, ...virtualSessionsFromTasks],
-    [realActiveSessions, virtualSessionsFromTasks]
+    () => [...enrichedRealSessions, ...virtualSessionsFromTasks],
+    [enrichedRealSessions, virtualSessionsFromTasks]
   )
 
   const [activeOpsExpanded, setActiveOpsExpanded] = useState(false)
@@ -598,11 +627,11 @@ export default function EngineerHome() {
       <section className={styles.section}>
         <button
           type="button"
-          className={styles.collapseHeader}
+          className={`${styles.collapseHeader} ${lang === 'ar' ? styles.collapseHeaderRtl : ''}`}
           onClick={() => setActiveOpsExpanded((e) => !e)}
           aria-expanded={activeOpsExpanded}
         >
-          <i className={`fas fa-fw ${activeOpsExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}`} />
+          <i className={`fas fa-fw ${activeOpsExpanded ? 'fa-chevron-down' : lang === 'ar' ? 'fa-chevron-left' : 'fa-chevron-right'}`} />
           <h2 className={styles.sectionTitleCollapse}>{t('homeActiveOperations')}</h2>
           {activeOperationsList.length > 0 && <span className={styles.collapseBadge}>{activeOperationsList.length}</span>}
         </button>
@@ -613,25 +642,33 @@ export default function EngineerHome() {
                 <p className={styles.opsEmpty}>{t('homeNoActiveSessions')}</p>
               ) : (
                 <ul className={styles.opsList}>
-                  {activeOperationsList.map((op) => (
-                    <li key={op.id} className={styles.opsItem}>
-                      <button
-                        type="button"
-                        className={styles.opsItemBtn}
-                        onClick={() => navigate('/engineer/monitor')}
-                      >
-                        <span className={styles.opsWorker}>{op.workerName ?? '—'}</span>
-                        <span className={styles.opsDetail}>
-                          {[op.department, op.task].filter(Boolean).join(' · ') || '—'} · {(op.zone === 'Inventory' || (op.zone && String(op.zone).startsWith('Zone '))) ? (op.zone || '—') : (op.zone ? `Zone ${op.zone}` : '—')} · {op.linesArea || '—'}
-                        </span>
-                        {op.startTime && formatDuration(op.startTime) && (
-                          <span className={styles.opsDuration} title={t('homeDuration')}>
-                            {formatDuration(op.startTime)}
+                  {activeOperationsList.map((op) => {
+                    const dept = getDepartment(op.departmentId)
+                    const taskDef = getTaskById(op.taskId)
+                    const zoneObj = zonesList.find((z) => z.id === op.zoneId)
+                    const deptLabel = lang === 'ar' ? (dept?.labelAr ?? op.department) : op.department
+                    const taskLabel = lang === 'ar' ? (taskDef?.labelAr ?? op.task) : op.task
+                    const zoneDisplay = lang === 'ar' ? (zoneObj?.labelAr ?? op.zone) : ((op.zone === 'Inventory' || (op.zone && String(op.zone).startsWith('Zone '))) ? (op.zone || '—') : (op.zone ? `Zone ${op.zone}` : '—'))
+                    return (
+                      <li key={op.id} className={styles.opsItem}>
+                        <button
+                          type="button"
+                          className={styles.opsItemBtn}
+                          onClick={() => navigate('/engineer/monitor')}
+                        >
+                          <span className={styles.opsWorker}>{op.workerName ?? '—'}</span>
+                          <span className={styles.opsDetail}>
+                            {[deptLabel, taskLabel].filter(Boolean).join(' · ') || '—'} · {zoneDisplay} · {op.linesArea || '—'}
                           </span>
-                        )}
-                      </button>
-                    </li>
-                  ))}
+                          {op.startTime && formatDuration(op.startTime) && (
+                            <span className={styles.opsDuration} title={t('homeDuration')}>
+                              {formatDuration(op.startTime)}
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
             </div>
@@ -643,11 +680,11 @@ export default function EngineerHome() {
       <section className={styles.section}>
         <button
           type="button"
-          className={styles.collapseHeader}
+          className={`${styles.collapseHeader} ${lang === 'ar' ? styles.collapseHeaderRtl : ''}`}
           onClick={() => setRecentFaultsExpanded((e) => !e)}
           aria-expanded={recentFaultsExpanded}
         >
-          <i className={`fas fa-fw ${recentFaultsExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}`} />
+          <i className={`fas fa-fw ${recentFaultsExpanded ? 'fa-chevron-down' : lang === 'ar' ? 'fa-chevron-left' : 'fa-chevron-right'}`} />
           <h2 className={styles.sectionTitleCollapse}><i className="fas fa-wrench fa-fw" /> {t('homeRecentFaultLogs')}</h2>
           {equipmentTicketsForHome.length > 0 && <span className={styles.collapseBadge}>{equipmentTicketsForHome.length}</span>}
         </button>
@@ -679,7 +716,7 @@ export default function EngineerHome() {
                         <td>{row.equipmentName}</td>
                         <td>{row.zone}</td>
                         <td>{t(row.ticketType === 'fault' ? 'homeTicketTypeFault' : row.ticketType === 'preventive' ? 'homeTicketTypePreventive' : row.ticketType === 'inspection' ? 'homeTicketTypeInspection' : 'homeTicketTypeCorrective')}</td>
-                        <td>{row.severityLabel}</td>
+                        <td>{row.severity ? t('homeSeverity' + (row.severity.charAt(0).toUpperCase() + row.severity.slice(1))) : (row.severityLabel || '—')}</td>
                         <td>{row.dueDate ? new Date(row.dueDate + 'T12:00:00').toLocaleDateString() : '—'}</td>
                         <td>{row.ticketType === 'fault' ? t('homeFaultStatusOpen') : t('homeFaultStatusScheduled')}</td>
                         <td>{row.createdAt ? new Date(row.createdAt).toLocaleString() : '—'}</td>

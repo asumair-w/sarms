@@ -18,6 +18,22 @@ import styles from './RegisterManageWorkers.module.css'
 const ROLE_LABEL = Object.fromEntries(ROLE_OPTIONS.map((r) => [r.value, r.label]))
 const DEPT_LABEL = Object.fromEntries(DEPARTMENT_OPTIONS.map((d) => [d.value, d.label]))
 
+/** Map skill option value to translation key (engineer.skillXxx). */
+const SKILL_KEY_MAP = {
+  'Harvesting': 'skillHarvesting',
+  'Irrigation': 'skillIrrigation',
+  'Machine Repair': 'skillMachineRepair',
+  'Inspection': 'skillInspection',
+  'Plant Care': 'skillPlantCare',
+  'Packing': 'skillPacking',
+  'Storage': 'skillStorage',
+  'Spraying / Treatment': 'skillSprayingTreatment',
+  'Monitoring': 'skillMonitoring',
+  'Preventive Maintenance': 'skillPreventiveMaintenance',
+  'Testing': 'skillTesting',
+  'Quality Check': 'skillQualityCheck',
+}
+
 function getWeekStart() {
   const d = new Date()
   const day = d.getDay()
@@ -110,6 +126,9 @@ function RegisterManageWorkers() {
   const isEngineerRoute = location.pathname.startsWith('/engineer')
   const { lang } = useLanguage()
   const t = (key) => getTranslation(lang, 'engineer', key)
+  const getSkillLabel = (skill) => t(SKILL_KEY_MAP[skill] || skill)
+  const getRoleLabel = (role) => (role ? t('role' + (role.charAt(0).toUpperCase() + role.slice(1))) : '')
+  const getDeptLabel = (dept) => (dept ? t('dept' + (dept.charAt(0).toUpperCase() + dept.slice(1))) : '')
   const { sessions, tasks, workers, updateWorker, setWorkers } = useAppStore()
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
@@ -342,41 +361,41 @@ function RegisterManageWorkers() {
     <div className={styles.page}>
       {/* Worker Ranking Widget */}
       <section className={styles.rankingSection}>
-        <h2 className={styles.rankingTitle}><i className="fas fa-trophy fa-fw" /> Worker Ranking</h2>
+        <h2 className={styles.rankingTitle}><i className="fas fa-trophy fa-fw" /> {t('workerRanking')}</h2>
         <div className={styles.rankingGrid}>
           {ranking.topPerformer ? (
             <Link to={`${profileBase}/${ranking.topPerformer.worker.id}`} className={`${styles.rankingCard} ${styles.rankingCardGold} ${styles.rankingCardLink}`}>
-              <span className={styles.rankingLabel}>Top Performer (this week)</span>
+              <span className={styles.rankingLabel}>{t('topPerformerThisWeek')}</span>
               <span className={styles.rankingName}>{ranking.topPerformer.worker.fullName}</span>
-              <span className={styles.rankingMetric}>{ranking.topPerformer.value} completed</span>
+              <span className={styles.rankingMetric}>{ranking.topPerformer.value} {t('completedLabel')}</span>
             </Link>
           ) : (
             <div className={`${styles.rankingCard} ${styles.rankingCardGold}`}>
-              <span className={styles.rankingLabel}>Top Performer (this week)</span>
+              <span className={styles.rankingLabel}>{t('topPerformerThisWeek')}</span>
               <span className={styles.cellMuted}>—</span>
             </div>
           )}
           {ranking.mostOverloaded && ranking.mostOverloaded.value > 0 ? (
             <Link to={`${profileBase}/${ranking.mostOverloaded.worker.id}`} className={`${styles.rankingCard} ${styles.rankingCardNeutral} ${styles.rankingCardLink}`}>
-              <span className={styles.rankingLabel}>Most Overloaded (active tasks)</span>
+              <span className={styles.rankingLabel}>{t('mostOverloadedActiveTasks')}</span>
               <span className={styles.rankingName}>{ranking.mostOverloaded.worker.fullName}</span>
-              <span className={styles.rankingMetric}>{ranking.mostOverloaded.value} active</span>
+              <span className={styles.rankingMetric}>{ranking.mostOverloaded.value} {t('activeLabel')}</span>
             </Link>
           ) : (
             <div className={`${styles.rankingCard} ${styles.rankingCardNeutral}`}>
-              <span className={styles.rankingLabel}>Most Overloaded (active tasks)</span>
+              <span className={styles.rankingLabel}>{t('mostOverloadedActiveTasks')}</span>
               <span className={styles.cellMuted}>—</span>
             </div>
           )}
           {ranking.mostDelayed && ranking.mostDelayed.value > 0 ? (
             <Link to={`${profileBase}/${ranking.mostDelayed.worker.id}`} className={`${styles.rankingCard} ${styles.rankingCardBad} ${styles.rankingCardLink}`}>
-              <span className={styles.rankingLabel}>Most Delayed (overdue)</span>
+              <span className={styles.rankingLabel}>{t('mostDelayedOverdue')}</span>
               <span className={styles.rankingName}>{ranking.mostDelayed.worker.fullName}</span>
-              <span className={styles.rankingMetric}>{ranking.mostDelayed.value} overdue</span>
+              <span className={styles.rankingMetric}>{ranking.mostDelayed.value} {t('overdueLabel')}</span>
             </Link>
           ) : (
             <div className={`${styles.rankingCard} ${styles.rankingCardBad}`}>
-              <span className={styles.rankingLabel}>Most Delayed (overdue)</span>
+              <span className={styles.rankingLabel}>{t('mostDelayedOverdue')}</span>
               <span className={styles.cellMuted}>—</span>
             </div>
           )}
@@ -394,31 +413,31 @@ function RegisterManageWorkers() {
         <select className={styles.filter} value={isEngineerRoute && filterRole === 'admin' ? '' : filterRole} onChange={(e) => setFilterRole(e.target.value)}>
           <option value="">{t('allRoles')}</option>
           {roleOptions.map((r) => (
-            <option key={r.value} value={r.value}>{r.label}</option>
+            <option key={r.value} value={r.value}>{getRoleLabel(r.value)}</option>
           ))}
         </select>
         <select className={styles.filter} value={filterDept} onChange={(e) => setFilterDept(e.target.value)}>
           <option value="">{t('allDepartmentsOpt')}</option>
           {DEPARTMENT_OPTIONS.map((d) => (
-            <option key={d.value} value={d.value}>{d.label}</option>
+            <option key={d.value} value={d.value}>{getDeptLabel(d.value)}</option>
           ))}
         </select>
         <select className={styles.filter} value={filterSkill} onChange={(e) => setFilterSkill(e.target.value)}>
           <option value="">{t('allSkills')}</option>
           {SKILL_OPTIONS.map((s) => (
-            <option key={s} value={s}>{s}</option>
+            <option key={s} value={s}>{getSkillLabel(s)}</option>
           ))}
         </select>
         <select className={styles.filter} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-          <option value="">All (account)</option>
-          <option value="active">Active</option>
+          <option value="">{t('allAccount')}</option>
+          <option value="active">{t('active')}</option>
           <option value="not_active">{t('notActive')}</option>
         </select>
         <button type="button" className={styles.addWorkerBtn} onClick={openAdd}>
-          <i className="fas fa-user-plus fa-fw" /> Add New Worker
+          <i className="fas fa-user-plus fa-fw" /> {t('addNewWorker')}
         </button>
         <button type="button" className={styles.exportPdfBtn} onClick={exportEmployeesPDF} disabled={filtered.length === 0} title="Export table to PDF">
-          <i className="fas fa-file-pdf fa-fw" /> Export PDF
+          <i className="fas fa-file-pdf fa-fw" /> {t('exportPdf')}
         </button>
       </div>
 
@@ -426,17 +445,17 @@ function RegisterManageWorkers() {
         <table className={styles.table}>
           <thead>
             <tr>
-              <th>Employee ID</th>
-              <th>Full Name</th>
-              <th>Skills</th>
-              <th>Role</th>
-              <th>Department</th>
-              <th>Account</th>
+              <th>{t('employeeId')}</th>
+              <th>{t('fullName')}</th>
+              <th>{t('skills')}</th>
+              <th>{t('role')}</th>
+              <th>{t('department')}</th>
+              <th>{t('account')}</th>
               <th>{t('inTask')}</th>
-              <th>Tasks This Week</th>
-              <th>Overdue</th>
-              <th>Efficiency %</th>
-              <th>Actions</th>
+              <th>{t('tasksThisWeek')}</th>
+              <th>{t('overdue')}</th>
+              <th>{t('efficiencyPct')}</th>
+              <th>{t('actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -463,15 +482,15 @@ function RegisterManageWorkers() {
                   </td>
                   <td>
                     <div className={styles.skillTags}>
-                      {skills.length ? skills.map((s) => <span key={s} className={styles.skillTag}>{s}</span>) : <span className={styles.cellMuted}>—</span>}
+                      {skills.length ? skills.map((s) => <span key={s} className={styles.skillTag}>{getSkillLabel(s)}</span>) : <span className={styles.cellMuted}>—</span>}
                     </div>
                   </td>
-                  <td>{ROLE_LABEL[w.role] ?? w.role}</td>
-                  <td>{DEPT_LABEL[w.department] ?? w.department}</td>
+                  <td>{getRoleLabel(w.role) || w.role}</td>
+                  <td>{getDeptLabel(w.department) || w.department}</td>
                   <td><span className={accountCls}>{accountLabel}</span></td>
                   <td>
                     {showInTask ? (
-                      inTask ? <span className={styles.badgeInTask}>Yes</span> : <span className={styles.badgeNotInTask}>No</span>
+                      inTask ? <span className={styles.badgeInTask}>{t('yes')}</span> : <span className={styles.badgeNotInTask}>{t('no')}</span>
                     ) : (
                       <span className={styles.cellMuted}>—</span>
                     )}
@@ -481,8 +500,8 @@ function RegisterManageWorkers() {
                   <td><span className={effCls}>{eff != null ? `${eff}%` : '—'}</span></td>
                   <td>
                     <div className={styles.actionsCell}>
-                      <Link to={`${profileBase}/${w.id}`} className={styles.actionBtn}>View</Link>
-                      <button type="button" className={styles.actionBtn} onClick={() => openEdit(w)} title="Edit">Edit</button>
+                      <Link to={`${profileBase}/${w.id}`} className={styles.actionBtn}>{t('view')}</Link>
+                      <button type="button" className={styles.actionBtn} onClick={() => openEdit(w)} title={t('edit')}>{t('edit')}</button>
                     </div>
                   </td>
                 </tr>
@@ -491,7 +510,7 @@ function RegisterManageWorkers() {
           </tbody>
         </table>
         {filtered.length === 0 && (
-          <p className={styles.empty}>No workers match your filters.</p>
+          <p className={styles.empty}>{t('noWorkersMatch')}</p>
         )}
       </div>
 
@@ -500,45 +519,45 @@ function RegisterManageWorkers() {
         <div className={styles.overlay} onClick={closeAddAndCreated}>
           <div className={styles.panel} onClick={(e) => e.stopPropagation()}>
             <div className={styles.panelHeader}>
-              <h2><i className="fas fa-user-plus fa-fw" /> Add New Worker</h2>
-              <button type="button" className={styles.closeBtn} onClick={closeAddAndCreated} aria-label="Close">×</button>
+              <h2><i className="fas fa-user-plus fa-fw" /> {t('addNewWorker')}</h2>
+              <button type="button" className={styles.closeBtn} onClick={closeAddAndCreated} aria-label={t('close')}>×</button>
             </div>
             <form onSubmit={saveAddWorker} className={styles.form}>
-              <label className={styles.label}>Full Name *</label>
+              <label className={styles.label}>{t('fullNameRequired')}</label>
               <input className={styles.input} value={addForm.fullName} onChange={(e) => setAddForm((f) => ({ ...f, fullName: e.target.value }))} placeholder={t('fullName')} required />
-              <label className={styles.label}>Role</label>
+              <label className={styles.label}>{t('role')}</label>
               <select className={styles.input} value={addForm.role} onChange={(e) => setAddForm((f) => ({ ...f, role: e.target.value }))}>
                 {roleOptions.map((r) => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
+                  <option key={r.value} value={r.value}>{getRoleLabel(r.value)}</option>
                 ))}
               </select>
-              <label className={styles.label}>Department</label>
+              <label className={styles.label}>{t('department')}</label>
               <select className={styles.input} value={addForm.department} onChange={(e) => setAddForm((f) => ({ ...f, department: e.target.value }))}>
                 {DEPARTMENT_OPTIONS.map((d) => (
-                  <option key={d.value} value={d.value}>{d.label}</option>
+                  <option key={d.value} value={d.value}>{getDeptLabel(d.value)}</option>
                 ))}
               </select>
-              <label className={styles.label}>Account Status</label>
+              <label className={styles.label}>{t('accountStatus')}</label>
               <select className={styles.input} value={addForm.status} onChange={(e) => setAddForm((f) => ({ ...f, status: e.target.value }))}>
-                <option value="active">Active</option>
+                <option value="active">{t('active')}</option>
                 <option value="inactive">{t('notActive')}</option>
               </select>
-              <label className={styles.label}>Phone</label>
+              <label className={styles.label}>{t('phone')}</label>
               <input type="tel" className={styles.input} value={addForm.phone} onChange={(e) => setAddForm((f) => ({ ...f, phone: e.target.value }))} placeholder={t('phonePlaceholder')} />
-              <label className={styles.label}>Email</label>
+              <label className={styles.label}>{t('email')}</label>
               <input type="email" className={styles.input} value={addForm.email} onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))} placeholder={t('emailPlaceholder')} />
-              <label className={styles.label}>Skills</label>
+              <label className={styles.label}>{t('skills')}</label>
               <div className={styles.skillCheckboxGrid}>
                 {SKILL_OPTIONS.map((skill) => (
                   <label key={skill} className={styles.skillCheckbox}>
                     <input type="checkbox" checked={addForm.skills.includes(skill)} onChange={() => toggleAddSkill(skill)} />
-                    <span>{skill}</span>
+                    <span>{getSkillLabel(skill)}</span>
                   </label>
                 ))}
               </div>
               <div className={styles.formActions}>
-                <button type="submit" className={styles.primaryBtn}>Create Worker</button>
-                <button type="button" className={styles.secondaryBtn} onClick={closeAddAndCreated}>Cancel</button>
+                <button type="submit" className={styles.primaryBtn}>{t('createWorker')}</button>
+                <button type="button" className={styles.secondaryBtn} onClick={closeAddAndCreated}>{t('cancel')}</button>
               </div>
             </form>
           </div>
@@ -550,26 +569,26 @@ function RegisterManageWorkers() {
         <div className={styles.overlay} onClick={closeAddAndCreated}>
           <div className={styles.panel} onClick={(e) => e.stopPropagation()}>
             <div className={styles.panelHeader}>
-              <h2><i className="fas fa-check-circle fa-fw" /> Worker Created</h2>
-              <button type="button" className={styles.closeBtn} onClick={closeAddAndCreated} aria-label="Close">×</button>
+              <h2><i className="fas fa-check-circle fa-fw" /> {t('workerCreated')}</h2>
+              <button type="button" className={styles.closeBtn} onClick={closeAddAndCreated} aria-label={t('close')}>×</button>
             </div>
             <div className={styles.createdPanel}>
               <p className={styles.createdName}>{createdWorker.fullName}</p>
               <div className={styles.createdRow}>
-                <span className={styles.createdLabel}>Employee ID (login):</span>
+                <span className={styles.createdLabel}>{t('employeeIdLogin')}</span>
                 <code className={styles.createdCode}>{createdWorker.employeeId}</code>
               </div>
               <div className={styles.createdRow}>
-                <span className={styles.createdLabel}>Temporary password:</span>
+                <span className={styles.createdLabel}>{t('tempPassword')}</span>
                 <code className={styles.createdCode}>{createdWorker.tempPassword}</code>
               </div>
               <div className={styles.qrWrap}>
-                <span className={styles.createdLabel}>QR code (for login)</span>
+                <span className={styles.createdLabel}>{t('qrCodeForLogin')}</span>
                 <img src={getQRCodeUrl(createdWorker.employeeId, 180)} alt={`QR for ${createdWorker.employeeId}`} className={styles.qrImg} />
               </div>
-              <p className={styles.createdHint}>Save the ID and password; the worker can use the QR code to sign in.</p>
+              <p className={styles.createdHint}>{t('saveIdPasswordHint')}</p>
               <div className={styles.formActions}>
-                <button type="button" className={styles.primaryBtn} onClick={closeAddAndCreated}>Done</button>
+                <button type="button" className={styles.primaryBtn} onClick={closeAddAndCreated}>{t('done')}</button>
               </div>
             </div>
           </div>
@@ -580,45 +599,45 @@ function RegisterManageWorkers() {
         <div className={styles.overlay} onClick={() => setEditOpen(false)}>
           <div className={styles.panel} onClick={(e) => e.stopPropagation()}>
             <div className={styles.panelHeader}>
-              <h2>Edit Worker</h2>
-              <button type="button" className={styles.closeBtn} onClick={() => setEditOpen(false)} aria-label="Close">×</button>
+              <h2>{t('editWorker')}</h2>
+              <button type="button" className={styles.closeBtn} onClick={() => setEditOpen(false)} aria-label={t('close')}>×</button>
             </div>
             <form onSubmit={saveEdit} className={styles.form}>
-              <label className={styles.label}>Full Name *</label>
+              <label className={styles.label}>{t('fullNameRequired')}</label>
               <input className={styles.input} value={editForm.fullName} onChange={(e) => setEditForm((f) => ({ ...f, fullName: e.target.value }))} required />
-              <label className={styles.label}>Role</label>
+              <label className={styles.label}>{t('role')}</label>
               <select className={styles.input} value={editForm.role} onChange={(e) => setEditForm((f) => ({ ...f, role: e.target.value }))}>
                 {roleOptions.map((r) => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
+                  <option key={r.value} value={r.value}>{getRoleLabel(r.value)}</option>
                 ))}
               </select>
-              <label className={styles.label}>Department</label>
+              <label className={styles.label}>{t('department')}</label>
               <select className={styles.input} value={editForm.department} onChange={(e) => setEditForm((f) => ({ ...f, department: e.target.value }))}>
                 {DEPARTMENT_OPTIONS.map((d) => (
-                  <option key={d.value} value={d.value}>{d.label}</option>
+                  <option key={d.value} value={d.value}>{getDeptLabel(d.value)}</option>
                 ))}
               </select>
-              <label className={styles.label}>Account Status</label>
+              <label className={styles.label}>{t('accountStatus')}</label>
               <select className={styles.input} value={editForm.status} onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))}>
-                <option value="active">Active</option>
+                <option value="active">{t('active')}</option>
                 <option value="inactive">{t('notActive')}</option>
               </select>
-              <label className={styles.label}>Skills</label>
+              <label className={styles.label}>{t('skills')}</label>
               <div className={styles.skillCheckboxGrid}>
                 {SKILL_OPTIONS.map((skill) => (
                   <label key={skill} className={styles.skillCheckbox}>
                     <input type="checkbox" checked={editForm.skills.includes(skill)} onChange={() => toggleSkill(skill)} />
-                    <span>{skill}</span>
+                    <span>{getSkillLabel(skill)}</span>
                   </label>
                 ))}
               </div>
               <div className={styles.formActions}>
-                <button type="submit" className={styles.primaryBtn}>Save</button>
-                <button type="button" className={styles.secondaryBtn} onClick={() => setEditOpen(false)}>Cancel</button>
+                <button type="submit" className={styles.primaryBtn}>{t('save')}</button>
+                <button type="button" className={styles.secondaryBtn} onClick={() => setEditOpen(false)}>{t('cancel')}</button>
               </div>
               <div className={styles.deleteSection}>
-                <button type="button" className={styles.dangerBtn} onClick={deleteWorker} title="Permanently delete this worker">
-                  <i className="fas fa-user-minus fa-fw" /> Delete worker permanently
+                <button type="button" className={styles.dangerBtn} onClick={deleteWorker} title={t('deleteWorkerPermanently')}>
+                  <i className="fas fa-user-minus fa-fw" /> {t('deleteWorkerPermanently')}
                 </button>
               </div>
             </form>

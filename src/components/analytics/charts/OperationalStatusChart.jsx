@@ -25,6 +25,12 @@ import {
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
 const LABELS = ['Pending', 'In Progress', 'Completed', 'Delayed']
+
+function getStatusLabels(t) {
+  if (!t) return LABELS
+  return [t('chartPending'), t('chartInProgress'), t('chartCompleted'), t('chartDelayed')]
+}
+
 /** Per-category colors: Pending, In Progress, Completed, Delayed */
 const TASKS_COLORS = [SLATE_GREY, SOFT_BLUE, OLIVE_PRIMARY, MUTED_ORANGE]
 const TASKS_HOVER = [SLATE_GREY_HOVER, SOFT_BLUE_HOVER, OLIVE_PRIMARY_HOVER, MUTED_ORANGE_HOVER]
@@ -33,17 +39,18 @@ const SESSIONS_HOVER = [SLATE_GREY_HOVER, SOFT_BLUE_HOVER, SLATE_GREY_HOVER, MUT
 const FAULTS_COLORS = [SLATE_GREY, SOFT_RED, SLATE_GREY, SLATE_GREY]
 const FAULTS_HOVER = [SLATE_GREY_HOVER, SOFT_RED_HOVER, SLATE_GREY_HOVER, SLATE_GREY_HOVER]
 
-export default function OperationalStatusChart({ data, onSegmentClick }) {
+export default function OperationalStatusChart({ data, t, onSegmentClick }) {
   const tasks = data?.tasks ?? [0, 0, 0, 0]
   const sessions = data?.sessions ?? [0, 0, 0, 0]
   const faults = data?.faults ?? [0, 0, 0, 0]
+  const labels = t ? getStatusLabels(t) : (data?.labels ?? LABELS)
 
   const chartData = {
-    labels: data?.labels ?? LABELS,
+    labels,
     datasets: [
-      { label: 'Tasks', data: tasks, backgroundColor: TASKS_COLORS, hoverBackgroundColor: TASKS_HOVER },
-      { label: 'Sessions', data: sessions, backgroundColor: SESSIONS_COLORS, hoverBackgroundColor: SESSIONS_HOVER },
-      { label: 'Faults', data: faults, backgroundColor: FAULTS_COLORS, hoverBackgroundColor: FAULTS_HOVER },
+      { label: t ? t('tasks') : 'Tasks', data: tasks, backgroundColor: TASKS_COLORS, hoverBackgroundColor: TASKS_HOVER },
+      { label: t ? t('sessions') : 'Sessions', data: sessions, backgroundColor: SESSIONS_COLORS, hoverBackgroundColor: SESSIONS_HOVER },
+      { label: t ? t('faults') : 'Faults', data: faults, backgroundColor: FAULTS_COLORS, hoverBackgroundColor: FAULTS_HOVER },
     ],
   }
 

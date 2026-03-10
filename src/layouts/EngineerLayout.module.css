@@ -89,7 +89,24 @@
 .topBarRight {
   position: relative;
   flex-shrink: 0;
-  margin-left: auto;
+  margin-inline-start: auto;
+}
+
+/* Arabic layout: put user block on the left */
+.wrapperRtl .topBar {
+  direction: rtl;
+}
+
+/* Only menu button content LTR; breadcrumb keeps RTL so text order is correct */
+.wrapperRtl .topBar .menuBtn {
+  direction: ltr;
+}
+
+.wrapperRtl .topBarUserBlock {
+  order: 10;
+  margin-inline-start: 0;
+  margin-inline-end: auto;
+  direction: ltr;
 }
 
 .userMenuBtn {
@@ -138,7 +155,7 @@
 .userDropdown {
   position: absolute;
   top: calc(100% + 4px);
-  right: 0;
+  inset-inline-end: 0;
   min-width: 200px;
   padding: 0.25rem 0;
   background: var(--sarms-card, #fff);
@@ -532,13 +549,31 @@
     display: flex;
   }
 
-  .sectionIndicator {
-    display: none;
+  /* On mobile: show interface name + page name (same as desktop), fit by smaller font and wrap */
+  .topBarLeft {
+    flex: 1;
+    min-width: 0;
   }
 
-  .breadcrumbSep,
+  .breadcrumb {
+    flex-wrap: wrap;
+    gap: 0.2rem;
+  }
+
   .breadcrumbLink {
-    font-size: 1rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  .breadcrumbSep {
+    font-size: 0.75rem;
+  }
+
+  .sectionIndicator {
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1.35;
   }
 
   .userMenuLabel {

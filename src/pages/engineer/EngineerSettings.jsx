@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useLanguage } from '../../context/LanguageContext'
+import { useAppStore } from '../../context/AppStoreContext'
 import { getTranslation } from '../../i18n/translations'
 import styles from '../AdminSettings.module.css'
 
 export default function EngineerSettings() {
   const { lang, setLang } = useLanguage()
+  const { resetToSeed } = useAppStore()
   const t = (key) => getTranslation(lang, 'admin', key)
   const [account, setAccount] = useState({ userId: '', role: '' })
+  const [seedDone, setSeedDone] = useState(false)
 
   useEffect(() => {
     try {
@@ -62,6 +65,28 @@ export default function EngineerSettings() {
         <div className={styles.accountRow}>
           <span><span className={styles.accountLabel}>{t('userId')}</span> {account.userId}</span>
           <span><span className={styles.accountLabel}>{t('role')}</span> {(account.role && ['admin', 'engineer', 'worker'].includes(account.role)) ? t('role' + account.role.charAt(0).toUpperCase() + account.role.slice(1)) : account.role}</span>
+        </div>
+      </section>
+
+      {/* Testing & Data – fill dummy/seed data */}
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}><i className="fas fa-database fa-fw" /> {t('testingData')}</h2>
+        <p className={styles.sectionDesc}>
+          {t('testingDataDesc')}
+        </p>
+        <div className={styles.row} style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <button
+            type="button"
+            className={styles.resetDataBtn}
+            onClick={() => {
+              resetToSeed()
+              setSeedDone(true)
+              setTimeout(() => setSeedDone(false), 3000)
+            }}
+          >
+            {t('resetDataToSeed')}
+          </button>
+          {seedDone && <span className={styles.hint} style={{ margin: 0 }}>{t('resetDataDone')}</span>}
         </div>
       </section>
     </div>

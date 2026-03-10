@@ -54,6 +54,11 @@ export default function EngineerLayout() {
   }
 
   function toggleSidebarCollapse() {
+    /* On mobile when sidebar is open as overlay: collapse button closes the sidebar instead of toggling width */
+    if (sidebarOpen) {
+      setSidebarOpen(false)
+      return
+    }
     setSidebarCollapsed((prev) => {
       const next = !prev
       localStorage.setItem(STORAGE_KEY, next ? 'true' : 'false')
@@ -65,7 +70,7 @@ export default function EngineerLayout() {
   const currentLabel = currentItem ? t(currentItem.labelKey) : t('navHome')
 
   return (
-    <div className={`${styles.wrapper} ${sidebarOpen ? styles.wrapperSidebarOpen : ''}`}>
+    <div className={`${styles.wrapper} ${sidebarOpen ? styles.wrapperSidebarOpen : ''} ${lang === 'ar' ? styles.wrapperRtl : ''}`}>
       <header className={styles.topBar}>
         <button
           type="button"
@@ -85,7 +90,7 @@ export default function EngineerLayout() {
             <span className={styles.sectionIndicator}>{currentLabel}</span>
           </nav>
         </div>
-        <div className={styles.topBarRight} ref={userDropdownRef}>
+        <div className={`${styles.topBarRight} ${styles.topBarUserBlock}`} ref={userDropdownRef}>
           <button
             type="button"
             className={styles.userMenuBtn}
