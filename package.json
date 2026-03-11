@@ -7,9 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && npx wrangler pages deploy dist --project-name=sarms",
-    "deploy:cf": "npx wrangler deploy --assets=./dist --compatibility-date 2026-02-02 --name sarms",
-    "build:cf": "npm run build && npx wrangler deploy --assets=./dist --compatibility-date 2026-02-02 --name sarms"
+    "deploy": "npm run build && npx wrangler deploy",
+    "deploy:pages": "npm run build && npx wrangler pages deploy dist --project-name=sarms",
+    "build:deploy": "npm run build && npx wrangler deploy"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
