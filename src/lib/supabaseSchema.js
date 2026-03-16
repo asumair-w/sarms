@@ -15,11 +15,22 @@ function ensureUuid(id) {
   return id && isUuid(id) ? id : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : null)
 }
 
+/** Generate next display code from prefix + number (e.g. EQ001, W002). */
+function nextDisplayCode(prefix, existingCodes) {
+  const nums = (existingCodes || []).map((c) => {
+    const m = (c || '').toString().match(/^\D+(\d+)$/)
+    return m ? parseInt(m[1], 10) : 0
+  })
+  const max = Math.max(0, ...nums)
+  return prefix + String(max + 1).padStart(3, '0')
+}
+
 // ----- Workers -----
 function fromDbWorker(r) {
   if (!r) return null
   return {
     id: r.id,
+    code: r.code,
     employeeId: r.employee_id,
     fullName: r.full_name,
     phone: r.phone,
@@ -39,6 +50,7 @@ function toDbWorker(item) {
   const id = ensureUuid(item.id) || item.id
   return {
     id,
+    code: item.code ?? null,
     employee_id: item.employeeId ?? item.employee_id ?? null,
     full_name: item.fullName ?? item.full_name ?? '',
     phone: item.phone ?? null,
@@ -83,6 +95,7 @@ function fromDbTask(r, workerIds = []) {
   if (!r) return null
   return {
     id: r.id,
+    code: r.code,
     zoneId: r.zone_id,
     batchId: r.batch_id,
     taskType: r.task_type,
@@ -106,6 +119,7 @@ function toDbTask(item) {
   const id = ensureUuid(item.id) || item.id
   return {
     id,
+    code: item.code ?? null,
     zone_id: item.zoneId ?? item.zone_id ?? '',
     batch_id: item.batchId ?? item.batch_id ?? '',
     task_type: item.taskType ?? item.task_type ?? 'farming',
@@ -129,6 +143,7 @@ function fromDbSession(r) {
   if (!r) return null
   return {
     id: r.id,
+    code: r.code,
     workerId: r.worker_id,
     workerName: r.worker_name,
     department: r.department,
@@ -151,6 +166,7 @@ function toDbSession(item) {
   const id = ensureUuid(item.id) || item.id
   return {
     id,
+    code: item.code ?? null,
     worker_id: item.workerId ?? item.worker_id,
     worker_name: item.workerName ?? item.worker_name ?? null,
     department: item.department ?? null,
@@ -174,6 +190,7 @@ function fromDbRecord(r) {
   if (!r) return null
   return {
     id: r.id,
+    code: r.code,
     recordType: r.record_type,
     worker: r.worker,
     department: r.department,
@@ -198,6 +215,7 @@ function toDbRecord(item) {
   const id = ensureUuid(item.id) || item.id
   return {
     id,
+    code: item.code ?? null,
     record_type: item.recordType ?? item.record_type ?? 'production',
     worker: item.worker ?? null,
     department: item.department ?? null,
@@ -223,6 +241,7 @@ function fromDbInventory(r) {
   if (!r) return null
   return {
     id: r.id,
+    code: r.code,
     name: r.name,
     category: r.category,
     quantity: Number(r.quantity) || 0,
@@ -238,6 +257,7 @@ function toDbInventory(item) {
   const id = ensureUuid(item.id) || item.id
   return {
     id,
+    code: item.code ?? null,
     name: item.name ?? '',
     category: item.category ?? 'other',
     quantity: Number(item.quantity) || 0,
@@ -269,6 +289,7 @@ function toDbInventoryMovement(item) {
   const id = ensureUuid(item.id) || item.id
   return {
     id,
+    code: item.code ?? null,
     item_id: item.itemId ?? item.item_id,
     old_quantity: Number(item.old_quantity) ?? 0,
     new_quantity: Number(item.new_quantity) ?? 0,
@@ -285,6 +306,7 @@ function fromDbEquipment(r) {
   if (!r) return null
   return {
     id: r.id,
+    code: r.code,
     name: r.name,
     category: r.category,
     zone: r.zone,
@@ -298,6 +320,7 @@ function toDbEquipment(item) {
   const id = ensureUuid(item.id) || item.id
   return {
     id,
+    code: item.code ?? null,
     name: item.name ?? '',
     category: item.category ?? null,
     zone: item.zone ?? null,
@@ -312,6 +335,7 @@ function fromDbFault(r) {
   if (!r) return null
   return {
     id: r.id,
+    code: r.code,
     equipmentId: r.equipment_id,
     equipmentName: r.equipment_name,
     category: r.category,
@@ -327,6 +351,7 @@ function toDbFault(item) {
   const id = ensureUuid(item.id) || item.id
   return {
     id,
+    code: item.code ?? null,
     equipment_id: item.equipmentId ?? item.equipment_id ?? null,
     equipment_name: item.equipmentName ?? item.equipment_name ?? null,
     category: item.category ?? 'other',
@@ -343,6 +368,7 @@ function fromDbMaintenancePlan(r) {
   if (!r) return null
   return {
     id: r.id,
+    code: r.code,
     equipmentId: r.equipment_id,
     equipmentName: r.equipment_name,
     plannedDate: r.planned_date,
@@ -357,6 +383,7 @@ function toDbMaintenancePlan(item) {
   const id = ensureUuid(item.id) || item.id
   return {
     id,
+    code: item.code ?? null,
     equipment_id: item.equipmentId ?? item.equipment_id,
     equipment_name: item.equipmentName ?? item.equipment_name ?? null,
     planned_date: item.plannedDate ?? item.planned_date,
@@ -469,13 +496,18 @@ export async function persistAllSupabase(state) {
   }
 
   try {
-    // Workers
+    // Workers (auto code: W001, W002…)
     await deleteAll('workers')
     if (workersList.length > 0) {
+      const codes = []
+      for (const row of workerRows) {
+        if (!row.code) row.code = nextDisplayCode('W', codes)
+        codes.push(row.code)
+      }
       await supabase.from('workers').insert(workerRows)
     }
 
-    // Tasks + task_workers (use workerIdMap for worker_ids)
+    // Tasks + task_workers (auto code: T001…)
     const { data: existingTw } = await supabase.from('task_workers').select('task_id')
     const taskIdsToDelete = [...new Set((existingTw || []).map((r) => r.task_id))]
     for (let i = 0; i < taskIdsToDelete.length; i += 100) {
@@ -486,6 +518,11 @@ export async function persistAllSupabase(state) {
     const tasksList = state.tasks || []
     if (tasksList.length > 0) {
       const taskRows = tasksList.map(toDbTask)
+      const tCodes = []
+      for (const row of taskRows) {
+        if (!row.code) row.code = nextDisplayCode('T', tCodes)
+        tCodes.push(row.code)
+      }
       await supabase.from('tasks').insert(taskRows)
       const twRows = []
       for (let i = 0; i < tasksList.length; i++) {
@@ -500,7 +537,7 @@ export async function persistAllSupabase(state) {
       if (twRows.length > 0) await supabase.from('task_workers').insert(twRows)
     }
 
-    // Sessions (map workerId via workerIdMap)
+    // Sessions (auto code: S001…)
     await deleteAll('sessions')
     const sessionsList = state.sessions || []
     if (sessionsList.length > 0) {
@@ -510,14 +547,25 @@ export async function persistAllSupabase(state) {
         if (mapped) row.worker_id = mapped
         return row
       })
+      const sCodes = []
+      for (const row of rows) {
+        if (!row.code) row.code = nextDisplayCode('S', sCodes)
+        sCodes.push(row.code)
+      }
       await supabase.from('sessions').insert(rows)
     }
 
-    // Records, zones, inventory, inventory_movements, equipment, faults, maintenance_plans
+    // Records (auto code: R001…)
     await deleteAll('records')
     const recordsList = state.records || []
     if (recordsList.length > 0) {
-      await supabase.from('records').insert(recordsList.map(toDbRecord))
+      const rows = recordsList.map(toDbRecord)
+      const rCodes = []
+      for (const row of rows) {
+        if (!row.code) row.code = nextDisplayCode('R', rCodes)
+        rCodes.push(row.code)
+      }
+      await supabase.from('records').insert(rows)
     }
 
     await deleteAll('zones')
@@ -531,6 +579,11 @@ export async function persistAllSupabase(state) {
     const inventoryIdMap = {}
     if (invList.length > 0) {
       const invRows = invList.map(toDbInventory)
+      const invCodes = []
+      for (const row of invRows) {
+        if (!row.code) row.code = nextDisplayCode('INV', invCodes)
+        invCodes.push(row.code)
+      }
       for (let i = 0; i < invList.length; i++) inventoryIdMap[invList[i].id] = invRows[i].id
       await supabase.from('inventory').insert(invRows)
     }
@@ -539,6 +592,11 @@ export async function persistAllSupabase(state) {
     const movList = state.inventoryMovements || []
     if (movList.length > 0) {
       const movRows = movList.map(toDbInventoryMovement)
+      const imCodes = []
+      for (const row of movRows) {
+        if (!row.code) row.code = nextDisplayCode('IM', imCodes)
+        imCodes.push(row.code)
+      }
       for (const m of movRows) {
         const resolved = inventoryIdMap[m.item_id] ?? (isUuid(m.item_id) ? m.item_id : null)
         if (resolved) m.item_id = resolved
@@ -551,6 +609,11 @@ export async function persistAllSupabase(state) {
     const equipmentIdMap = {}
     if (eqList.length > 0) {
       const eqRows = eqList.map(toDbEquipment)
+      const eqCodes = []
+      for (const row of eqRows) {
+        if (!row.code) row.code = nextDisplayCode('EQ', eqCodes)
+        eqCodes.push(row.code)
+      }
       for (let i = 0; i < eqList.length; i++) equipmentIdMap[eqList[i].id] = eqRows[i].id
       await supabase.from('equipment').insert(eqRows)
     }
@@ -559,6 +622,11 @@ export async function persistAllSupabase(state) {
     const faultsList = state.faults || []
     if (faultsList.length > 0) {
       const faultRows = faultsList.map(toDbFault)
+      const fCodes = []
+      for (const row of faultRows) {
+        if (!row.code) row.code = nextDisplayCode('F', fCodes)
+        fCodes.push(row.code)
+      }
       for (const f of faultRows) {
         const resolved = equipmentIdMap[f.equipment_id] ?? (isUuid(f.equipment_id) ? f.equipment_id : null)
         if (resolved != null) f.equipment_id = resolved
@@ -570,6 +638,11 @@ export async function persistAllSupabase(state) {
     const mpList = state.maintenancePlans || []
     if (mpList.length > 0) {
       const mpRows = mpList.map(toDbMaintenancePlan)
+      const mpCodes = []
+      for (const row of mpRows) {
+        if (!row.code) row.code = nextDisplayCode('MP', mpCodes)
+        mpCodes.push(row.code)
+      }
       for (const p of mpRows) {
         const resolved = equipmentIdMap[p.equipment_id] ?? (isUuid(p.equipment_id) ? p.equipment_id : null)
         if (resolved) p.equipment_id = resolved

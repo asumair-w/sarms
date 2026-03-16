@@ -119,9 +119,11 @@ CREATE TABLE IF NOT EXISTS zones (
 
 -- -----------------------------------------------------------------------------
 -- 2) workers (UUID PK)
+-- code: display id e.g. W001, E001 (readable in UI / Table Editor)
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS workers (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code              TEXT,
   employee_id       TEXT,
   full_name         TEXT NOT NULL,
   phone             TEXT,
@@ -142,9 +144,11 @@ CREATE INDEX IF NOT EXISTS idx_workers_status ON workers(status);
 
 -- -----------------------------------------------------------------------------
 -- 3) equipment (UUID PK; zone is display label, no FK)
+-- code: display id e.g. EQ001, EQ002
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS equipment (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code              TEXT,
   name              TEXT NOT NULL,
   category          TEXT,
   zone              TEXT,
@@ -158,9 +162,11 @@ CREATE INDEX IF NOT EXISTS idx_equipment_status ON equipment(status);
 
 -- -----------------------------------------------------------------------------
 -- 4) inventory (UUID PK)
+-- code: display id e.g. INV001
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS inventory (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code              TEXT,
   name              TEXT NOT NULL,
   category          inventory_category_enum NOT NULL,
   quantity          NUMERIC(12,2) NOT NULL DEFAULT 0,
@@ -175,9 +181,11 @@ CREATE INDEX IF NOT EXISTS idx_inventory_category ON inventory(category);
 
 -- -----------------------------------------------------------------------------
 -- 5) tasks (UUID PK, FK zone_id → zones)
+-- code: display id e.g. T001, T002
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS tasks (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code                TEXT,
   zone_id             TEXT NOT NULL REFERENCES zones(id) ON DELETE RESTRICT,
   batch_id            TEXT NOT NULL,
   task_type           task_type_enum NOT NULL,
@@ -214,10 +222,11 @@ CREATE INDEX IF NOT EXISTS idx_task_workers_worker ON task_workers(worker_id);
 
 -- -----------------------------------------------------------------------------
 -- 7) sessions (UUID PK, FKs worker_id → workers, zone_id → zones)
--- worker_name, zone, task are denormalized display fields for UI rendering.
+-- code: display id e.g. S001. worker_name, zone, task are denormalized for UI.
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS sessions (
   id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code                  TEXT,
   worker_id              UUID NOT NULL REFERENCES workers(id) ON DELETE RESTRICT,
   worker_name            TEXT,
   department             TEXT,
@@ -241,9 +250,11 @@ CREATE INDEX IF NOT EXISTS idx_sessions_zone ON sessions(zone_id);
 
 -- -----------------------------------------------------------------------------
 -- 8) records (UUID PK)
+-- code: display id e.g. R001
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS records (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code              TEXT,
   record_type       record_type_enum NOT NULL,
   worker            TEXT,
   department        TEXT,
@@ -269,9 +280,11 @@ CREATE INDEX IF NOT EXISTS idx_records_created ON records(created_at);
 
 -- -----------------------------------------------------------------------------
 -- 9) inventory_movements (UUID PK, FK item_id → inventory)
+-- code: display id e.g. IM001
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS inventory_movements (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code              TEXT,
   item_id           UUID NOT NULL REFERENCES inventory(id) ON DELETE RESTRICT,
   old_quantity      NUMERIC(12,2) NOT NULL,
   new_quantity      NUMERIC(12,2) NOT NULL,
@@ -287,9 +300,11 @@ CREATE INDEX IF NOT EXISTS idx_inv_movements_created ON inventory_movements(crea
 
 -- -----------------------------------------------------------------------------
 -- 10) faults (UUID PK, FK equipment_id → equipment, SET NULL on delete)
+-- code: display id e.g. F001
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS faults (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code              TEXT,
   equipment_id      UUID REFERENCES equipment(id) ON DELETE SET NULL,
   equipment_name    TEXT,
   category          TEXT NOT NULL,
@@ -305,9 +320,11 @@ CREATE INDEX IF NOT EXISTS idx_faults_created ON faults(created_at);
 
 -- -----------------------------------------------------------------------------
 -- 11) maintenance_plans (UUID PK, FK equipment_id → equipment, CASCADE)
+-- code: display id e.g. MP001
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS maintenance_plans (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code              TEXT,
   equipment_id      UUID NOT NULL REFERENCES equipment(id) ON DELETE CASCADE,
   equipment_name    TEXT,
   planned_date      DATE NOT NULL,
