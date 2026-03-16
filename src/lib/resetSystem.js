@@ -7,18 +7,19 @@ import { supabase, isSupabaseConfigured } from './supabase'
 
 const SKIP_HYDRATE_KEY = 'sarms-skip-hydrate'
 
-/** Tables used by SARMS (matches AppStoreContext). Delete all rows, keep structure. */
+/** Tables used by SARMS. Order respects FKs: task_workers, sessions first; then tasks; then rest. */
 const SUPABASE_TABLES = [
-  'workers',
-  'zones',
+  'task_workers',
+  'sessions',
   'tasks',
   'records',
-  'sessions',
-  'inventory',
   'inventory_movements',
-  'equipment',
   'faults',
   'maintenance_plans',
+  'workers',
+  'equipment',
+  'inventory',
+  'zones',
   'settings',
 ]
 
@@ -61,7 +62,7 @@ export async function resetSupabaseDatabase() {
   const BATCH = 100
   for (const table of SUPABASE_TABLES) {
     try {
-      const pk = table === 'settings' ? 'key' : 'id'
+      const pk = table === 'settings' ? 'key' : table === 'task_workers' ? 'task_id' : 'id'
       const { data: rows, error: selectErr } = await supabase.from(table).select(pk)
       if (selectErr) {
         if (selectErr.code === '42P01') continue

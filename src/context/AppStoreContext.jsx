@@ -6,6 +6,7 @@ import { getInitialInventory, getInitialEquipment } from '../data/inventory'
 import { getInitialFaults, getInitialMaintenancePlans } from '../data/faults'
 import { getInitialSessions } from '../data/monitorActive'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import { fetchSupabaseState, persistAllSupabase, persistSetting as persistSettingSupabase } from '../lib/supabaseSchema'
 
 const RECORDS_STORAGE_KEY = 'sarms-records'
 const SESSIONS_STORAGE_KEY = 'sarms-sessions'
@@ -260,71 +261,6 @@ function getInitialState() {
   }
 }
 
-/** Fetch all SARMS data from Supabase and return state shape. */
-async function fetchSupabaseState() {
-  if (!supabase) return null
-  const tables = [
-    'workers', 'zones', 'tasks', 'records', 'sessions',
-    'inventory', 'inventory_movements', 'equipment', 'faults', 'maintenance_plans', 'settings'
-  ]
-  const out = {}
-  try {
-    for (const table of tables) {
-      if (table === 'settings') {
-        const { data, error } = await supabase.from('settings').select('key, value')
-        if (error) {
-          if (error.code === '42P01') continue
-          console.warn('Supabase settings:', error.message)
-          continue
-        }
-        const rows = data || []
-        const batchesRow = rows.find((r) => r.key === BATCHES_BY_ZONE_STORAGE_KEY)
-        const defaultRow = rows.find((r) => r.key === DEFAULT_BATCH_BY_ZONE_STORAGE_KEY)
-        out.batchesByZone = batchesRow && typeof batchesRow.value === 'object' ? batchesRow.value : {}
-        out.defaultBatchByZone = defaultRow && typeof defaultRow.value === 'object' ? defaultRow.value : {}
-        continue
-      }
-      const { data, error } = await supabase.from(table).select('id, data')
-      if (error) {
-        if (error.code === '42P01') continue
-        console.warn(`Supabase ${table}:`, error.message)
-        continue
-      }
-      const list = (data || []).map((row) => (row.data && typeof row.data === 'object' ? { ...row.data, id: row.id } : { id: row.id }))
-      const key = table === 'inventory_movements' ? 'inventoryMovements' : table.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
-      out[key] = list
-    }
-    return out
-  } catch (e) {
-    console.warn('fetchSupabaseState:', e)
-    return null
-  }
-}
-
-/** Persist a list to Supabase (replace table). */
-async function persistTable(tableName, list) {
-  if (!supabase || !Array.isArray(list)) return
-  try {
-    await supabase.from(tableName).delete().neq('id', '')
-    if (list.length > 0) {
-      const rows = list.map((item) => ({ id: item.id, data: item }))
-      await supabase.from(tableName).insert(rows)
-    }
-  } catch (e) {
-    console.warn(`Supabase persist ${tableName}:`, e)
-  }
-}
-
-/** Persist settings key. */
-async function persistSetting(key, value) {
-  if (!supabase) return
-  try {
-    await supabase.from('settings').upsert({ key, value: value || {} }, { onConflict: 'key' })
-  } catch (e) {
-    console.warn('Supabase persist settings:', e)
-  }
-}
-
 function storeReducer(state, action) {
   switch (action.type) {
     case 'SET_TASKS':
@@ -530,86 +466,70 @@ export function AppStoreProvider({ children }) {
     return () => { cancelled = true }
   }, [])
 
+  // Supabase: single debounced persist of full state (production schema: columns + task_workers + UUIDs)
   useEffect(() => {
-    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
-    if (isSupabaseConfigured) {
-      persistTable('records', state.records)
-    } else {
-      try { localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(state.records)) } catch (_) {}
-    }
-  }, [state.records, state.hydrateDone])
+    if (!supabaseHydrateDone.current || !isSupabaseConfigured || !state.hydrateDone) return
+    const t = setTimeout(() => {
+      persistAllSupabase(state)
+    }, 600)
+    return () => clearTimeout(t)
+  }, [
+    state.hydrateDone,
+    state.workers,
+    state.zones,
+    state.tasks,
+    state.records,
+    state.sessions,
+    state.batchesByZone,
+    state.defaultBatchByZone,
+    state.inventory,
+    state.inventoryMovements,
+    state.equipment,
+    state.faults,
+    state.maintenancePlans,
+  ])
 
   useEffect(() => {
     if (!supabaseHydrateDone.current && isSupabaseConfigured) return
-    if (isSupabaseConfigured) persistTable('sessions', state.sessions)
-    else try { localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(state.sessions)) } catch (_) {}
-  }, [state.sessions, state.hydrateDone])
-
-  useEffect(() => {
-    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
-    if (isSupabaseConfigured) persistTable('zones', state.zones)
-    else try { localStorage.setItem(ZONES_STORAGE_KEY, JSON.stringify(state.zones)) } catch (_) {}
-  }, [state.zones, state.hydrateDone])
-
-  useEffect(() => {
-    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
-    if (isSupabaseConfigured) persistTable('tasks', state.tasks)
-    else try { localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(state.tasks)) } catch (_) {}
-  }, [state.tasks, state.hydrateDone])
-
-  useEffect(() => {
-    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
-    if (isSupabaseConfigured) {
-      persistSetting(BATCHES_BY_ZONE_STORAGE_KEY, state.batchesByZone)
-    } else {
-      try { localStorage.setItem(BATCHES_BY_ZONE_STORAGE_KEY, JSON.stringify(state.batchesByZone)) } catch (_) {}
-    }
+    if (isSupabaseConfigured) persistSettingSupabase(BATCHES_BY_ZONE_STORAGE_KEY, state.batchesByZone)
+    else try { localStorage.setItem(BATCHES_BY_ZONE_STORAGE_KEY, JSON.stringify(state.batchesByZone)) } catch (_) {}
   }, [state.batchesByZone, state.hydrateDone])
 
   useEffect(() => {
     if (!supabaseHydrateDone.current && isSupabaseConfigured) return
-    if (isSupabaseConfigured) {
-      persistSetting(DEFAULT_BATCH_BY_ZONE_STORAGE_KEY, state.defaultBatchByZone)
-    } else {
-      try { localStorage.setItem(DEFAULT_BATCH_BY_ZONE_STORAGE_KEY, JSON.stringify(state.defaultBatchByZone)) } catch (_) {}
-    }
+    if (isSupabaseConfigured) persistSettingSupabase(DEFAULT_BATCH_BY_ZONE_STORAGE_KEY, state.defaultBatchByZone)
+    else try { localStorage.setItem(DEFAULT_BATCH_BY_ZONE_STORAGE_KEY, JSON.stringify(state.defaultBatchByZone)) } catch (_) {}
   }, [state.defaultBatchByZone, state.hydrateDone])
 
   useEffect(() => {
     if (!supabaseHydrateDone.current && isSupabaseConfigured) return
-    if (isSupabaseConfigured) persistTable('workers', state.workers)
-    try { localStorage.setItem(WORKERS_STORAGE_KEY, JSON.stringify(state.workers)) } catch (_) {}
-  }, [state.workers, state.hydrateDone])
-
-  useEffect(() => {
-    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
-    if (isSupabaseConfigured) persistTable('inventory', state.inventory)
-    else try { localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(state.inventory)) } catch (_) {}
-  }, [state.inventory, state.hydrateDone])
-
-  useEffect(() => {
-    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
-    if (isSupabaseConfigured) persistTable('inventory_movements', state.inventoryMovements)
-    else try { localStorage.setItem(INVENTORY_MOVEMENTS_STORAGE_KEY, JSON.stringify(state.inventoryMovements)) } catch (_) {}
-  }, [state.inventoryMovements, state.hydrateDone])
-
-  useEffect(() => {
-    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
-    if (isSupabaseConfigured) persistTable('equipment', state.equipment)
-    else try { localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(state.equipment)) } catch (_) {}
-  }, [state.equipment, state.hydrateDone])
-
-  useEffect(() => {
-    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
-    if (isSupabaseConfigured) persistTable('faults', state.faults)
-    else try { localStorage.setItem(FAULTS_STORAGE_KEY, JSON.stringify(state.faults)) } catch (_) {}
-  }, [state.faults, state.hydrateDone])
-
-  useEffect(() => {
-    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
-    if (isSupabaseConfigured) persistTable('maintenance_plans', state.maintenancePlans)
-    else try { localStorage.setItem(MAINTENANCE_PLANS_STORAGE_KEY, JSON.stringify(state.maintenancePlans)) } catch (_) {}
-  }, [state.maintenancePlans, state.hydrateDone])
+    if (!isSupabaseConfigured) {
+      try {
+        localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(state.records))
+        localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(state.sessions))
+        localStorage.setItem(ZONES_STORAGE_KEY, JSON.stringify(state.zones))
+        localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(state.tasks))
+        localStorage.setItem(WORKERS_STORAGE_KEY, JSON.stringify(state.workers))
+        localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(state.inventory))
+        localStorage.setItem(INVENTORY_MOVEMENTS_STORAGE_KEY, JSON.stringify(state.inventoryMovements))
+        localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(state.equipment))
+        localStorage.setItem(FAULTS_STORAGE_KEY, JSON.stringify(state.faults))
+        localStorage.setItem(MAINTENANCE_PLANS_STORAGE_KEY, JSON.stringify(state.maintenancePlans))
+      } catch (_) {}
+    }
+  }, [
+    state.records,
+    state.sessions,
+    state.zones,
+    state.tasks,
+    state.workers,
+    state.inventory,
+    state.inventoryMovements,
+    state.equipment,
+    state.faults,
+    state.maintenancePlans,
+    state.hydrateDone,
+  ])
 
   const addTask = useCallback((task) => dispatch({ type: 'ADD_TASK', payload: task }), [])
   const updateTaskStatus = useCallback((taskId, status) =>
