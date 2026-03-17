@@ -462,7 +462,14 @@ export async function fetchSupabaseState() {
     out.sessions = (sessionsData || []).map(fromDbSession).filter(Boolean)
 
     const { data: recordsData } = await supabase.from('records').select('*')
-    out.records = (recordsData || []).map(fromDbRecord).filter(Boolean)
+    const opsRecords = (recordsData || []).map(fromDbRecord).filter(Boolean)
+    const { data: harvestLogData } = await supabase.from('harvest_log').select('*')
+    const harvestRecords = (harvestLogData || []).map((r) => {
+      const rec = fromDbRecord(r)
+      if (rec) rec.source = 'harvest_form'
+      return rec
+    }).filter(Boolean)
+    out.records = [...opsRecords, ...harvestRecords]
 
     const { data: invData } = await supabase.from('inventory').select('*')
     out.inventory = (invData || []).map(fromDbInventory).filter(Boolean)
@@ -568,17 +575,31 @@ export async function persistAllSupabase(state) {
       await supabase.from('sessions').insert(rows)
     }
 
-    // Records (auto code: R001…)
+    // Records (operations only) → records table (R001…)
     await deleteAll('records')
     const recordsList = state.records || []
-    if (recordsList.length > 0) {
-      const rows = recordsList.map(toDbRecord)
+    const opsList = recordsList.filter((r) => r.source !== 'harvest_form')
+    if (opsList.length > 0) {
+      const rows = opsList.map(toDbRecord)
       const rCodes = []
       for (const row of rows) {
         if (!row.code) row.code = nextDisplayCode('R', rCodes)
         rCodes.push(row.code)
       }
       await supabase.from('records').insert(rows)
+    }
+
+    // Harvest log only → harvest_log table (HL001…)
+    await deleteAll('harvest_log')
+    const harvestList = recordsList.filter((r) => r.source === 'harvest_form')
+    if (harvestList.length > 0) {
+      const rows = harvestList.map(toDbRecord)
+      const hlCodes = []
+      for (const row of rows) {
+        if (!row.code) row.code = nextDisplayCode('HL', hlCodes)
+        hlCodes.push(row.code)
+      }
+      await supabase.from('harvest_log').insert(rows)
     }
 
     await deleteAll('zones')
@@ -689,3 +710,45 @@ export async function persistSetting(key, value) {
     console.warn('persistSetting:', e)
   }
 }
+
+const ACTIVE_SESSION_KEY_PREFIX = 'sarms_active_session_'
+const SESSION_ID_STORAGE_KEY = 'sarms-session-id'
+
+/** Normalize user id for session key (one active session per user). */
+function normalizedSessionKey(userId) {
+  return ACTIVE_SESSION_KEY_PREFIX + String(userId ?? '').trim().toLowerCase()
+}
+
+/**
+ * Call after successful login: generate a new session id, store in sessionStorage,
+ * and persist to Supabase so other devices can be detected as "kicked".
+ * Only runs when Supabase is configured.
+ */
+export function setActiveSessionForUser(userId) {
+  if (!userId || !supabase) return
+  const sessionId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `s-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  try {
+    if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(SESSION_ID_STORAGE_KEY, sessionId)
+  } catch (_) {}
+  const key = normalizedSessionKey(userId)
+  const value = { sessionId, at: new Date().toISOString() }
+  persistSetting(key, value)
+}
+
+/**
+ * Returns the current session id stored for this user in Supabase (or null).
+ * Used to detect if this device was "kicked" by a login from another device.
+ */
+export async function getActiveSessionForUser(userId) {
+  if (!userId || !supabase) return null
+  try {
+    const key = normalizedSessionKey(userId)
+    const { data, error } = await supabase.from('settings').select('value').eq('key', key).maybeSingle()
+    if (error || !data?.value?.sessionId) return null
+    return data.value.sessionId
+  } catch (e) {
+    return null
+  }
+}
+
+export { SESSION_ID_STORAGE_KEY }

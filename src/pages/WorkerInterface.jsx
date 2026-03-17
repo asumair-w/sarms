@@ -12,6 +12,7 @@ import {
 } from '../data/workerFlow'
 import { SEED_WORKERS } from '../data/engineerWorkers'
 import { useAppStore } from '../context/AppStoreContext'
+import { useSessionKickCheck } from '../hooks/useSessionKickCheck'
 import { TASK_STATUS, generateTaskId } from '../data/assignTask'
 import { nextRecordId } from '../utils/idGenerators'
 import WorkerSettingsModal from '../components/WorkerSettingsModal'
@@ -55,6 +56,8 @@ export default function WorkerInterface() {
   useEffect(() => {
     syncLangFromUser()
   }, [syncLangFromUser])
+
+  useSessionKickCheck()
 
   const userId = location.state?.userId ?? (typeof window !== 'undefined' ? sessionStorage.getItem('sarms-user-id') : null) ?? 'worker'
   const worker = useMemo(() => {
@@ -186,6 +189,27 @@ export default function WorkerInterface() {
     setBlockMessage(null)
   }
 
+  /** Resolve task id for completion: use session.taskId, or find in_progress task for this worker matching task name. */
+  function resolveTaskIdForCompletion(session) {
+    const tid = session.taskId ?? session.task_id
+    if (tid != null && String(tid).trim() !== '') return String(tid).trim()
+    const taskLabel = (session.task || '').trim()
+    const wid = String(workerId ?? '').trim()
+    const eid = String(worker?.employeeId ?? '').trim().toLowerCase()
+    const match = (tasks || []).find((t) => {
+      if (t.status !== TASK_STATUS.IN_PROGRESS && t.status !== 'in_progress') return false
+      const workerMatch = (t.workerIds || []).some(
+        (id) => String(id).trim() === wid || String(id).trim().toLowerCase() === eid
+      )
+      if (!workerMatch) return false
+      const defs = getTasksForDepartment(session.departmentId || t.departmentId) || []
+      const labelMatch = defs.some((def) => (def.labelEn || '').trim() === taskLabel || (def.labelAr || '').trim() === taskLabel)
+      const taskNameMatch = (t.task || '').trim() === taskLabel
+      return labelMatch || taskNameMatch
+    })
+    return match ? (match.id ?? match.code ?? null) : null
+  }
+
   function handleCompleteAssigned(session) {
     if (!session?.id) return
     const lineParts = (session.linesArea || '–').split(/[–\-]/).map((p) => (p || '').trim())
@@ -220,7 +244,8 @@ export default function WorkerInterface() {
     }
     // Save record immediately so it persists even if user refreshes or closes before "Log another" / "Log out"
     addRecord(record)
-    if (session.taskId) updateTaskStatus(session.taskId, TASK_STATUS.COMPLETED)
+    const taskIdToComplete = resolveTaskIdForCompletion(session)
+    if (taskIdToComplete) updateTaskStatus(taskIdToComplete, TASK_STATUS.COMPLETED)
     // Mark session completed so it appears in Analytics (Active vs completed by zone); do not remove
     updateSession(session.id, { completedAt: endTime })
     setCompletedSession({

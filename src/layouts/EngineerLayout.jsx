@@ -3,6 +3,7 @@ import { Outlet, useLocation, NavLink, useNavigate, Link } from 'react-router-do
 import { useLanguage } from '../context/LanguageContext'
 import { getTranslation } from '../i18n/translations'
 import { SIDEBAR_SECTIONS, SIDEBAR_ITEMS } from '../data/engineerNav'
+import { useSessionKickCheck } from '../hooks/useSessionKickCheck'
 import styles from './EngineerLayout.module.css'
 
 const STORAGE_KEY = 'sarms-sidebar-collapsed'
@@ -37,6 +38,8 @@ export default function EngineerLayout() {
     setSidebarOpen(false)
   }, [currentPath])
 
+  useSessionKickCheck()
+
   useEffect(() => {
     if (!userDropdownOpen) return
     function handleClickOutside(e) {
@@ -50,6 +53,7 @@ export default function EngineerLayout() {
     setUserDropdownOpen(false)
     sessionStorage.removeItem('sarms-user-role')
     sessionStorage.removeItem(USER_ID_KEY)
+    try { sessionStorage.removeItem('sarms-session-id') } catch (_) {}
     navigate('/login', { replace: true })
   }
 

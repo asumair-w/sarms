@@ -279,6 +279,35 @@ CREATE INDEX IF NOT EXISTS idx_records_date ON records(date_time);
 CREATE INDEX IF NOT EXISTS idx_records_created ON records(created_at);
 
 -- -----------------------------------------------------------------------------
+-- 8b) harvest_log (UUID PK) – سجل الحصاد فقط، منفصل عن operations/records
+-- code: display id e.g. HL001
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS harvest_log (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code              TEXT,
+  record_type       record_type_enum NOT NULL DEFAULT 'production',
+  worker            TEXT,
+  department        TEXT,
+  task              TEXT,
+  zone              TEXT,
+  lines             TEXT,
+  lines_area        TEXT,
+  quantity          NUMERIC(12,2) DEFAULT 0,
+  unit              TEXT,
+  date_time         TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ DEFAULT now(),
+  duration          INTEGER,
+  start_time        TIMESTAMPTZ,
+  notes             TEXT,
+  quality_outcome   quality_outcome_enum,
+  severity          record_severity_enum,
+  data              JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX IF NOT EXISTS idx_harvest_log_date ON harvest_log(date_time);
+CREATE INDEX IF NOT EXISTS idx_harvest_log_created ON harvest_log(created_at);
+
+-- -----------------------------------------------------------------------------
 -- 9) inventory_movements (UUID PK, FK item_id → inventory)
 -- code: display id e.g. IM001
 -- -----------------------------------------------------------------------------
@@ -356,6 +385,7 @@ ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE task_workers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE harvest_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE inventory_movements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE faults ENABLE ROW LEVEL SECURITY;
 ALTER TABLE maintenance_plans ENABLE ROW LEVEL SECURITY;
@@ -369,6 +399,7 @@ CREATE POLICY "Allow anon read write tasks" ON tasks FOR ALL USING (true) WITH C
 CREATE POLICY "Allow anon read write task_workers" ON task_workers FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow anon read write sessions" ON sessions FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow anon read write records" ON records FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow anon read write harvest_log" ON harvest_log FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow anon read write inventory_movements" ON inventory_movements FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow anon read write faults" ON faults FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow anon read write maintenance_plans" ON maintenance_plans FOR ALL USING (true) WITH CHECK (true);

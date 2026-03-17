@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { validateCredentials, validateUserIdFromQR, getRedirectForRole } from '../auth'
 import { useLanguage } from '../context/LanguageContext'
 import { getTranslation } from '../i18n/translations'
+import { setActiveSessionForUser } from '../lib/supabaseSchema'
 import LoginStyles from './Login.module.css'
 import QRScanModal from '../components/QRScanModal'
 
@@ -37,6 +38,7 @@ export default function Login() {
     if (result.ok) {
       sessionStorage.setItem('sarms-user-role', result.role)
       sessionStorage.setItem('sarms-user-id', userId)
+      setActiveSessionForUser(userId)
       navigate(getRedirectForRole(result.role), { replace: true, state: { userId } })
     } else {
       const errKey = ERROR_KEYS[result.error] || 'errorInvalid'
@@ -50,6 +52,7 @@ export default function Login() {
     if (result.ok) {
       sessionStorage.setItem('sarms-user-role', result.role)
       sessionStorage.setItem('sarms-user-id', resolvedUserId)
+      setActiveSessionForUser(resolvedUserId)
       setShowQRModal(false)
       navigate(getRedirectForRole(result.role), { replace: true, state: { userId: resolvedUserId } })
     } else {

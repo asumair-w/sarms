@@ -2,9 +2,12 @@
 
 ## ما تم إصلاحه
 
-### 1. Harvest record في Operations log
-- **المشكلة:** سجل الحصاد كان يظهر في Operations log بدل Harvest log.
-- **الحل:** حفظ حقل `source` في قاعدة البيانات (داخل عمود `data` في جدول records). عند إكمال مهمة "Harvesting" من واجهة العامل أو من Monitor يتم تعيين `source: 'harvest_form'` للسجل، فيظهر في **Harvest log** ولا يظهر في **Operations log** (الذي يعرض فقط السجلات التي `source !== 'harvest_form'`).
+### 1. Harvest record في Operations log + جدول harvest_log
+- **المشكلة:** سجل الحصاد كان يظهر في Operations log لأنه ما كان فيه جدول مخصص للحصاد.
+- **الحل:**  
+  - إنشاء جدول **harvest_log** في الـ schema (نفس أعمدة records) بحيث تُحفظ سجلات الحصاد فيه فقط.  
+  - في التطبيق: السجلات التي `source === 'harvest_form'` تُكتب في **harvest_log** (كود HL001، HL002، …)، وباقي السجلات في **records** (R001، …).  
+  - عند التحميل: نقرأ من الجدولين وندمجهم في `state.records` مع الإبقاء على `source: 'harvest_form'` لسجلات الحصاد حتى تعمل شاشة Harvest log كما هي.
 
 ### 2. العامل لا يقدر ينهي المهمة من واجهته
 - **السبب:** بعد استخدام UUID للمهام، `session.taskId` كان أحياناً قديماً (مثل T001) بينما المهام في الـ state لها `id` UUID، فـ `updateTaskStatus(session.taskId)` لا يجد المهمة.
