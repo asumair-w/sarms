@@ -107,13 +107,16 @@ export default function WorkerInterface() {
     }
     return sessions.filter((s) => {
       if (!s.assignedByEngineer) return false
+      if (s.completedAt) return false
       const sId = String(s.workerId ?? '').trim()
       if (!sId) return false
-      if (sId === wid) return true
-      if (eid && sId.toLowerCase() === eid) return true
-      if (uid && sId.toLowerCase() === uid) return true
+      const sIdLower = sId.toLowerCase()
+      const widLower = wid.toLowerCase()
+      if (sId === wid || sIdLower === widLower) return true
+      if (eid && sIdLower === eid) return true
+      if (uid && sIdLower === uid) return true
       const sessionWorker = resolveSessionWorker(s)
-      if (sessionWorker && (String(sessionWorker.employeeId ?? '').trim().toLowerCase() === uid || String(sessionWorker.id ?? '').trim() === wid)) return true
+      if (sessionWorker && (String(sessionWorker.employeeId ?? '').trim().toLowerCase() === uid || String(sessionWorker.id ?? '').trim().toLowerCase() === widLower)) return true
       return false
     })
   }, [sessions, workerId, worker, userId, workers])
@@ -195,19 +198,29 @@ export default function WorkerInterface() {
     if (tid != null && String(tid).trim() !== '') return String(tid).trim()
     const taskLabel = (session.task || '').trim()
     const wid = String(workerId ?? '').trim()
+    const widLower = wid.toLowerCase()
     const eid = String(worker?.employeeId ?? '').trim().toLowerCase()
+    const sessionZone = String(session.zoneId ?? session.zone ?? '').trim()
+    const sessionDept = String(session.departmentId ?? '').trim()
     const match = (tasks || []).find((t) => {
       if (t.status !== TASK_STATUS.IN_PROGRESS && t.status !== 'in_progress') return false
-      const workerMatch = (t.workerIds || []).some(
-        (id) => String(id).trim() === wid || String(id).trim().toLowerCase() === eid
-      )
+      const workerMatch = (t.workerIds || []).some((id) => {
+        const sid = String(id ?? '').trim()
+        return sid === wid || sid.toLowerCase() === widLower || sid === eid || sid.toLowerCase() === eid
+      })
       if (!workerMatch) return false
       const defs = getTasksForDepartment(session.departmentId || t.departmentId) || []
       const labelMatch = defs.some((def) => (def.labelEn || '').trim() === taskLabel || (def.labelAr || '').trim() === taskLabel)
       const taskNameMatch = (t.task || '').trim() === taskLabel
-      return labelMatch || taskNameMatch
+      if (!labelMatch && !taskNameMatch) return false
+      if (sessionZone || sessionDept) {
+        const zoneOk = !sessionZone || String(t.zoneId ?? '').trim() === sessionZone
+        const deptOk = !sessionDept || String(t.departmentId ?? '').trim() === sessionDept
+        if (!zoneOk || !deptOk) return false
+      }
+      return true
     })
-    return match ? (match.id ?? match.code ?? null) : null
+    return match ? String(match.id ?? match.code ?? '') : null
   }
 
   function handleCompleteAssigned(session) {

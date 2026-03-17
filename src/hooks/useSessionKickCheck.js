@@ -6,6 +6,7 @@ import { isSupabaseConfigured } from '../lib/supabase'
 const USER_ID_KEY = 'sarms-user-id'
 const ROLE_KEY = 'sarms-user-role'
 const CHECK_INTERVAL_MS = 18_000
+const FIRST_CHECK_DELAY_MS = 3_000
 
 function clearSessionAndRedirect(navigate) {
   try {
@@ -44,9 +45,10 @@ export function useSessionKickCheck() {
     }
 
     intervalRef.current = setInterval(check, CHECK_INTERVAL_MS)
-    check()
+    const firstCheckTimer = setTimeout(check, FIRST_CHECK_DELAY_MS)
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
+      clearTimeout(firstCheckTimer)
     }
   }, [navigate])
 }

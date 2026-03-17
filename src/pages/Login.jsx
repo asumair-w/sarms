@@ -29,36 +29,40 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [showQRModal, setShowQRModal] = useState(false)
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
     setError('')
     setLoading(true)
     const result = validateCredentials(userId, password)
-    setLoading(false)
-    if (result.ok) {
-      sessionStorage.setItem('sarms-user-role', result.role)
-      sessionStorage.setItem('sarms-user-id', userId)
-      setActiveSessionForUser(userId)
-      navigate(getRedirectForRole(result.role), { replace: true, state: { userId } })
-    } else {
+    if (!result.ok) {
+      setLoading(false)
       const errKey = ERROR_KEYS[result.error] || 'errorInvalid'
       setError(t(errKey))
+      return
     }
+    sessionStorage.setItem('sarms-user-role', result.role)
+    sessionStorage.setItem('sarms-user-id', userId)
+    try {
+      await setActiveSessionForUser(userId)
+    } finally {
+      setLoading(false)
+    }
+    navigate(getRedirectForRole(result.role), { replace: true, state: { userId } })
   }
 
-  function handleQRSuccess(resolvedUserId) {
+  async function handleQRSuccess(resolvedUserId) {
     setError('')
     const result = validateUserIdFromQR(resolvedUserId)
-    if (result.ok) {
-      sessionStorage.setItem('sarms-user-role', result.role)
-      sessionStorage.setItem('sarms-user-id', resolvedUserId)
-      setActiveSessionForUser(resolvedUserId)
-      setShowQRModal(false)
-      navigate(getRedirectForRole(result.role), { replace: true, state: { userId: resolvedUserId } })
-    } else {
+    if (!result.ok) {
       const errKey = ERROR_KEYS[result.error] || 'errorQR'
       setError(t(errKey))
+      return
     }
+    sessionStorage.setItem('sarms-user-role', result.role)
+    sessionStorage.setItem('sarms-user-id', resolvedUserId)
+    await setActiveSessionForUser(resolvedUserId)
+    setShowQRModal(false)
+    navigate(getRedirectForRole(result.role), { replace: true, state: { userId: resolvedUserId } })
   }
 
   return (

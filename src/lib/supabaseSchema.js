@@ -722,9 +722,10 @@ function normalizedSessionKey(userId) {
 /**
  * Call after successful login: generate a new session id, store in sessionStorage,
  * and persist to Supabase so other devices can be detected as "kicked".
- * Only runs when Supabase is configured.
+ * Only runs when Supabase is configured. Returns a Promise so caller can await
+ * before navigating (avoids kick on same device when switching user).
  */
-export function setActiveSessionForUser(userId) {
+export async function setActiveSessionForUser(userId) {
   if (!userId || !supabase) return
   const sessionId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `s-${Date.now()}-${Math.random().toString(36).slice(2)}`
   try {
@@ -732,7 +733,7 @@ export function setActiveSessionForUser(userId) {
   } catch (_) {}
   const key = normalizedSessionKey(userId)
   const value = { sessionId, at: new Date().toISOString() }
-  persistSetting(key, value)
+  await persistSetting(key, value)
 }
 
 /**
