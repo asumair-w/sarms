@@ -82,6 +82,7 @@ export default function InventoryEquipment() {
   const [filterUpdatedLast7Days, setFilterUpdatedLast7Days] = useState(false)
   const [movementPeriod, setMovementPeriod] = useState('week') // 'week' | 'month'
   const stockTableRef = useRef(null)
+  const addItemSubmittingRef = useRef(false)
   const inventoryWithStatus = useMemo(
     () => inventory.map((i) => ({ ...i, status: getInventoryStatus(i) })),
     [inventory]
@@ -152,7 +153,9 @@ export default function InventoryEquipment() {
 
   function handleAddItem(e) {
     e.preventDefault()
+    if (addItemSubmittingRef.current) return
     if (!newItem.name.trim()) return
+    addItemSubmittingRef.current = true
     const category = newItem.category === 'other' ? 'other' : newItem.category
     const customCategory = newItem.category === 'other' ? (newItem.customCategory || '').trim() || undefined : undefined
     const itemId = nextInventoryItemId(inventory)
@@ -180,6 +183,7 @@ export default function InventoryEquipment() {
     })
     setNewItem({ name: '', category: 'supplies', customCategory: '', quantity: 0, unit: 'units', minQty: 0, warningQty: 10 })
     setAddItemOpen(false)
+    setTimeout(() => { addItemSubmittingRef.current = false }, 1500)
   }
 
   function handleDeleteItem(item) {

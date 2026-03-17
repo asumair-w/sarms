@@ -709,9 +709,11 @@ export default function MonitorActiveWork() {
         ? s.notes.map((n) => (n.text || '').trim()).filter(Boolean).join('\n')
         : undefined
       const linesVal = s.linesArea ?? s.lines ?? '—'
+      const isHarvest = (s.task || '').toLowerCase().includes('harvest')
       addRecord({
         id: nextRecordId(records),
         recordType: 'production',
+        ...(isHarvest && { source: 'harvest_form' }),
         worker: s.workerName ?? '',
         department: s.department ?? '',
         task: s.task ?? '',
@@ -742,9 +744,11 @@ export default function MonitorActiveWork() {
       const engineerNotesStr = (sessionData.notes?.length)
         ? sessionData.notes.map((n) => (n.text || '').trim()).filter(Boolean).join('\n')
         : undefined
+      const isHarvest = (sessionData.task || '').toLowerCase().includes('harvest')
       addRecord({
         id: nextRecordId(records),
         recordType: 'production',
+        ...(isHarvest && { source: 'harvest_form' }),
         worker: sessionData.workerName ?? '',
         department: sessionData.department ?? '',
         task: sessionData.task ?? '',

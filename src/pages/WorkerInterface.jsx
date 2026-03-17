@@ -199,9 +199,11 @@ export default function WorkerInterface() {
     const engineerNotesStr = (session.notes && session.notes.length)
       ? session.notes.map((n) => (n.text || '').trim()).filter(Boolean).join('\n')
       : undefined
+    const isHarvest = (session.task || '').toLowerCase().includes('harvest') || (session.taskId || '').toLowerCase() === 'harvesting'
     const record = {
       id: nextRecordId(records),
       recordType: 'production',
+      ...(isHarvest && { source: 'harvest_form' }),
       worker: workerName,
       department: session.department,
       task: session.task,
@@ -398,9 +400,11 @@ export default function WorkerInterface() {
       status: 'completed',
       duration: durationMins,
     }
+    const isHarvest = (activeSession.task || '').toLowerCase().includes('harvest')
     const record = {
       id: nextRecordId(records),
       recordType: 'production',
+      ...(isHarvest && { source: 'harvest_form' }),
       worker: workerName,
       department: activeSession.department,
       task: activeSession.task,
@@ -430,9 +434,11 @@ export default function WorkerInterface() {
     const engineerNotesStr = typeof completedSession.engineerNotes === 'string'
       ? completedSession.engineerNotes
       : undefined
+    const isHarvest = (completedSession.task || '').toLowerCase().includes('harvest')
     const record = {
       id: nextRecordId(records),
       recordType: 'production',
+      ...(isHarvest && { source: 'harvest_form' }),
       worker: workerName,
       department: completedSession.department,
       task: completedSession.task,

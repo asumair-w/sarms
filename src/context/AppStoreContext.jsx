@@ -269,19 +269,21 @@ function storeReducer(state, action) {
       return { ...state, tasks: [action.payload, ...state.tasks] }
     case 'UPDATE_TASK_STATUS': {
       const { taskId, status } = action.payload
+      const idOrCode = String(taskId ?? '').trim()
       return {
         ...state,
         tasks: state.tasks.map((t) =>
-          t.id === taskId ? { ...t, status } : t
+          (t.id && String(t.id) === idOrCode) || (t.code && String(t.code) === idOrCode) ? { ...t, status } : t
         ),
       }
     }
     case 'UPDATE_TASK': {
       const { taskId, updates } = action.payload
+      const idOrCode = String(taskId ?? '').trim()
       return {
         ...state,
         tasks: state.tasks.map((t) =>
-          t.id === taskId ? { ...t, ...updates } : t
+          (t.id && String(t.id) === idOrCode) || (t.code && String(t.code) === idOrCode) ? { ...t, ...updates } : t
         ),
       }
     }

@@ -158,6 +158,8 @@ function fromDbSession(r) {
     flagged: Boolean(r.flagged),
     assignedByEngineer: Boolean(r.assigned_by_engineer),
     notes: Array.isArray(r.notes) ? r.notes : (r.notes ? JSON.parse(r.notes) : []),
+    taskId: r.data?.taskId ?? null,
+    completedAt: r.data?.completedAt ?? null,
     ...(r.data && typeof r.data === 'object' ? r.data : {}),
   }
 }
@@ -181,13 +183,14 @@ function toDbSession(item) {
     flagged: Boolean(item.flagged),
     assigned_by_engineer: item.assignedByEngineer !== false,
     notes: Array.isArray(item.notes) ? item.notes : [],
-    data: {},
+    data: { taskId: item.taskId ?? null, completedAt: item.completedAt ?? null },
   }
 }
 
 // ----- Records -----
 function fromDbRecord(r) {
   if (!r) return null
+  const data = r.data && typeof r.data === 'object' ? r.data : {}
   return {
     id: r.id,
     code: r.code,
@@ -207,7 +210,10 @@ function fromDbRecord(r) {
     notes: r.notes,
     qualityOutcome: r.quality_outcome,
     severity: r.severity,
-    ...(r.data && typeof r.data === 'object' ? r.data : {}),
+    source: data.source,
+    engineerNotes: data.engineerNotes,
+    imageData: data.imageData,
+    ...data,
   }
 }
 
@@ -232,7 +238,11 @@ function toDbRecord(item) {
     notes: item.notes ?? null,
     quality_outcome: item.qualityOutcome ?? item.quality_outcome ?? null,
     severity: item.severity ?? null,
-    data: {},
+    data: {
+      source: item.source ?? null,
+      engineerNotes: item.engineerNotes ?? null,
+      imageData: item.imageData ?? null,
+    },
   }
 }
 
@@ -272,8 +282,10 @@ function toDbInventory(item) {
 // ----- Inventory movements -----
 function fromDbInventoryMovement(r) {
   if (!r) return null
+  const data = r.data && typeof r.data === 'object' ? r.data : {}
   return {
     id: r.id,
+    code: r.code,
     itemId: r.item_id,
     old_quantity: r.old_quantity,
     new_quantity: r.new_quantity,
@@ -281,7 +293,8 @@ function fromDbInventoryMovement(r) {
     movementType: r.movement_type,
     changed_by: r.changed_by,
     created_at: r.created_at,
-    ...(r.data && typeof r.data === 'object' ? r.data : {}),
+    change_amount: data.change_amount,
+    ...data,
   }
 }
 
@@ -297,7 +310,7 @@ function toDbInventoryMovement(item) {
     movement_type: item.movementType ?? item.movement_type ?? null,
     changed_by: item.changed_by ?? null,
     created_at: item.created_at ?? item.createdAt ?? null,
-    data: {},
+    data: { change_amount: item.change_amount ?? (Number(item.new_quantity) - Number(item.old_quantity)) },
   }
 }
 
