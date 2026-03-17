@@ -63,7 +63,7 @@ export default function LogFaultMaintenance() {
   const getTicketTypeDisplayLabel = (id) => (id === 'fault' ? t('eqTicketTypeFault') : id === 'preventive' ? t('eqTicketTypePreventive') : id === 'corrective' ? t('eqTicketTypeCorrective') : id === 'inspection' ? t('eqTicketTypeInspection') : id || '—')
   const getSeverityDisplayLabel = (id) => (id === 'low' ? t('eqSeverityLow') : id === 'medium' ? t('eqSeverityMedium') : id === 'high' ? t('eqSeverityHigh') : id === 'critical' ? t('eqSeverityCritical') : id || '—')
   const getFaultCategoryDisplayLabel = (id) => (id === 'mechanical' ? t('eqFaultCatMechanical') : id === 'electrical' ? t('eqFaultCatElectrical') : id === 'operational' ? t('eqFaultCatOperational') : id === 'other' ? t('eqFaultCatOther') : id || '—')
-  const { equipment, faults, maintenancePlans, addFault, addMaintenancePlan, updateMaintenancePlan, updateEquipmentItem, addEquipmentItem, removeEquipmentItem, updateFault, zones: storeZones } = useAppStore()
+  const { equipment, faults, maintenancePlans, addFault, addMaintenancePlan, updateMaintenancePlan, updateEquipmentItem, addEquipmentItem, removeEquipmentItem, updateFault, addResolvedTicket, zones: storeZones } = useAppStore()
   const zonesList = (storeZones && storeZones.length > 0) ? storeZones : getInitialZones()
 
   const [equipmentOpen, setEquipmentOpen] = useState(true)
@@ -615,10 +615,31 @@ export default function LogFaultMaintenance() {
     e.preventDefault()
     if (!resolveTicket || !resolveForm.completionNote.trim()) return
     const now = new Date().toISOString()
+    const resolvedBy = (typeof window !== 'undefined' && sessionStorage.getItem('sarms-user-id')) || ''
+    const notes = resolveForm.completionNote.trim()
+    const summary = resolveTicket.description || resolveTicket.notes || `${resolveTicket.equipmentName || ''} – ${resolveTicket.ticketType || resolveTicket.source || 'ticket'}`.trim()
     if (resolveTicket.source === 'fault') {
-      updateFault(resolveTicket.id, { status: FAULT_STATUS_RESOLVED, resolutionNote: resolveForm.completionNote.trim(), resolvedAt: now, resolutionSpareParts: resolveForm.spareParts.trim() || undefined, resolutionPhoto: resolveForm.resolutionPhoto || undefined })
+      updateFault(resolveTicket.id, { status: FAULT_STATUS_RESOLVED, resolutionNote: notes, resolvedAt: now, resolutionSpareParts: resolveForm.spareParts.trim() || undefined, resolutionPhoto: resolveForm.resolutionPhoto || undefined })
+      addResolvedTicket({
+        ticketType: 'fault',
+        faultId: resolveTicket.id,
+        maintenancePlanId: null,
+        resolvedAt: now,
+        resolvedBy: resolvedBy || undefined,
+        notes,
+        summary: summary || undefined,
+      })
     } else {
-      updateMaintenancePlan(resolveTicket.id, { status: 'completed', resolvedAt: now, resolutionNote: resolveForm.completionNote.trim(), resolutionSpareParts: resolveForm.spareParts.trim() || undefined, resolutionPhoto: resolveForm.resolutionPhoto || undefined })
+      updateMaintenancePlan(resolveTicket.id, { status: 'completed', resolvedAt: now, resolutionNote: notes, resolutionSpareParts: resolveForm.spareParts.trim() || undefined, resolutionPhoto: resolveForm.resolutionPhoto || undefined })
+      addResolvedTicket({
+        ticketType: 'maintenance',
+        faultId: null,
+        maintenancePlanId: resolveTicket.id,
+        resolvedAt: now,
+        resolvedBy: resolvedBy || undefined,
+        notes,
+        summary: summary || undefined,
+      })
       if (resolveTicket.ticketType === 'inspection' && resolveTicket.intervalDays) {
         const eq = equipment.find((x) => x.id === resolveTicket.equipmentId)
         if (eq) {

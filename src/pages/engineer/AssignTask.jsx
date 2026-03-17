@@ -62,8 +62,15 @@ const OPERATION_PATH_STEPS = [
 ]
 
 function workerNames(workerIds, assignableList = ASSIGNABLE) {
+  const idStr = (x) => (x == null ? '' : String(x).trim())
   return (workerIds || [])
-    .map((id) => assignableList.find((w) => w.id === id)?.fullName ?? id)
+    .map((id) => {
+      const sid = idStr(id)
+      const w = assignableList.find(
+        (w) => idStr(w.id) === sid || idStr(w.code) === sid || idStr(w.employeeId).toLowerCase() === sid.toLowerCase()
+      )
+      return w?.fullName ?? w?.full_name ?? id
+    })
     .join(', ')
 }
 

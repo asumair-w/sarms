@@ -15,6 +15,7 @@ const SUPABASE_TABLES = [
   'records',
   'harvest_log',
   'inventory_movements',
+  'resolved_tickets',
   'faults',
   'maintenance_plans',
   'workers',

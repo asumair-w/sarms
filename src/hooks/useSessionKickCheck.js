@@ -6,7 +6,7 @@ import { isSupabaseConfigured } from '../lib/supabase'
 const USER_ID_KEY = 'sarms-user-id'
 const ROLE_KEY = 'sarms-user-role'
 const CHECK_INTERVAL_MS = 18_000
-const FIRST_CHECK_DELAY_MS = 3_000
+const FIRST_CHECK_DELAY_MS = 20_000
 
 function clearSessionAndRedirect(navigate) {
   try {

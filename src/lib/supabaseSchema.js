@@ -407,6 +407,41 @@ function toDbMaintenancePlan(item) {
   }
 }
 
+// ----- Resolved tickets -----
+function fromDbResolvedTicket(r) {
+  if (!r) return null
+  return {
+    id: r.id,
+    code: r.code,
+    ticketType: r.ticket_type,
+    faultId: r.fault_id,
+    maintenancePlanId: r.maintenance_plan_id,
+    resolvedAt: r.resolved_at,
+    resolvedBy: r.resolved_by,
+    notes: r.notes,
+    summary: r.summary,
+    createdAt: r.created_at,
+    ...(r.data && typeof r.data === 'object' ? r.data : {}),
+  }
+}
+
+function toDbResolvedTicket(item) {
+  const id = ensureUuid(item.id) || item.id
+  return {
+    id,
+    code: item.code ?? null,
+    ticket_type: item.ticketType ?? item.ticket_type ?? 'fault',
+    fault_id: item.faultId ?? item.fault_id ?? null,
+    maintenance_plan_id: item.maintenancePlanId ?? item.maintenance_plan_id ?? null,
+    resolved_at: item.resolvedAt ?? item.resolved_at ?? new Date().toISOString(),
+    resolved_by: item.resolvedBy ?? item.resolved_by ?? null,
+    notes: item.notes ?? null,
+    summary: item.summary ?? null,
+    created_at: item.createdAt ?? item.created_at ?? null,
+    data: {},
+  }
+}
+
 // ----- Fetch: build state from DB -----
 const BATCHES_BY_ZONE_KEY = 'sarms-batches-by-zone'
 const DEFAULT_BATCH_BY_ZONE_KEY = 'sarms-default-batch-by-zone'
@@ -424,6 +459,7 @@ export async function fetchSupabaseState() {
     equipment: [],
     faults: [],
     maintenancePlans: [],
+    resolvedTickets: [],
     batchesByZone: {},
     defaultBatchByZone: {},
   }
@@ -485,6 +521,9 @@ export async function fetchSupabaseState() {
 
     const { data: mpData } = await supabase.from('maintenance_plans').select('*')
     out.maintenancePlans = (mpData || []).map(fromDbMaintenancePlan).filter(Boolean)
+
+    const { data: rtData } = await supabase.from('resolved_tickets').select('*')
+    out.resolvedTickets = (rtData || []).map(fromDbResolvedTicket).filter(Boolean)
 
     return out
   } catch (e) {
@@ -682,6 +721,18 @@ export async function persistAllSupabase(state) {
         if (resolved) p.equipment_id = resolved
       }
       await supabase.from('maintenance_plans').insert(mpRows.filter((p) => p.equipment_id))
+    }
+
+    await deleteAll('resolved_tickets')
+    const rtList = state.resolvedTickets || []
+    if (rtList.length > 0) {
+      const rtRows = rtList.map(toDbResolvedTicket)
+      const rtCodes = []
+      for (const row of rtRows) {
+        if (!row.code) row.code = nextDisplayCode('RT', rtCodes)
+        rtCodes.push(row.code)
+      }
+      await supabase.from('resolved_tickets').insert(rtRows)
     }
   } catch (e) {
     console.warn('persistAllSupabase:', e)

@@ -76,6 +76,7 @@ export default function InventoryEquipment() {
   const [editItem, setEditItem] = useState(null)
   const [historyModalItem, setHistoryModalItem] = useState(null)
   const [updateReason, setUpdateReason] = useState(INVENTORY_MOVEMENT_REASON.MANUAL_UPDATE)
+  const [addItemError, setAddItemError] = useState('')
   const [openActionsId, setOpenActionsId] = useState(null)
   const [dropdownAnchor, setDropdownAnchor] = useState(null)
   const [filterNeedsRefillOnly, setFilterNeedsRefillOnly] = useState(false)
@@ -154,15 +155,24 @@ export default function InventoryEquipment() {
   function handleAddItem(e) {
     e.preventDefault()
     if (addItemSubmittingRef.current) return
-    if (!newItem.name.trim()) return
-    addItemSubmittingRef.current = true
+    const nameTrim = newItem.name.trim()
+    if (!nameTrim) return
     const category = newItem.category === 'other' ? 'other' : newItem.category
+    const existing = inventory.find(
+      (i) => (i.name || '').trim().toLowerCase() === nameTrim.toLowerCase() && (i.category || '') === category
+    )
+    if (existing) {
+      setAddItemError(t('invDuplicateItem') || 'Item with same name and category already exists.')
+      return
+    }
+    setAddItemError('')
+    addItemSubmittingRef.current = true
     const customCategory = newItem.category === 'other' ? (newItem.customCategory || '').trim() || undefined : undefined
     const itemId = nextInventoryItemId(inventory)
     const initialQty = Number(newItem.quantity) || 0
     addInventoryItem({
       id: itemId,
-      name: newItem.name.trim(),
+      name: nameTrim,
       category,
       ...(customCategory != null && customCategory !== '' && { customCategory }),
       quantity: initialQty,
@@ -182,6 +192,7 @@ export default function InventoryEquipment() {
       movementType: 'added', // صنف جديد فقط
     })
     setNewItem({ name: '', category: 'supplies', customCategory: '', quantity: 0, unit: 'units', minQty: 0, warningQty: 10 })
+    setAddItemError('')
     setAddItemOpen(false)
     setTimeout(() => { addItemSubmittingRef.current = false }, 1500)
   }
@@ -301,6 +312,14 @@ export default function InventoryEquipment() {
   }, [inventoryWithStatus])
 
   /** Stock movement in selected period (this week / this month). Uses inventoryMovements for all inventory items. */
+  const inventoryIdAndCodeSet = useMemo(() => {
+    const set = new Set()
+    inventoryWithStatus.forEach((i) => {
+      if (i.id != null) set.add(String(i.id).trim())
+      if (i.code != null) set.add(String(i.code).trim())
+    })
+    return set
+  }, [inventoryWithStatus])
   const stockMovementStats = useMemo(() => {
     const now = new Date()
     let cutoffMs = 0
@@ -312,10 +331,9 @@ export default function InventoryEquipment() {
     } else if (movementPeriod === 'month') {
       cutoffMs = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
     }
-    const allItemIds = new Set(inventoryWithStatus.map((i) => i.id))
     const movements = (inventoryMovements || []).filter(
       (m) =>
-        allItemIds.has(m.itemId) &&
+        (m.itemId != null && inventoryIdAndCodeSet.has(String(m.itemId).trim())) &&
         new Date(m.created_at || 0).getTime() >= cutoffMs
     )
     let added = 0
@@ -346,7 +364,7 @@ export default function InventoryEquipment() {
       decreased: 0,
       hasMovement: fallbackUpdated > 0,
     }
-  }, [inventoryWithStatus, inventoryMovements, movementPeriod])
+  }, [inventoryWithStatus, inventoryMovements, movementPeriod, inventoryIdAndCodeSet])
 
   function clearSummaryFilters() {
     setFilterCategory('')
@@ -545,7 +563,7 @@ export default function InventoryEquipment() {
                 />
               </div>
               <div className={styles.filtersBarActions}>
-                <button type="button" className={styles.btnPrimary} onClick={() => setAddItemOpen(true)}>
+                <button type="button" className={styles.btnPrimary} onClick={() => { setAddItemError(''); setAddItemOpen(true); }}>
                   {t('invAddItem')}
                 </button>
               </div>
@@ -808,7 +826,12 @@ export default function InventoryEquipment() {
                 </thead>
                 <tbody>
                   {(inventoryMovements || [])
-                    .filter((m) => m.itemId === historyModalItem.id)
+                    .filter((m) => {
+                      const mid = m.itemId != null ? String(m.itemId).trim() : ''
+                      const iid = historyModalItem.id != null ? String(historyModalItem.id).trim() : ''
+                      const icode = historyModalItem.code != null ? String(historyModalItem.code).trim() : ''
+                      return mid === iid || mid === icode
+                    })
                     .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
                     .map((m) => (
                       <tr key={m.id}>
@@ -823,7 +846,7 @@ export default function InventoryEquipment() {
                 </tbody>
               </table>
             </div>
-            {(inventoryMovements || []).filter((m) => m.itemId === historyModalItem.id).length === 0 && (
+            {(inventoryMovements || []).filter((m) => String(m.itemId || '').trim() === String(historyModalItem.id || '').trim() || String(m.itemId || '').trim() === String(historyModalItem.code || '').trim()).length === 0 && (
               <p className={styles.modalHint}>{t('invNoQuantityChanges')}</p>
             )}
             <div className={styles.modalActions}>
@@ -838,6 +861,7 @@ export default function InventoryEquipment() {
         <div className={styles.modalOverlay} onClick={() => setAddItemOpen(false)}>
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
             <h3 className={styles.modalTitle}>{t('invAddItem')}</h3>
+            {addItemError && <p className={styles.modalHint} style={{ color: 'var(--danger, #c00)' }} role="alert">{addItemError}</p>}
             <form onSubmit={handleAddItem} className={styles.modalForm}>
               <div className={styles.formRow}>
                 <label>{t('itemName')}</label>

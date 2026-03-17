@@ -105,21 +105,22 @@ export default function WorkerInterface() {
       const fromSeed = SEED_WORKERS.find((w) => String(w.id ?? '').trim() === sId || String(w.employeeId ?? '').trim().toLowerCase() === sId.toLowerCase())
       return fromSeed || null
     }
+    const wName = String(workerName ?? '').trim().toLowerCase()
     return sessions.filter((s) => {
       if (!s.assignedByEngineer) return false
       if (s.completedAt) return false
       const sId = String(s.workerId ?? '').trim()
-      if (!sId) return false
       const sIdLower = sId.toLowerCase()
       const widLower = wid.toLowerCase()
-      if (sId === wid || sIdLower === widLower) return true
+      if (sId && (sId === wid || sIdLower === widLower)) return true
       if (eid && sIdLower === eid) return true
       if (uid && sIdLower === uid) return true
+      if (wName && (String(s.workerName ?? '').trim().toLowerCase() === wName)) return true
       const sessionWorker = resolveSessionWorker(s)
       if (sessionWorker && (String(sessionWorker.employeeId ?? '').trim().toLowerCase() === uid || String(sessionWorker.id ?? '').trim().toLowerCase() === widLower)) return true
       return false
     })
-  }, [sessions, workerId, worker, userId, workers])
+  }, [sessions, workerId, worker, userId, workers, workerName])
 
   // Restore in-progress session when worker logs back in (so they can finish the task).
   // If the worker has tasks assigned by the engineer, show those first and do NOT restore from localStorage

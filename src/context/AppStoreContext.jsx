@@ -20,6 +20,7 @@ const INVENTORY_MOVEMENTS_STORAGE_KEY = 'sarms-inventory-movements'
 const EQUIPMENT_STORAGE_KEY = 'sarms-equipment'
 const FAULTS_STORAGE_KEY = 'sarms-faults'
 const MAINTENANCE_PLANS_STORAGE_KEY = 'sarms-maintenance-plans'
+const RESOLVED_TICKETS_STORAGE_KEY = 'sarms-resolved-tickets'
 
 const SARMS_DATA_KEYS = [
   RECORDS_STORAGE_KEY,
@@ -34,6 +35,7 @@ const SARMS_DATA_KEYS = [
   EQUIPMENT_STORAGE_KEY,
   FAULTS_STORAGE_KEY,
   MAINTENANCE_PLANS_STORAGE_KEY,
+  RESOLVED_TICKETS_STORAGE_KEY,
 ]
 const WORKER_SESSION_PREFIX = 'sarms-worker-session-'
 
@@ -216,6 +218,17 @@ function loadMaintenancePlans() {
   return []
 }
 
+function loadResolvedTickets() {
+  try {
+    const raw = localStorage.getItem(RESOLVED_TICKETS_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) return parsed
+    }
+  } catch (_) {}
+  return []
+}
+
 /** Full dummy/seed state for "Reset to seed" – tasks, inventory, equipment, faults, sessions, records, workers, zones, batches. */
 function getSeedState() {
   const zones = getInitialZones()
@@ -238,6 +251,7 @@ function getSeedState() {
     equipment: getInitialEquipment(),
     faults: getInitialFaults(),
     maintenancePlans: getInitialMaintenancePlans(),
+    resolvedTickets: [],
     hydrateDone: true,
   }
 }
@@ -257,6 +271,7 @@ function getInitialState() {
     equipment: loadEquipment(),
     faults: loadFaults(),
     maintenancePlans: loadMaintenancePlans(),
+    resolvedTickets: loadResolvedTickets(),
     hydrateDone: false,
   }
 }
@@ -354,6 +369,8 @@ function storeReducer(state, action) {
       const equipmentId = action.payload
       return { ...state, equipment: state.equipment.filter((e) => e.id !== equipmentId) }
     }
+    case 'ADD_RESOLVED_TICKET':
+      return { ...state, resolvedTickets: [action.payload, ...(state.resolvedTickets || [])] }
     case 'ADD_FAULT':
       return { ...state, faults: [action.payload, ...state.faults] }
     case 'UPDATE_FAULT': {
@@ -468,6 +485,19 @@ export function AppStoreProvider({ children }) {
     return () => { cancelled = true }
   }, [])
 
+  // Auto-refresh from Supabase every 3s so new tasks and data appear without reload
+  useEffect(() => {
+    if (!isSupabaseConfigured || !state.hydrateDone) return
+    const interval = setInterval(() => {
+      fetchSupabaseState().then((payload) => {
+        if (payload && Object.keys(payload).length > 0) {
+          dispatch({ type: 'HYDRATE', payload })
+        }
+      }).catch(() => {})
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [state.hydrateDone])
+
   // Supabase: single debounced persist of full state (production schema: columns + task_workers + UUIDs)
   useEffect(() => {
     if (!supabaseHydrateDone.current || !isSupabaseConfigured || !state.hydrateDone) return
@@ -489,6 +519,7 @@ export function AppStoreProvider({ children }) {
     state.equipment,
     state.faults,
     state.maintenancePlans,
+    state.resolvedTickets,
   ])
 
   useEffect(() => {
@@ -517,6 +548,7 @@ export function AppStoreProvider({ children }) {
         localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(state.equipment))
         localStorage.setItem(FAULTS_STORAGE_KEY, JSON.stringify(state.faults))
         localStorage.setItem(MAINTENANCE_PLANS_STORAGE_KEY, JSON.stringify(state.maintenancePlans))
+        localStorage.setItem(RESOLVED_TICKETS_STORAGE_KEY, JSON.stringify(state.resolvedTickets || []))
       } catch (_) {}
     }
   }, [
@@ -530,6 +562,7 @@ export function AppStoreProvider({ children }) {
     state.equipment,
     state.faults,
     state.maintenancePlans,
+    state.resolvedTickets,
     state.hydrateDone,
   ])
 
@@ -561,6 +594,7 @@ export function AppStoreProvider({ children }) {
   const addEquipmentItem = useCallback((item) => dispatch({ type: 'ADD_EQUIPMENT', payload: item }), [])
   const removeEquipmentItem = useCallback((equipmentId) => dispatch({ type: 'REMOVE_EQUIPMENT', payload: equipmentId }), [])
 
+  const addResolvedTicket = useCallback((ticket) => dispatch({ type: 'ADD_RESOLVED_TICKET', payload: ticket }), [])
   const addFault = useCallback((fault) => dispatch({ type: 'ADD_FAULT', payload: fault }), [])
   const updateFault = useCallback((faultId, updates) =>
     dispatch({ type: 'UPDATE_FAULT', payload: { faultId, updates } }), [])
@@ -599,6 +633,7 @@ export function AppStoreProvider({ children }) {
     updateEquipmentItem,
     addEquipmentItem,
     removeEquipmentItem,
+    addResolvedTicket,
     addFault,
     updateFault,
     addMaintenancePlan,

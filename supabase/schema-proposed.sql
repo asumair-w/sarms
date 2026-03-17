@@ -367,6 +367,29 @@ CREATE INDEX IF NOT EXISTS idx_maint_plans_equipment ON maintenance_plans(equipm
 CREATE INDEX IF NOT EXISTS idx_maint_plans_date ON maintenance_plans(planned_date);
 
 -- -----------------------------------------------------------------------------
+-- 11b) resolved_tickets (UUID PK) – سجل التيكتات المحلّة (فاولت أو صيانة)
+-- code: display id e.g. RT001. ticket_type: 'fault' | 'maintenance'
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS resolved_tickets (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code                  TEXT,
+  ticket_type           TEXT NOT NULL CHECK (ticket_type IN ('fault', 'maintenance')),
+  fault_id              UUID REFERENCES faults(id) ON DELETE SET NULL,
+  maintenance_plan_id    UUID REFERENCES maintenance_plans(id) ON DELETE SET NULL,
+  resolved_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolved_by           TEXT,
+  notes                 TEXT,
+  summary               TEXT,
+  created_at            TIMESTAMPTZ DEFAULT now(),
+  data                  JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX IF NOT EXISTS idx_resolved_tickets_type ON resolved_tickets(ticket_type);
+CREATE INDEX IF NOT EXISTS idx_resolved_tickets_resolved_at ON resolved_tickets(resolved_at);
+CREATE INDEX IF NOT EXISTS idx_resolved_tickets_fault ON resolved_tickets(fault_id);
+CREATE INDEX IF NOT EXISTS idx_resolved_tickets_maint ON resolved_tickets(maintenance_plan_id);
+
+-- -----------------------------------------------------------------------------
 -- 12) settings (key-value; no UUID)
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS settings (
@@ -389,6 +412,7 @@ ALTER TABLE harvest_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE inventory_movements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE faults ENABLE ROW LEVEL SECURITY;
 ALTER TABLE maintenance_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE resolved_tickets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Allow anon read write zones" ON zones FOR ALL USING (true) WITH CHECK (true);
@@ -403,4 +427,5 @@ CREATE POLICY "Allow anon read write harvest_log" ON harvest_log FOR ALL USING (
 CREATE POLICY "Allow anon read write inventory_movements" ON inventory_movements FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow anon read write faults" ON faults FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow anon read write maintenance_plans" ON maintenance_plans FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow anon read write resolved_tickets" ON resolved_tickets FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow anon read write settings" ON settings FOR ALL USING (true) WITH CHECK (true);
