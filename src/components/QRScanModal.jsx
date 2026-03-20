@@ -10,7 +10,6 @@ export default function QRScanModal({ onClose, onSuccess }) {
   const t = (key) => getTranslation(lang, 'qr', key)
 
   const containerRef = useRef(null)
-  const [manualId, setManualId] = useState('')
   const [cameraError, setCameraError] = useState(null)
   const [cameraReady, setCameraReady] = useState(false)
   const scannerRef = useRef(null)
@@ -45,22 +44,40 @@ export default function QRScanModal({ onClose, onSuccess }) {
       if (!mounted) return
       const el = document.getElementById('qr-reader')
       if (!el) return
-      try {
-        const scanner = new Html5Qrcode('qr-reader')
-        scannerRef.current = scanner
-        await scanner.start(
-          { facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 260, height: 260 } },
-          (decodedText) => {
-            if (!mounted) return
-            safeStopScanner()
-            onSuccess(decodedText.trim())
-          },
-          () => {}
-        )
-        if (mounted) setCameraReady(true)
-      } catch (err) {
-        if (mounted) setCameraError(t('cameraError'))
+      const facingModes = ['environment', 'user']
+      let lastErr = null
+
+      // Try multiple facing modes for better device compatibility.
+      for (const facingMode of facingModes) {
+        let scanner = null
+        try {
+          scanner = new Html5Qrcode('qr-reader')
+          scannerRef.current = scanner
+          await scanner.start(
+            { facingMode },
+            { fps: 15, qrbox: { width: 350, height: 350 } },
+            (decodedText) => {
+              if (!mounted) return
+              safeStopScanner()
+              onSuccess(decodedText.trim())
+            },
+            () => {}
+          )
+          if (mounted) setCameraReady(true)
+          return
+        } catch (err) {
+          lastErr = err
+          try {
+            await scanner?.stop?.()
+          } catch (_) {}
+          scannerRef.current = null
+        }
+      }
+
+      if (mounted) {
+        // If we couldn't start the camera/scanner, show a clear message.
+        // (We don't expose `lastErr` to avoid leaking implementation details.)
+        setCameraError(t('cameraError'))
       }
     }
     startScan()
@@ -70,12 +87,6 @@ export default function QRScanModal({ onClose, onSuccess }) {
     }
   }, [onSuccess])
 
-  function handleManualSubmit(e) {
-    e.preventDefault()
-    const id = manualId.trim()
-    if (id) onSuccess(id)
-  }
-
   const modalContent = (
     <div
       className={QRScanStyles.page}
@@ -84,16 +95,7 @@ export default function QRScanModal({ onClose, onSuccess }) {
       aria-label={t('heading')}
       style={{ background: '#1e293b' }}
     >
-      <div className={QRScanStyles.card} style={{ minHeight: 320, background: '#fefdfb' }}>
-        <button
-          type="button"
-          className={QRScanStyles.closeButton}
-          onClick={handleClose}
-          aria-label={t('cancel')}
-        >
-          ×
-        </button>
-
+      <div className={QRScanStyles.card} style={{ minHeight: 420, background: '#fefdfb' }}>
         <header className={QRScanStyles.header}>
           <h1 className={QRScanStyles.title} style={{ color: '#0f172a', margin: 0 }}>
             {t('heading')}
@@ -110,7 +112,7 @@ export default function QRScanModal({ onClose, onSuccess }) {
               ref={containerRef}
               className={QRScanStyles.reader}
               aria-label={t('heading')}
-              style={{ width: '100%', height: 280 }}
+              style={{ width: '100%', height: 400 }}
             />
             {!cameraError && !cameraReady && (
               <div className={QRScanStyles.readerPlaceholder} aria-hidden="true">
@@ -122,39 +124,18 @@ export default function QRScanModal({ onClose, onSuccess }) {
               <div className={QRScanStyles.readerFallback}>
                 <i className={`fas fa-camera fa-fw ${QRScanStyles.fallbackIcon}`} />
                 <p>{cameraError}</p>
-                <p className={QRScanStyles.fallbackHint}>{t('enterUserId')}</p>
+                <p className={QRScanStyles.fallbackHint}>{t('useLoginInstead')}</p>
               </div>
             )}
           </div>
         </div>
 
-        <div className={QRScanStyles.divider}>
-          <span className={QRScanStyles.dividerLine} />
-          <span className={QRScanStyles.dividerText}>{t('or')}</span>
-          <span className={QRScanStyles.dividerLine} />
-        </div>
-
-        <section className={QRScanStyles.manualSection}>
-          <p className={QRScanStyles.manualTitle}>{t('orEnterUserId')}</p>
-          <form onSubmit={handleManualSubmit} className={QRScanStyles.manualForm}>
-            <input
-              id="manualUserId"
-              type="text"
-              className={QRScanStyles.manualInput}
-              value={manualId}
-              onChange={(e) => setManualId(e.target.value)}
-              placeholder={t('placeholder')}
-              autoComplete="off"
-              autoFocus={!!cameraError}
-            />
-            <button type="submit" className={QRScanStyles.manualButton} disabled={!manualId.trim()}>
-              {t('logIn')}
-            </button>
-          </form>
-        </section>
-
-        <button type="button" className={QRScanStyles.cancelTextButton} onClick={handleClose}>
-          {t('cancel')}
+        <button
+          type="button"
+          className={QRScanStyles.backToLoginBottomButton}
+          onClick={handleClose}
+        >
+          {t('backToLogin')}
         </button>
       </div>
     </div>
