@@ -635,6 +635,11 @@
   color: #9e4a4a;
 }
 
+.statusBadge[data-status="finished_by_worker"] {
+  background: #e5e7eb;
+  color: #374151;
+}
+
 .actionLink {
   background: none;
   border: none;
@@ -669,6 +674,58 @@
 .cellActions {
   white-space: nowrap;
 }
+
+.rowActionsBar {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  justify-content: flex-end;
+  max-width: 100%;
+}
+
+.inlineBtnComplete,
+.inlineBtnApprove,
+.inlineBtnReject {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.inlineBtnComplete {
+  color: #fff;
+  background: #5c7b5c;
+  border-color: #4a634a;
+}
+
+.inlineBtnComplete:hover {
+  background: #4a634a;
+}
+
+.inlineBtnApprove {
+  color: #fff;
+  background: #5c7b5c;
+  border-color: #4a634a;
+}
+
+.inlineBtnApprove:hover {
+  background: #4a634a;
+}
+
+.inlineBtnReject {
+  color: #7f1d1d;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.inlineBtnReject:hover {
+  background: #fee2e2;
+}
+
 .actionsWrap {
   position: relative;
   display: inline-block;

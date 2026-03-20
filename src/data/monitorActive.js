@@ -6,12 +6,14 @@ export const SESSION_STATUS = {
   ON_TIME: 'on_time',
   DELAYED: 'delayed',
   FLAGGED: 'flagged',
+  FINISHED_BY_WORKER: 'finished_by_worker',
 }
 
 export const SESSION_STATUS_LABELS = {
   [SESSION_STATUS.ON_TIME]: 'On time',
   [SESSION_STATUS.DELAYED]: 'Delayed',
   [SESSION_STATUS.FLAGGED]: 'Flagged',
+  [SESSION_STATUS.FINISHED_BY_WORKER]: 'Finished',
 }
 
 /** Mock active work sessions (worker + task + zone + start time + expected minutes). */
@@ -159,9 +161,11 @@ export function getInitialSessions() {
 
 /** Compute status: delayed if elapsed > expected, else on_time; flagged overrides display. */
 export function getSessionStatus(session, now = Date.now()) {
+  if (session.finishedByWorkerAt || session.finishedAt) return SESSION_STATUS.FINISHED_BY_WORKER
   if (session.flagged) return SESSION_STATUS.FLAGGED
   const start = new Date(session.startTime).getTime()
-  const elapsedMinutes = (now - start) / (60 * 1000)
+  const end = session.completedAt ? new Date(session.completedAt).getTime() : now
+  const elapsedMinutes = (end - start) / (60 * 1000)
   const expected = session.expectedMinutes || 60
   return elapsedMinutes > expected ? SESSION_STATUS.DELAYED : SESSION_STATUS.ON_TIME
 }
@@ -169,5 +173,7 @@ export function getSessionStatus(session, now = Date.now()) {
 /** Elapsed duration in minutes. */
 export function getElapsedMinutes(session, now = Date.now()) {
   const start = new Date(session.startTime).getTime()
-  return Math.floor((now - start) / (60 * 1000))
+  const endIso = session.completedAt || session.finishedByWorkerAt || session.finishedAt
+  const end = endIso ? new Date(endIso).getTime() : now
+  return Math.floor((end - start) / (60 * 1000))
 }

@@ -59,6 +59,7 @@ function normalizeTaskStatus(status) {
   const s = String(status).toLowerCase()
   if (s === TASK_STATUS.PENDING_APPROVAL || s === 'approved') return TASK_STATUS.PENDING_APPROVAL
   if (s === TASK_STATUS.IN_PROGRESS) return TASK_STATUS.IN_PROGRESS
+  if (s === TASK_STATUS.FINISHED_BY_WORKER) return TASK_STATUS.FINISHED_BY_WORKER
   if (s === TASK_STATUS.COMPLETED) return TASK_STATUS.COMPLETED
   if (s === TASK_STATUS.REJECTED) return TASK_STATUS.REJECTED
   return null
@@ -103,7 +104,7 @@ function getOverdueTasks(tasks, workerId, sessions = []) {
 function getActiveTasks(tasks, workerId) {
   return getWorkerTasks(tasks, workerId).filter((t) => {
     const status = normalizeTaskStatus(t.status)
-    return status === TASK_STATUS.IN_PROGRESS || status === TASK_STATUS.PENDING_APPROVAL
+    return status === TASK_STATUS.IN_PROGRESS || status === TASK_STATUS.PENDING_APPROVAL || status === TASK_STATUS.FINISHED_BY_WORKER
   })
 }
 

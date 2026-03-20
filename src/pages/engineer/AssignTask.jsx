@@ -49,6 +49,7 @@ function normalizeTaskStatus(status) {
   const s = String(status).toLowerCase()
   if (s === TASK_STATUS.PENDING_APPROVAL || s === 'approved') return TASK_STATUS.PENDING_APPROVAL
   if (s === TASK_STATUS.IN_PROGRESS) return TASK_STATUS.IN_PROGRESS
+  if (s === TASK_STATUS.FINISHED_BY_WORKER) return TASK_STATUS.FINISHED_BY_WORKER
   if (s === TASK_STATUS.COMPLETED) return TASK_STATUS.COMPLETED
   if (s === TASK_STATUS.REJECTED) return TASK_STATUS.REJECTED
   return null
@@ -58,6 +59,7 @@ function normalizeTaskStatus(status) {
 const OPERATION_PATH_STEPS = [
   { id: TASK_STATUS.PENDING_APPROVAL, label: 'Pending', color: '#8f9994' },
   { id: TASK_STATUS.IN_PROGRESS, label: 'In Progress', color: '#c9a060' },
+  { id: TASK_STATUS.FINISHED_BY_WORKER, label: 'Awaiting Approval', color: '#f59e0b' },
   { id: TASK_STATUS.COMPLETED, label: 'Completed', color: '#6d8a6d' },
 ]
 
@@ -88,6 +90,7 @@ function parseLinesRange(linesArea) {
 
 /** Status priority for overview (higher = show this when multiple tasks cover same row). */
 function overviewStatusPriority(status) {
+  if (status === TASK_STATUS.FINISHED_BY_WORKER) return 3
   if (status === TASK_STATUS.IN_PROGRESS) return 2
   if (status === TASK_STATUS.PENDING_APPROVAL || status === 'approved') return 1
   if (status === TASK_STATUS.COMPLETED) return 0
@@ -560,7 +563,8 @@ export default function AssignTask() {
     updateTaskStatus(taskId, TASK_STATUS.IN_PROGRESS)
     const existingSessions = (sessions || []).filter((s) => String(s.taskId) === String(taskId))
     if (existingSessions.length > 0) {
-      existingSessions.forEach((s) => updateSession(s.id, { expectedMinutes: mins }))
+      // Once engineer sets duration, this becomes an officially assigned/active task.
+      existingSessions.forEach((s) => updateSession(s.id, { expectedMinutes: mins, assignedByEngineer: true }))
       setAcceptDurationTaskId(null)
       return
     }
@@ -569,7 +573,6 @@ export default function AssignTask() {
     const taskLabel = getTasksForDepartment(task.departmentId)?.find((t) => t.id === task.taskId)
     const zoneLabel = ZONE_LABEL[task.zoneId] ?? task.zoneId
     const linesArea = task.linesArea || '—'
-    const isSelfStarted = !!task.startedByWorker
     ;(task.workerIds || []).forEach((wId) => {
       const workerName = assignableList.find((w) => w.id === wId)?.fullName ?? String(wId)
       addSession({
@@ -588,7 +591,8 @@ export default function AssignTask() {
         flagged: false,
         notes: [],
         taskId,
-        assignedByEngineer: !isSelfStarted,
+        // Once engineer sets duration, this is officially assigned (even if worker created it).
+        assignedByEngineer: true,
       })
     })
     setAcceptDurationTaskId(null)
@@ -907,7 +911,7 @@ export default function AssignTask() {
           <div className={styles.operationPath}>
             <span className={styles.operationPathLabel}><i className="fas fa-route fa-fw" /> {t('assignOperationPath')}</span>
             <div className={styles.operationPathSteps}>
-              {OPERATION_PATH_STEPS.map((step) => (
+              {OPERATION_PATH_STEPS.filter((step) => step.id !== TASK_STATUS.FINISHED_BY_WORKER).map((step) => (
                 <span
                   key={step.id}
                   className={styles.operationPathChip}
@@ -949,7 +953,7 @@ export default function AssignTask() {
               ) : (
                 <>
                   <div className={styles.greenhouseLegend}>
-                    {OPERATION_PATH_STEPS.map((step) => (
+                    {OPERATION_PATH_STEPS.filter((step) => step.id !== TASK_STATUS.FINISHED_BY_WORKER).map((step) => (
                       <span key={step.id} className={styles.legendItem}>
                         <span className={styles.legendDot} style={{ background: step.color }} />
                         {step.id === TASK_STATUS.PENDING_APPROVAL ? t('assignPending') : step.id === TASK_STATUS.IN_PROGRESS ? t('assignInProgress') : t('assignCompleted')}

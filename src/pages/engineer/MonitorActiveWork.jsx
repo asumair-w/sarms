@@ -72,7 +72,13 @@ function formatDuration(minutes) {
 function isTaskInProgress(status) {
   if (status == null || status === '') return false
   const s = String(status).toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_').trim()
-  return s === TASK_STATUS.IN_PROGRESS
+  return s === TASK_STATUS.IN_PROGRESS || s === TASK_STATUS.FINISHED_BY_WORKER
+}
+
+function isTaskFinishedByWorker(status) {
+  if (status == null || status === '') return false
+  const s = String(status).toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_').trim()
+  return s === TASK_STATUS.FINISHED_BY_WORKER
 }
 
 export default function MonitorActiveWork() {
@@ -99,9 +105,10 @@ export default function MonitorActiveWork() {
     if (status === SESSION_STATUS.ON_TIME) return t('monitorOnTime')
     if (status === SESSION_STATUS.DELAYED) return t('monitorDelayed')
     if (status === SESSION_STATUS.FLAGGED) return t('monitorFlagged')
+    if (status === SESSION_STATUS.FINISHED_BY_WORKER) return 'Finished'
     return SESSION_STATUS_LABELS[status] ?? status
   }
-  const { sessions, updateSession, addSession, removeSession, addRecord, updateTaskStatus, records, zones: storeZones, workers, tasks } = useAppStore()
+  const { sessions, updateSession, addSession, removeSession, addRecord, updateTaskStatus, updateTask, records, zones: storeZones, workers, tasks } = useAppStore()
   const zonesList = (storeZones && storeZones.length > 0) ? storeZones : getInitialZones()
   const ZONE_LABELS = useMemo(() => Object.fromEntries(zonesList.map((z) => [z.id, z.label])), [zonesList])
   const [filterDept, setFilterDept] = useState('')
@@ -482,14 +489,22 @@ export default function MonitorActiveWork() {
     () =>
       activeSessionsOnly.map((s) => {
         const worker = (workers || []).find((w) => String(w.id) === String(s.workerId))
+        const task = s.taskId ? (tasks || []).find((t) => String(t.id) === String(s.taskId)) : null
+        const taskStatus = task?.status
+        const finishedByWorkerAt = task?.finishedAt || s.finishedByWorkerAt || s.finishedAt
         return {
           ...s,
-          status: getSessionStatus(s, now),
-          elapsedMinutes: getElapsedMinutes(s, now),
+          status: isTaskFinishedByWorker(taskStatus) ? SESSION_STATUS.FINISHED_BY_WORKER : getSessionStatus(s, now),
+          elapsedMinutes: getElapsedMinutes({ ...s, finishedByWorkerAt }, now),
+          taskStatus,
+          finishedByWorkerAt,
+          workerNotes: task?.workerNotes ?? s.workerNotes,
+          workerImages: task?.workerImages ?? (s.imageData ? [s.imageData] : []),
+          engineerComment: task?.engineerComment,
           employeeId: worker?.employeeId || s.workerId,
         }
       }),
-    [activeSessionsOnly, tick, now, workers]
+    [activeSessionsOnly, tick, now, workers, tasks]
   )
   const completedSessionsWithStatus = useMemo(
     () =>
@@ -696,20 +711,22 @@ export default function MonitorActiveWork() {
     setNoteText('')
   }
 
-  function markCompleted(sessionId, sessionData) {
+  function approveCompletion(sessionId, sessionData) {
     const s = (sessions || []).find((x) => x.id === sessionId)
-    const completedAt = new Date().toISOString()
+    const approvedAt = new Date().toISOString()
 
     if (s) {
       if (viewSession?.id === sessionId) setViewSession(null)
       if (noteSession?.id === sessionId) setNoteSession(null)
       const startMs = s.startTime ? new Date(s.startTime).getTime() : Date.now()
-      const durationMinutes = Math.round((Date.now() - startMs) / 60000)
+      const endMs = s.finishedByWorkerAt ? new Date(s.finishedByWorkerAt).getTime() : Date.now()
+      const durationMinutes = Math.max(0, Math.round((endMs - startMs) / 60000))
       const engineerNotesStr = (s.notes?.length)
         ? s.notes.map((n) => (n.text || '').trim()).filter(Boolean).join('\n')
         : undefined
       const linesVal = s.linesArea ?? s.lines ?? '—'
       const isHarvest = (s.task || '').toLowerCase().includes('harvest')
+      // Only create operation log record on engineer approval.
       addRecord({
         id: nextRecordId(records),
         recordType: 'production',
@@ -721,15 +738,21 @@ export default function MonitorActiveWork() {
         zoneId: s.zoneId ?? '',
         linesArea: linesVal,
         lines: linesVal,
-        dateTime: completedAt,
-        createdAt: completedAt,
+        dateTime: approvedAt,
+        createdAt: approvedAt,
         duration: durationMinutes,
-        startTime: s.startTime ?? completedAt,
-        notes: undefined,
+        startTime: s.startTime ?? approvedAt,
+        notes: (s.workerNotes || '').trim() || undefined,
         engineerNotes: engineerNotesStr,
         imageData: s.imageData,
       })
-      if (s.taskId) updateTaskStatus(s.taskId, TASK_STATUS.COMPLETED)
+      if (s.taskId) {
+        updateTaskStatus(s.taskId, TASK_STATUS.COMPLETED)
+        updateTask(s.taskId, {
+          approvedAt,
+          engineerComment: engineerNotesStr,
+        })
+      }
       removeSession(sessionId)
       return
     }
@@ -740,7 +763,8 @@ export default function MonitorActiveWork() {
       if (viewSession?.id === sessionId) setViewSession(null)
       if (noteSession?.id === sessionId) setNoteSession(null)
       const startMs = sessionData.startTime ? new Date(sessionData.startTime).getTime() : Date.now()
-      const durationMinutes = Math.round((Date.now() - startMs) / 60000)
+      const endMs = sessionData.finishedByWorkerAt ? new Date(sessionData.finishedByWorkerAt).getTime() : Date.now()
+      const durationMinutes = Math.max(0, Math.round((endMs - startMs) / 60000))
       const engineerNotesStr = (sessionData.notes?.length)
         ? sessionData.notes.map((n) => (n.text || '').trim()).filter(Boolean).join('\n')
         : undefined
@@ -756,14 +780,32 @@ export default function MonitorActiveWork() {
         zoneId: sessionData.zoneId,
         linesArea: sessionData.linesArea ?? '',
         lines: sessionData.linesArea ?? '',
-        dateTime: completedAt,
-        createdAt: completedAt,
+        dateTime: approvedAt,
+        createdAt: approvedAt,
         duration: durationMinutes,
         startTime: sessionData.startTime,
-        notes: undefined,
+        notes: (sessionData.workerNotes || '').trim() || undefined,
         engineerNotes: engineerNotesStr,
-        imageData: sessionData.imageData,
+        imageData: sessionData.workerImages?.[0] || sessionData.imageData,
       })
+      updateTask(sessionData.taskId, { approvedAt, engineerComment: engineerNotesStr })
+    }
+  }
+
+  function rejectCompletion(sessionId, sessionData) {
+    const s = (sessions || []).find((x) => x.id === sessionId)
+    if (s) {
+      // Resume timer by clearing finished flag.
+      updateSession(sessionId, { finishedByWorkerAt: null })
+      if (s.taskId) {
+        updateTaskStatus(s.taskId, TASK_STATUS.IN_PROGRESS)
+        updateTask(s.taskId, { finishedAt: null })
+      }
+      return
+    }
+    if (sessionData && String(sessionId).startsWith('task-') && sessionData.taskId) {
+      updateTaskStatus(sessionData.taskId, TASK_STATUS.IN_PROGRESS)
+      updateTask(sessionData.taskId, { finishedAt: null })
     }
   }
 
@@ -984,6 +1026,7 @@ export default function MonitorActiveWork() {
               <option value={SESSION_STATUS.ON_TIME}>{t('monitorOnTime')}</option>
               <option value={SESSION_STATUS.DELAYED}>{t('monitorDelayed')}</option>
               <option value={SESSION_STATUS.FLAGGED}>{t('monitorFlagged')}</option>
+              <option value={SESSION_STATUS.FINISHED_BY_WORKER}>Finished</option>
             </select>
           </div>
           <div className={styles.filterGroup}>
@@ -1007,7 +1050,6 @@ export default function MonitorActiveWork() {
                 <th>{t('monitorLinesArea')}</th>
                 <th><button type="button" className={styles.thSort} onClick={() => handleSort('startTime')}>{t('monitorStartTime')} {sortBy === 'startTime' && (sortOrder === 'asc' ? '↑' : '↓')}</button></th>
                 <th><button type="button" className={styles.thSort} onClick={() => handleSort('elapsedMinutes')}>{t('monitorDuration')} {sortBy === 'elapsedMinutes' && (sortOrder === 'asc' ? '↑' : '↓')}</button></th>
-                <th>{t('monitorSource')}</th>
                 <th><button type="button" className={styles.thSort} onClick={() => handleSort('status')}>{t('monitorStatus')} {sortBy === 'status' && (sortOrder === 'asc' ? '↑' : '↓')}</button></th>
                 <th>{t('monitorActions')}</th>
               </tr>
@@ -1015,7 +1057,7 @@ export default function MonitorActiveWork() {
             <tbody>
               {sortedFiltered.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className={styles.emptyCell}>
+                  <td colSpan={9} className={styles.emptyCell}>
                     {t('monitorNoSessionsMatch')}
                   </td>
                 </tr>
@@ -1032,7 +1074,6 @@ export default function MonitorActiveWork() {
                     <td>{s.linesArea}</td>
                     <td>{new Date(s.startTime).toLocaleString()}</td>
                     <td>{formatDuration(s.elapsedMinutes)}</td>
-                    <td>{s.assignedByEngineer ? t('monitorAssigned') : t('monitorSelfStarted')}</td>
                     <td>
                       {s.status === 'completed' ? (
                         <span className={styles.statusBadge} data-status="completed" style={{ background: '#dcfce7', color: '#166534' }}>
@@ -1045,25 +1086,54 @@ export default function MonitorActiveWork() {
                       )}
                     </td>
                     <td className={styles.cellActions}>
-                        <div className={styles.actionsWrap} data-actions-wrap>
-                          <button
-                            type="button"
-                            className={styles.actionsBtn}
-                            onClick={(ev) => {
-                              if (openActionsSessionId === s.id) {
-                                setOpenActionsSessionId(null)
-                                setDropdownAnchor(null)
-                              } else {
-                                const rect = ev.currentTarget.getBoundingClientRect()
-                                setOpenActionsSessionId(s.id)
-                                setDropdownAnchor({ top: rect.bottom + 2, left: rect.left })
-                              }
-                            }}
-                            aria-expanded={openActionsSessionId === s.id}
-                            aria-haspopup="true"
-                          >
-                            {t('monitorActions')} <span className={styles.actionsCaret}>{openActionsSessionId === s.id ? '▲' : '▼'}</span>
-                          </button>
+                        <div className={styles.rowActionsBar}>
+                          {s.status === SESSION_STATUS.FINISHED_BY_WORKER && (
+                            <>
+                              <button
+                                type="button"
+                                className={styles.inlineBtnApprove}
+                                onClick={() => approveCompletion(s.id, s)}
+                              >
+                                {t('monitorApprove')}
+                              </button>
+                              <button
+                                type="button"
+                                className={styles.inlineBtnReject}
+                                onClick={() => rejectCompletion(s.id, s)}
+                              >
+                                {t('monitorReject')}
+                              </button>
+                            </>
+                          )}
+                          {s.status !== 'completed' && s.status !== SESSION_STATUS.FINISHED_BY_WORKER && (
+                            <button
+                              type="button"
+                              className={styles.inlineBtnComplete}
+                              onClick={() => approveCompletion(s.id, s)}
+                            >
+                              {t('monitorComplete')}
+                            </button>
+                          )}
+                          <div className={styles.actionsWrap} data-actions-wrap>
+                            <button
+                              type="button"
+                              className={styles.actionsBtn}
+                              onClick={(ev) => {
+                                if (openActionsSessionId === s.id) {
+                                  setOpenActionsSessionId(null)
+                                  setDropdownAnchor(null)
+                                } else {
+                                  const rect = ev.currentTarget.getBoundingClientRect()
+                                  setOpenActionsSessionId(s.id)
+                                  setDropdownAnchor({ top: rect.bottom + 2, left: rect.left })
+                                }
+                              }}
+                              aria-expanded={openActionsSessionId === s.id}
+                              aria-haspopup="true"
+                            >
+                              {t('monitorActions')} <span className={styles.actionsCaret}>{openActionsSessionId === s.id ? '▲' : '▼'}</span>
+                            </button>
+                          </div>
                         </div>
                       </td>
                   </tr>
@@ -1097,7 +1167,6 @@ export default function MonitorActiveWork() {
                 <button type="button" className={styles.actionsItem} onClick={() => { toggleFlag(openSession.id, openSession); closeMenu(); }}>
                   {openSession.flagged ? t('monitorUnflag') : t('monitorFlag')}
                 </button>
-                <button type="button" className={`${styles.actionsItem} ${styles.actionsItemComplete}`} onClick={() => { markCompleted(openSession.id, openSession); closeMenu(); }}>{t('monitorComplete')}</button>
               </>
             )}
           </div>,

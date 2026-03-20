@@ -5,6 +5,7 @@
 export const TASK_STATUS = {
   PENDING_APPROVAL: 'pending_approval',
   IN_PROGRESS: 'in_progress',
+  FINISHED_BY_WORKER: 'finished_by_worker',
   COMPLETED: 'completed',
   REJECTED: 'rejected',
 }
@@ -12,6 +13,7 @@ export const TASK_STATUS = {
 export const TASK_STATUS_LABELS = {
   [TASK_STATUS.PENDING_APPROVAL]: 'Pending',
   [TASK_STATUS.IN_PROGRESS]: 'In Progress',
+  [TASK_STATUS.FINISHED_BY_WORKER]: 'Finished (Awaiting Approval)',
   [TASK_STATUS.COMPLETED]: 'Completed',
   [TASK_STATUS.REJECTED]: 'Rejected',
   approved: 'Pending',

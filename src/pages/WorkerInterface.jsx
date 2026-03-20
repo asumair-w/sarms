@@ -49,7 +49,7 @@ export default function WorkerInterface() {
   const navigate = useNavigate()
   const location = useLocation()
   const { lang, syncLangFromUser } = useLanguage()
-  const { workers, sessions, zones = [], records = [], tasks = [], addSession, removeSession, updateSession, addTask, updateTaskStatus, addRecord, defaultBatchByZone = {} } = useAppStore()
+  const { workers, sessions, zones = [], records = [], tasks = [], addSession, removeSession, updateSession, addTask, updateTaskStatus, updateTask, addRecord, defaultBatchByZone = {} } = useAppStore()
   const zonesList = (zones && zones.length > 0) ? zones : DEFAULT_ZONES
   const t = (key) => getTranslation(lang, 'worker', key)
 
@@ -77,6 +77,7 @@ export default function WorkerInterface() {
   const [lineFrom, setLineFrom] = useState('')
   const [lineTo, setLineTo] = useState('')
   const [activeSession, setActiveSession] = useState(null)
+  const [resumeAssignedSession, setResumeAssignedSession] = useState(null) // assigned-by-engineer session to start/resume in EXECUTION screen
   const [completedSession, setCompletedSession] = useState(null)
   const [blockMessage, setBlockMessage] = useState(null)
   const [showSettings, setShowSettings] = useState(false)
@@ -108,7 +109,7 @@ export default function WorkerInterface() {
     const wName = String(workerName ?? '').trim().toLowerCase()
     return sessions.filter((s) => {
       if (!s.assignedByEngineer) return false
-      if (s.completedAt) return false
+      if (s.completedAt || s.finishedByWorkerAt) return false
       const sId = String(s.workerId ?? '').trim()
       const sIdLower = sId.toLowerCase()
       const widLower = wid.toLowerCase()
@@ -224,7 +225,7 @@ export default function WorkerInterface() {
     return match ? String(match.id ?? match.code ?? '') : null
   }
 
-  function handleCompleteAssigned(session) {
+  function handleFinishAssigned(session) {
     if (!session?.id) return
     const lineParts = (session.linesArea || '–').split(/[–\-]/).map((p) => (p || '').trim())
     const lineFromPart = lineParts[0] ?? ''
@@ -234,34 +235,21 @@ export default function WorkerInterface() {
     const endTime = new Date().toISOString()
     const durationMins = Math.round((endMs - startMs) / 60000)
     const linesStr = `${(lineFromPart || '').trim()} – ${(lineToPart || '').trim()}`.trim()
-    const engineerNotesStr = (session.notes && session.notes.length)
-      ? session.notes.map((n) => (n.text || '').trim()).filter(Boolean).join('\n')
-      : undefined
-    const isHarvest = (session.task || '').toLowerCase().includes('harvest') || (session.taskId || '').toLowerCase() === 'harvesting'
-    const record = {
-      id: nextRecordId(records),
-      recordType: 'production',
-      ...(isHarvest && { source: 'harvest_form' }),
-      worker: workerName,
-      department: session.department,
-      task: session.task,
-      zone: session.zone,
-      lines: linesStr,
-      linesArea: linesStr,
-      dateTime: endTime,
-      createdAt: new Date().toISOString(),
-      duration: durationMins,
-      startTime: session.startTime,
-      notes: completionNotes.trim() || undefined,
-      engineerNotes: engineerNotesStr,
-      imageData: completionImage || undefined,
-    }
-    // Save record immediately so it persists even if user refreshes or closes before "Log another" / "Log out"
-    addRecord(record)
     const taskIdToComplete = resolveTaskIdForCompletion(session)
-    if (taskIdToComplete) updateTaskStatus(taskIdToComplete, TASK_STATUS.COMPLETED)
-    // Mark session completed so it appears in Analytics (Active vs completed by zone); do not remove
-    updateSession(session.id, { completedAt: endTime })
+    if (taskIdToComplete) {
+      updateTaskStatus(taskIdToComplete, TASK_STATUS.FINISHED_BY_WORKER)
+      updateTask(taskIdToComplete, {
+        finishedAt: endTime,
+        workerNotes: completionNotes.trim() || undefined,
+        workerImages: completionImage ? [completionImage] : [],
+      })
+    }
+    // Stop timer immediately but keep in Active Work until engineer approves
+    updateSession(session.id, {
+      finishedByWorkerAt: endTime,
+      workerNotes: completionNotes.trim() || undefined,
+      imageData: completionImage || undefined,
+    })
     setCompletedSession({
       department: session.department,
       task: session.task,
@@ -270,18 +258,40 @@ export default function WorkerInterface() {
       line_to: (lineToPart || '').trim(),
       start_time: session.startTime,
       end_time: endTime,
-      status: 'completed',
+      status: 'finished_by_worker',
       duration: durationMins,
-      engineerNotes: engineerNotesStr,
     })
     setCompletionNotes('')
     setCompletionImage(null)
     setRecordSavedForCompletion(true)
     setPendingCompleteSession(null)
-    setStep(STEPS.CONFIRMATION)
+    const uid = String(userId ?? '').trim().toLowerCase()
+    const wid = String(workerId ?? '').trim()
+    const widLower = wid.toLowerCase()
+    const eid = worker?.employeeId ? String(worker.employeeId).trim().toLowerCase() : ''
+    const remainingAssigned = (sessions || []).filter((s) => {
+      if (!s.assignedByEngineer) return false
+      if (s.completedAt || s.finishedByWorkerAt) return false
+      if (s.id === session.id) return false
+      const sId = String(s.workerId ?? '').trim()
+      const sIdLower = sId.toLowerCase()
+      if (sId && (sId === wid || sIdLower === widLower)) return true
+      if (eid && sIdLower === eid) return true
+      if (uid && sIdLower === uid) return true
+      return false
+    })
+    if (remainingAssigned.length === 0) {
+      navigate('/login', { replace: true })
+    } else {
+      setStep(STEPS.DEPARTMENT)
+    }
   }
 
   function openCompletionForm(session) {
+    if (session?.finishedByWorkerAt || session?.finishedAt) {
+      setBlockMessage('Awaiting engineer approval')
+      return
+    }
     setPendingCompleteSession(session)
     setCompletionNotes('')
     setCompletionImage(null)
@@ -290,7 +300,7 @@ export default function WorkerInterface() {
 
   function confirmCompleteWithNotes() {
     if (pendingCompleteSession) {
-      handleCompleteAssigned(pendingCompleteSession)
+      handleFinishAssigned(pendingCompleteSession)
     }
   }
 
@@ -380,6 +390,25 @@ export default function WorkerInterface() {
       setBlockMessage(t('activeTaskBlock'))
       return
     }
+    // Starting an engineer-assigned task: start the existing session timer and enter activeSession mode.
+    if (resumeAssignedSession?.id) {
+      const nowIso = new Date().toISOString()
+      const lineParts = (resumeAssignedSession.linesArea || '–').split(/[–\-]/).map((p) => (p || '').trim())
+      updateSession(resumeAssignedSession.id, { startTime: resumeAssignedSession.startTime || nowIso })
+      setActiveSession({
+        worker_id: userId,
+        department: resumeAssignedSession.department,
+        task: resumeAssignedSession.task,
+        zone: resumeAssignedSession.zone,
+        line_from: lineParts[0] || '',
+        line_to: lineParts[1] || '',
+        start_time: resumeAssignedSession.startTime || nowIso,
+        status: 'in_progress',
+        _sessionId: resumeAssignedSession.id,
+      })
+      setBlockMessage(null)
+      return
+    }
     const now = new Date().toISOString()
     const linesArea = selectedZoneId === 'inventory' ? '—' : `${lineFrom.trim()}–${lineTo.trim()}`
     const taskId = generateTaskId(tasks)
@@ -418,8 +447,21 @@ export default function WorkerInterface() {
     }
     if (activeSession._sessionId) {
       const sessionInStore = (sessions || []).find((s) => s.id === activeSession._sessionId)
-      if (sessionInStore?.taskId) updateTaskStatus(sessionInStore.taskId, TASK_STATUS.COMPLETED)
-      removeSession(activeSession._sessionId)
+      if (sessionInStore?.taskId) {
+        const endTimeIso = new Date().toISOString()
+        updateTaskStatus(sessionInStore.taskId, TASK_STATUS.FINISHED_BY_WORKER)
+        updateTask(sessionInStore.taskId, {
+          finishedAt: endTimeIso,
+          workerNotes: completionNotes.trim() || undefined,
+          workerImages: completionImage ? [completionImage] : [],
+        })
+        // Stop timer but keep session visible for engineer approval
+        updateSession(activeSession._sessionId, {
+          finishedByWorkerAt: endTimeIso,
+          workerNotes: completionNotes.trim() || undefined,
+          imageData: completionImage || undefined,
+        })
+      }
     }
     try {
       localStorage.removeItem(WORKER_SESSION_STORAGE_KEY + (userId || '').trim().toLowerCase())
@@ -436,29 +478,9 @@ export default function WorkerInterface() {
     const completed = {
       ...activeSession,
       end_time: endTime.toISOString(),
-      status: 'completed',
+      status: 'finished_by_worker',
       duration: durationMins,
     }
-    const isHarvest = (activeSession.task || '').toLowerCase().includes('harvest')
-    const record = {
-      id: nextRecordId(records),
-      recordType: 'production',
-      ...(isHarvest && { source: 'harvest_form' }),
-      worker: workerName,
-      department: activeSession.department,
-      task: activeSession.task,
-      zone: activeSession.zone,
-      lines: linesStr,
-      linesArea: linesStr,
-      dateTime: endTime.toISOString(),
-      createdAt: new Date().toISOString(),
-      duration: durationMins,
-      startTime: activeSession.start_time,
-      notes: completionNotes.trim() || undefined,
-      engineerNotes: engineerNotesStr,
-      imageData: completionImage || undefined,
-    }
-    addRecord(record)
     setRecordSavedForCompletion(true)
     setCompletedSession(completed)
     setCompletionNotes('')
@@ -561,16 +583,29 @@ export default function WorkerInterface() {
             {myAssignedSessions.map((session) => (
               <div key={session.id} className={styles.assignedCard}>
                 <div className={styles.assignedInfo}>
-                  <span className={styles.assignedDept}>{session.department}</span>
-                  <span className={styles.assignedTask}>{session.task}</span>
-                  <span className={styles.assignedZone}>{session.zone} · {session.linesArea}</span>
+                  <span className={styles.assignedDept}>
+                    {labelByLang(getDepartment(session.departmentId || session.taskTypeId) || { labelEn: session.department, labelAr: session.department }, lang)}
+                  </span>
+                  <span className={styles.assignedTask}>
+                    {(() => {
+                      const deptId = session.departmentId || session.taskTypeId
+                      const defs = deptId ? (getTasksForDepartment(deptId) || []) : []
+                      const taskDefId = session.taskDefId || session.taskId
+                      const found = defs.find((d) => d.id === taskDefId) || defs.find((d) => d.labelEn === session.task || d.labelAr === session.task)
+                      return labelByLang(found || { labelEn: session.task, labelAr: session.task }, lang)
+                    })()}
+                  </span>
+                  <span className={styles.assignedZone}>
+                    {labelByLang(getZone(session.zoneId, zonesList) || { labelEn: session.zone, labelAr: session.zone }, lang)} · {session.linesArea}
+                  </span>
                 </div>
                 <button
                   type="button"
                   className={styles.primaryButton}
                   onClick={() => openCompletionForm(session)}
+                  disabled={!!(session.finishedByWorkerAt || session.finishedAt)}
                 >
-                  <i className={`${faIcon('check')} ${styles.btnIcon}`} /> {t('completeTask')}
+                  <i className={`${faIcon('check')} ${styles.btnIcon}`} /> {session.finishedByWorkerAt ? 'Awaiting approval' : t('confirmComplete')}
                 </button>
               </div>
             ))}
@@ -794,11 +829,12 @@ export default function WorkerInterface() {
             </div>
           </div>
           <div className={styles.executionActions}>
-            <button type="button" className={styles.startBtn} onClick={handleStartTask}>
-              <i className={`${faIcon('play')} ${styles.btnIcon}`} /> {t('startTask')}
-            </button>
-            <button type="button" className={styles.endBtn} onClick={handleEndTask}>
-              <i className={`${faIcon('stop')} ${styles.btnIcon}`} /> {t('endTask')}
+            <button
+              type="button"
+              className={styles.startBtn}
+              onClick={activeSession ? handleEndTask : handleStartTask}
+            >
+              <i className={`${faIcon(activeSession ? 'stop' : 'play')} ${styles.btnIcon}`} /> {t(activeSession ? 'finishTask' : 'confirmStart')}
             </button>
           </div>
         </div>
@@ -810,7 +846,7 @@ export default function WorkerInterface() {
             <i className={`${faIcon(lang === 'ar' ? 'arrow-right' : 'arrow-left')} ${styles.backArrow}`} /> {t('back')}
           </button>
           <h1 className={styles.screenTitle}>
-            <i className={`${faIcon('check')} ${styles.stepIcon}`} /> {t('completeTask')}
+            <i className={`${faIcon('check')} ${styles.stepIcon}`} /> {t('confirmComplete')}
           </h1>
           <div className={styles.summaryCard}>
             <div className={styles.summaryRow}>
