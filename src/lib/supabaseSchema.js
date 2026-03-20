@@ -101,7 +101,6 @@ function fromDbTask(r, workerIds = []) {
     taskType: r.task_type,
     departmentId: r.department_id,
     taskId: r.task_id,
-    workerIds: workerIds,
     priority: r.priority ?? 'medium',
     estimatedMinutes: r.estimated_minutes ?? null,
     notes: r.notes ?? null,
@@ -112,11 +111,19 @@ function fromDbTask(r, workerIds = []) {
     flagged: Boolean(r.flagged),
     createdAt: r.created_at,
     ...(r.data && typeof r.data === 'object' ? r.data : {}),
+    workerIds,
   }
 }
 
 function toDbTask(item) {
-  const id = ensureUuid(item.id) || item.id
+  // tasks.id in DB is TEXT (e.g. T001); do not coerce non-UUID strings to random UUIDs
+  const rawId = item.id
+  const id =
+    rawId != null && String(rawId).trim() !== ''
+      ? String(rawId)
+      : typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `task-${Date.now()}`
   return {
     id,
     code: item.code ?? null,
@@ -139,11 +146,21 @@ function toDbTask(item) {
 }
 
 // ----- Sessions -----
+function deriveSessionRowStatus(item) {
+  if (item.finishedByWorkerAt || item.finishedAt) return 'finished_by_worker'
+  const s = item.status
+  if (s === 'assigned' || s === 'in_progress' || s === 'finished_by_worker' || s === 'closed') return s
+  return 'in_progress'
+}
+
 function fromDbSession(r) {
   if (!r) return null
+  const data = r.data && typeof r.data === 'object' ? r.data : {}
   return {
-    id: r.id,
+    ...data,
+    id: data.clientId || r.id,
     code: r.code,
+    taskId: r.task_id ?? data.taskId ?? null,
     workerId: r.worker_id,
     workerName: r.worker_name,
     department: r.department,
@@ -155,20 +172,49 @@ function fromDbSession(r) {
     linesArea: r.lines_area,
     startTime: r.start_time,
     expectedMinutes: r.expected_minutes ?? 60,
+    status: r.status,
     flagged: Boolean(r.flagged),
-    assignedByEngineer: Boolean(r.assigned_by_engineer),
-    notes: Array.isArray(r.notes) ? r.notes : (r.notes ? JSON.parse(r.notes) : []),
-    taskId: r.data?.taskId ?? null,
-    completedAt: r.data?.completedAt ?? null,
-    ...(r.data && typeof r.data === 'object' ? r.data : {}),
+    assignedByEngineer: r.assigned_by_engineer !== false,
+    notes: Array.isArray(r.notes) ? r.notes : [],
+    finishedByWorkerAt: r.finished_by_worker_at,
+    closedAt: r.closed_at,
+    workerNotes: r.worker_notes,
+    imageData: r.image_data,
+    assignedAt: r.assigned_at,
+    completedAt: data.completedAt ?? null,
   }
 }
 
 function toDbSession(item) {
-  const id = ensureUuid(item.id) || item.id
+  const taskId = item.taskId ?? item.task_id
+  const rawId = item.id
+  /** Adapter sets DB UUID on item.id; _clientSessionKey preserves UI id (e.g. s-assign-…). */
+  const clientSource = item._clientSessionKey != null ? item._clientSessionKey : rawId
+  const id = isUuid(String(rawId))
+    ? String(rawId)
+    : typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : String(rawId)
+
+  const clientId = clientSource != null && !isUuid(String(clientSource)) ? String(clientSource) : null
+  const extras = {}
+  const known = new Set([
+    'id', 'code', '_clientSessionKey', 'workerId', 'worker_id', 'workerName', 'worker_name', 'department', 'departmentId', 'department_id',
+    'taskTypeId', 'task_type_id', 'task', 'zone', 'zoneId', 'zone_id', 'linesArea', 'lines_area',
+    'startTime', 'start_time', 'expectedMinutes', 'expected_minutes', 'flagged', 'notes', 'taskId', 'task_id',
+    'assignedByEngineer', 'assigned_by_engineer', 'status', 'finishedByWorkerAt', 'finished_by_worker_at',
+    'closedAt', 'closed_at', 'workerNotes', 'worker_notes', 'imageData', 'image_data', 'completedAt', 'completed_at',
+    'finishedAt', 'assignedAt', 'assigned_at',
+  ])
+  for (const [k, v] of Object.entries(item)) {
+    if (known.has(k)) continue
+    extras[k] = v
+  }
+
   return {
     id,
     code: item.code ?? null,
+    task_id: taskId,
     worker_id: item.workerId ?? item.worker_id,
     worker_name: item.workerName ?? item.worker_name ?? null,
     department: item.department ?? null,
@@ -180,10 +226,20 @@ function toDbSession(item) {
     lines_area: item.linesArea ?? item.lines_area ?? null,
     start_time: item.startTime ?? item.start_time,
     expected_minutes: item.expectedMinutes ?? item.expected_minutes ?? 60,
-    flagged: Boolean(item.flagged),
+    status: deriveSessionRowStatus(item),
+    finished_by_worker_at: item.finishedByWorkerAt ?? item.finished_by_worker_at ?? null,
+    closed_at: item.closedAt ?? item.closed_at ?? null,
     assigned_by_engineer: item.assignedByEngineer !== false,
+    assigned_at: item.assignedAt ?? item.assigned_at ?? null,
+    flagged: Boolean(item.flagged),
+    worker_notes: item.workerNotes ?? item.worker_notes ?? null,
+    image_data: item.imageData ?? item.image_data ?? null,
     notes: Array.isArray(item.notes) ? item.notes : [],
-    data: { taskId: item.taskId ?? null, completedAt: item.completedAt ?? null },
+    data: {
+      ...extras,
+      ...(clientId ? { clientId } : {}),
+      completedAt: item.completedAt ?? null,
+    },
   }
 }
 
@@ -598,20 +654,21 @@ export async function persistAllSupabase(state) {
 
     // Sessions (auto code: S001…)
     await deleteAll('sessions')
-    const sessionsList = state.sessions || []
+    const sessionsList = (state.sessions || []).filter((s) => s.taskId || s.task_id)
     if (sessionsList.length > 0) {
       const rows = sessionsList.map((s) => {
         const row = toDbSession(s)
         const mapped = workerIdMap[s.workerId ?? s.worker_id] ?? (isUuid(s.workerId ?? s.worker_id) ? s.workerId ?? s.worker_id : null)
         if (mapped) row.worker_id = mapped
+        if (!row.task_id) return null
         return row
-      })
+      }).filter(Boolean)
       const sCodes = []
       for (const row of rows) {
         if (!row.code) row.code = nextDisplayCode('S', sCodes)
         sCodes.push(row.code)
       }
-      await supabase.from('sessions').insert(rows)
+      if (rows.length > 0) await supabase.from('sessions').insert(rows)
     }
 
     // Records (operations only) → records table (R001…)
@@ -804,3 +861,17 @@ export async function getActiveSessionForUser(userId) {
 }
 
 export { SESSION_ID_STORAGE_KEY }
+
+/** Used by supabaseTasksAdapter (Phase 1+) — keeps UI task/worker shape stable. */
+export {
+  isUuid,
+  ensureUuid,
+  fromDbTask,
+  toDbTask,
+  fromDbZone,
+  toDbZone,
+  fromDbWorker,
+  toDbWorker,
+  fromDbSession,
+  toDbSession,
+}

@@ -6,7 +6,16 @@ import { getInitialInventory, getInitialEquipment } from '../data/inventory'
 import { getInitialFaults, getInitialMaintenancePlans } from '../data/faults'
 import { getInitialSessions } from '../data/monitorActive'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
-import { fetchSupabaseState, persistAllSupabase, persistSetting as persistSettingSupabase } from '../lib/supabaseSchema'
+import { fetchSupabaseState, persistAllSupabase } from '../lib/supabaseSchema'
+import { USE_SUPABASE_ACTIVE } from '../config/dataBackend'
+import { fetchTasksAppShaped, persistTask, replaceAllTasks } from '../lib/supabaseTasksAdapter'
+import {
+  fetchSessionsAppShaped,
+  persistSession,
+  deleteSessionFromSupabase,
+  replaceAllSessions,
+} from '../lib/supabaseSessionsAdapter'
+import { fetchOperationsLogRecords, approveTaskCompleteViaRpc } from '../lib/supabaseOperationsLogAdapter'
 
 const RECORDS_STORAGE_KEY = 'sarms-records'
 const SESSIONS_STORAGE_KEY = 'sarms-sessions'
@@ -41,6 +50,13 @@ const WORKER_SESSION_PREFIX = 'sarms-worker-session-'
 
 const SKIP_HYDRATE_KEY = 'sarms-skip-hydrate'
 
+/**
+ * Critical for clean-workflow testing:
+ * Do NOT automatically fetch/refresh/persist Supabase state on app load.
+ * Enable only when explicitly requested (future toggle).
+ */
+const SUPABASE_AUTO_SYNC_ENABLED = false
+
 /** Clears all SARMS data from localStorage (and worker session keys). Sets a flag so next load does not re-fill from Supabase. */
 export function clearAllSarmsDataStorage() {
   try {
@@ -58,23 +74,30 @@ export function clearAllSarmsDataStorage() {
 function loadRecords() {
   try {
     const raw = localStorage.getItem(RECORDS_STORAGE_KEY)
-    if (raw) {
+    // Key present (including "[]") = trust storage; missing = first run → demo seed
+    if (raw != null && raw !== '') {
       const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed)) return parsed
+      if (Array.isArray(parsed)) {
+        console.info('[SARMS][load] records from localStorage:', RECORDS_STORAGE_KEY, 'count=', parsed.length)
+        return parsed
+      }
     }
   } catch (_) {}
-  return []
+  return getInitialRecords()
 }
 
 function loadSessions() {
   try {
     const raw = localStorage.getItem(SESSIONS_STORAGE_KEY)
-    if (raw) {
+    if (raw != null && raw !== '') {
       const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed)) return parsed
+      if (Array.isArray(parsed)) {
+        console.info('[SARMS][load] sessions from localStorage:', SESSIONS_STORAGE_KEY, 'count=', parsed.length)
+        return parsed
+      }
     }
   } catch (_) {}
-  return []
+  return getInitialSessions()
 }
 
 function loadZones() {
@@ -91,12 +114,15 @@ function loadZones() {
 function loadTasks() {
   try {
     const raw = localStorage.getItem(TASKS_STORAGE_KEY)
-    if (raw) {
+    if (raw != null && raw !== '') {
       const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      if (Array.isArray(parsed)) {
+        console.info('[SARMS][load] tasks from localStorage:', TASKS_STORAGE_KEY, 'count=', parsed.length)
+        return parsed
+      }
     }
   } catch (_) {}
-  return []
+  return getInitialTasks()
 }
 
 /** Normalize batch list to array of { id, name }. Supports legacy string[] format. */
@@ -142,14 +168,14 @@ function withoutTechnicians(workers) {
   return workers.filter((w) => (w.role || '').toLowerCase() !== 'technician')
 }
 
-/** Default is 15 workers + 1 engineer + 1 admin. If loaded data has more than 1 engineer or more than 1 admin, use minimal seed. */
+/**
+ * Normalize workers from storage. Never wipe the list for multi-engineer/admin —
+ * that used to replace everyone with 3 default accounts and made new users "disappear".
+ */
 function normalizeWorkersList(workers) {
   if (!Array.isArray(workers) || workers.length === 0) return getMinimalWorkers()
   const filtered = withoutTechnicians(workers)
-  const engineers = filtered.filter((w) => (w.role || '').toLowerCase() === 'engineer').length
-  const admins = filtered.filter((w) => (w.role || '').toLowerCase() === 'admin').length
-  if (engineers > 1 || admins > 1) return getMinimalWorkers()
-  return filtered
+  return filtered.length > 0 ? filtered : getMinimalWorkers()
 }
 
 function loadWorkers() {
@@ -157,9 +183,13 @@ function loadWorkers() {
     const raw = localStorage.getItem(WORKERS_STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed) && parsed.length > 0) return normalizeWorkersList(parsed)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        console.info('[SARMS][load] workers from localStorage:', WORKERS_STORAGE_KEY, 'count=', parsed.length)
+        return normalizeWorkersList(parsed)
+      }
     }
   } catch (_) {}
+  console.info('[SARMS][load] workers default minimal seed (localStorage empty or invalid)')
   return getMinimalWorkers()
 }
 
@@ -257,11 +287,23 @@ function getSeedState() {
 }
 
 /** Build full initial state (used on every provider mount so persisted data is never lost on remount/HMR). */
+function findTaskInList(tasks, taskId) {
+  const idOrCode = String(taskId ?? '').trim()
+  return (tasks || []).find(
+    (t) => (t.id && String(t.id) === idOrCode) || (t.code && String(t.code) === idOrCode)
+  )
+}
+
+function findSessionInList(sessions, sessionId) {
+  const key = String(sessionId ?? '').trim()
+  return (sessions || []).find((s) => s.id != null && String(s.id) === key)
+}
+
 function getInitialState() {
   return {
-    tasks: loadTasks(),
-    records: loadRecords(),
-    sessions: loadSessions(),
+    tasks: USE_SUPABASE_ACTIVE ? [] : loadTasks(),
+    records: USE_SUPABASE_ACTIVE ? [] : loadRecords(),
+    sessions: USE_SUPABASE_ACTIVE ? [] : loadSessions(),
     zones: loadZones(),
     batchesByZone: loadBatchesByZone(),
     defaultBatchByZone: loadDefaultBatchByZone(),
@@ -452,10 +494,60 @@ const AppStoreContext = createContext(null)
 export function AppStoreProvider({ children }) {
   const [state, dispatch] = useReducer(storeReducer, undefined, getInitialState)
   const supabaseHydrateDone = useRef(false)
+  const stateRef = useRef(state)
+  // Phase 3: keep the exact record snapshot from `addRecord` so `removeSession`
+  // can execute the engineer approval RPC inside a single transaction.
+  const pendingOpsLogRecordRef = useRef(null) // record created by engineer approval
+  const pendingEngineerCompletionRef = useRef(null) // { taskId, record }
+  stateRef.current = state
 
-  // Hydrate from Supabase once on mount (if configured). Skip when user just did "Clear all data" so they get empty state.
+  // Phases 1–2: VITE_USE_SUPABASE — tasks + sessions from Supabase (same shapes as localStorage).
   useEffect(() => {
-    if (!isSupabaseConfigured) {
+    if (!USE_SUPABASE_ACTIVE) return
+    try {
+      // Phase 1–3: hard-disable localStorage for the migrated domains.
+      // We never read these keys when USE_SUPABASE_ACTIVE=true, but removing avoids any stale keys affecting debugging.
+      localStorage.removeItem(TASKS_STORAGE_KEY)
+      localStorage.removeItem(SESSIONS_STORAGE_KEY)
+      localStorage.removeItem(RECORDS_STORAGE_KEY)
+
+      if (sessionStorage.getItem(SKIP_HYDRATE_KEY)) {
+        sessionStorage.removeItem(SKIP_HYDRATE_KEY)
+        console.info('[SARMS][supabase] skip-hydrate: tasks/sessions hydrate skipped')
+        supabaseHydrateDone.current = true
+        dispatch({ type: 'HYDRATE_DONE' })
+        return
+      }
+    } catch (_) {}
+    let cancelled = false
+    console.info('[SARMS][supabase] USE_SUPABASE: fetching tasks + sessions + operations_log…')
+    Promise.all([fetchTasksAppShaped(), fetchSessionsAppShaped(), fetchOperationsLogRecords()])
+      .then(([tasks, sessions, records]) => {
+        supabaseHydrateDone.current = true
+        if (cancelled) {
+          dispatch({ type: 'HYDRATE_DONE' })
+          return
+        }
+        dispatch({ type: 'HYDRATE', payload: { tasks, sessions, records } })
+        dispatch({ type: 'HYDRATE_DONE' })
+      })
+      .catch(() => {
+        supabaseHydrateDone.current = true
+        console.info('[SARMS][supabase] tasks/sessions fetch failed; retry with reload')
+        dispatch({ type: 'HYDRATE_DONE' })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Legacy: full-state Supabase hydrate (disabled unless SUPABASE_AUTO_SYNC_ENABLED).
+  useEffect(() => {
+    if (USE_SUPABASE_ACTIVE) return
+    if (!isSupabaseConfigured || !SUPABASE_AUTO_SYNC_ENABLED) {
+      if (isSupabaseConfigured && !SUPABASE_AUTO_SYNC_ENABLED) {
+        console.info('[SARMS][supabase] auto-sync disabled: skipping hydrate on mount')
+      }
       supabaseHydrateDone.current = true
       dispatch({ type: 'HYDRATE_DONE' })
       return
@@ -463,12 +555,14 @@ export function AppStoreProvider({ children }) {
     try {
       if (sessionStorage.getItem(SKIP_HYDRATE_KEY)) {
         sessionStorage.removeItem(SKIP_HYDRATE_KEY)
+        console.info('[SARMS][supabase] skip-hydrate flag found: skipping hydrate on mount')
         supabaseHydrateDone.current = true
         dispatch({ type: 'HYDRATE_DONE' })
         return
       }
     } catch (_) {}
     let cancelled = false
+    console.info('[SARMS][supabase] hydrating on mount…')
     fetchSupabaseState().then((payload) => {
       supabaseHydrateDone.current = true
       if (cancelled) {
@@ -476,18 +570,21 @@ export function AppStoreProvider({ children }) {
         return
       }
       const hasAny = payload && Object.values(payload).some((v) => Array.isArray(v) ? v.length > 0 : typeof v === 'object' && v !== null && Object.keys(v).length > 0)
+      console.info('[SARMS][supabase] hydrate payload:', hasAny ? 'has data' : 'empty')
       if (hasAny) dispatch({ type: 'HYDRATE', payload })
       else dispatch({ type: 'HYDRATE_DONE' })
     }).catch(() => {
       supabaseHydrateDone.current = true
+      console.info('[SARMS][supabase] hydrate failed; continuing with local state')
       dispatch({ type: 'HYDRATE_DONE' })
     })
     return () => { cancelled = true }
   }, [])
 
-  // Auto-refresh from Supabase every 3s so new tasks and data appear without reload
+  // Auto-refresh from Supabase every 3s (disabled for clean reset workflows; not used for USE_SUPABASE task mode)
   useEffect(() => {
-    if (!isSupabaseConfigured || !state.hydrateDone) return
+    if (USE_SUPABASE_ACTIVE) return
+    if (!isSupabaseConfigured || !SUPABASE_AUTO_SYNC_ENABLED || !state.hydrateDone) return
     const interval = setInterval(() => {
       fetchSupabaseState().then((payload) => {
         if (payload && Object.keys(payload).length > 0) {
@@ -500,7 +597,8 @@ export function AppStoreProvider({ children }) {
 
   // Supabase: single debounced persist of full state (production schema: columns + task_workers + UUIDs)
   useEffect(() => {
-    if (!supabaseHydrateDone.current || !isSupabaseConfigured || !state.hydrateDone) return
+    if (USE_SUPABASE_ACTIVE) return
+    if (!supabaseHydrateDone.current || !isSupabaseConfigured || !SUPABASE_AUTO_SYNC_ENABLED || !state.hydrateDone) return
     const t = setTimeout(() => {
       persistAllSupabase(state)
     }, 600)
@@ -522,35 +620,40 @@ export function AppStoreProvider({ children }) {
     state.resolvedTickets,
   ])
 
+  // Always persist batches/default batch to localStorage in local-only mode.
   useEffect(() => {
-    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
-    if (isSupabaseConfigured) persistSettingSupabase(BATCHES_BY_ZONE_STORAGE_KEY, state.batchesByZone)
-    else try { localStorage.setItem(BATCHES_BY_ZONE_STORAGE_KEY, JSON.stringify(state.batchesByZone)) } catch (_) {}
+    try {
+      localStorage.setItem(BATCHES_BY_ZONE_STORAGE_KEY, JSON.stringify(state.batchesByZone))
+    } catch (_) {}
   }, [state.batchesByZone, state.hydrateDone])
 
   useEffect(() => {
-    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
-    if (isSupabaseConfigured) persistSettingSupabase(DEFAULT_BATCH_BY_ZONE_STORAGE_KEY, state.defaultBatchByZone)
-    else try { localStorage.setItem(DEFAULT_BATCH_BY_ZONE_STORAGE_KEY, JSON.stringify(state.defaultBatchByZone)) } catch (_) {}
+    try {
+      localStorage.setItem(DEFAULT_BATCH_BY_ZONE_STORAGE_KEY, JSON.stringify(state.defaultBatchByZone))
+    } catch (_) {}
   }, [state.defaultBatchByZone, state.hydrateDone])
 
+  // Persist full SARMS state to localStorage (tasks omitted when USE_SUPABASE — Supabase is source for tasks).
   useEffect(() => {
-    if (!supabaseHydrateDone.current && isSupabaseConfigured) return
-    if (!isSupabaseConfigured) {
-      try {
+    try {
+      if (!USE_SUPABASE_ACTIVE) {
         localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(state.records))
+      }
+      if (!USE_SUPABASE_ACTIVE) {
         localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(state.sessions))
-        localStorage.setItem(ZONES_STORAGE_KEY, JSON.stringify(state.zones))
+      }
+      localStorage.setItem(ZONES_STORAGE_KEY, JSON.stringify(state.zones))
+      if (!USE_SUPABASE_ACTIVE) {
         localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(state.tasks))
-        localStorage.setItem(WORKERS_STORAGE_KEY, JSON.stringify(state.workers))
-        localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(state.inventory))
-        localStorage.setItem(INVENTORY_MOVEMENTS_STORAGE_KEY, JSON.stringify(state.inventoryMovements))
-        localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(state.equipment))
-        localStorage.setItem(FAULTS_STORAGE_KEY, JSON.stringify(state.faults))
-        localStorage.setItem(MAINTENANCE_PLANS_STORAGE_KEY, JSON.stringify(state.maintenancePlans))
-        localStorage.setItem(RESOLVED_TICKETS_STORAGE_KEY, JSON.stringify(state.resolvedTickets || []))
-      } catch (_) {}
-    }
+      }
+      localStorage.setItem(WORKERS_STORAGE_KEY, JSON.stringify(state.workers))
+      localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(state.inventory))
+      localStorage.setItem(INVENTORY_MOVEMENTS_STORAGE_KEY, JSON.stringify(state.inventoryMovements))
+      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(state.equipment))
+      localStorage.setItem(FAULTS_STORAGE_KEY, JSON.stringify(state.faults))
+      localStorage.setItem(MAINTENANCE_PLANS_STORAGE_KEY, JSON.stringify(state.maintenancePlans))
+      localStorage.setItem(RESOLVED_TICKETS_STORAGE_KEY, JSON.stringify(state.resolvedTickets || []))
+    } catch (_) {}
   }, [
     state.records,
     state.sessions,
@@ -566,20 +669,121 @@ export function AppStoreProvider({ children }) {
     state.hydrateDone,
   ])
 
-  const addTask = useCallback((task) => dispatch({ type: 'ADD_TASK', payload: task }), [])
-  const updateTaskStatus = useCallback((taskId, status) =>
-    dispatch({ type: 'UPDATE_TASK_STATUS', payload: { taskId, status } }), [])
-  const updateTask = useCallback((taskId, updates) =>
-    dispatch({ type: 'UPDATE_TASK', payload: { taskId, updates } }), [])
+  const addTask = useCallback((task) => {
+    dispatch({ type: 'ADD_TASK', payload: task })
+    if (USE_SUPABASE_ACTIVE) {
+      const { workers, zones } = stateRef.current
+      persistTask(task, workers, zones).catch((e) => console.warn('[SARMS][tasks] persist add', e))
+    }
+  }, [])
 
-  const addRecord = useCallback((record) => dispatch({ type: 'ADD_RECORD', payload: record }), [])
+  const updateTaskStatus = useCallback((taskId, status) => {
+    dispatch({ type: 'UPDATE_TASK_STATUS', payload: { taskId, status } })
+    if (USE_SUPABASE_ACTIVE) {
+      if (status === TASK_STATUS.COMPLETED && pendingOpsLogRecordRef.current) {
+        pendingEngineerCompletionRef.current = {
+          taskId: String(taskId ?? ''),
+          record: pendingOpsLogRecordRef.current,
+        }
+        pendingOpsLogRecordRef.current = null
+      }
+
+      const pending = pendingEngineerCompletionRef.current
+      if (pending && String(pending.taskId) === String(taskId ?? '')) return
+
+      const prev = findTaskInList(stateRef.current.tasks, taskId)
+      if (prev) {
+        const merged = { ...prev, status }
+        const { workers, zones } = stateRef.current
+        persistTask(merged, workers, zones).catch((e) => console.warn('[SARMS][tasks] persist status', e))
+      }
+    }
+  }, [])
+
+  const updateTask = useCallback((taskId, updates) => {
+    dispatch({ type: 'UPDATE_TASK', payload: { taskId, updates } })
+    if (USE_SUPABASE_ACTIVE) {
+      const pending = pendingEngineerCompletionRef.current
+      if (pending && String(pending.taskId) === String(taskId ?? '')) return
+
+      const prev = findTaskInList(stateRef.current.tasks, taskId)
+      if (prev) {
+        const merged = { ...prev, ...updates }
+        const { workers, zones } = stateRef.current
+        persistTask(merged, workers, zones).catch((e) => console.warn('[SARMS][tasks] persist update', e))
+      }
+    }
+  }, [])
+
+  const addRecord = useCallback((record) => {
+    dispatch({ type: 'ADD_RECORD', payload: record })
+    // In engineer approval flow, `addRecord` is followed by:
+    //   updateTaskStatus(taskId, completed) → updateTask(taskId, { approvedAt, engineerComment }) → removeSession(sessionId)
+    // We capture the record snapshot so `removeSession` can execute the RPC inside a single transaction.
+    if (
+      USE_SUPABASE_ACTIVE &&
+      record &&
+      record.recordType === 'production' &&
+      record.duration != null &&
+      record.startTime
+    ) {
+      pendingOpsLogRecordRef.current = record
+    }
+  }, [])
   const updateRecord = useCallback((recordId, updates) =>
     dispatch({ type: 'UPDATE_RECORD', payload: { recordId, updates } }), [])
   const removeRecord = useCallback((recordId) => dispatch({ type: 'REMOVE_RECORD', payload: recordId }), [])
-  const addSession = useCallback((session) => dispatch({ type: 'ADD_SESSION', payload: session }), [])
-  const removeSession = useCallback((sessionId) => dispatch({ type: 'REMOVE_SESSION', payload: sessionId }), [])
-  const updateSession = useCallback((sessionId, updates) =>
-    dispatch({ type: 'UPDATE_SESSION', payload: { sessionId, updates } }), [])
+  const addSession = useCallback((session) => {
+    dispatch({ type: 'ADD_SESSION', payload: session })
+    if (USE_SUPABASE_ACTIVE) {
+      const { workers, zones, tasks } = stateRef.current
+      persistSession(session, workers, zones, tasks).catch((e) =>
+        console.warn('[SARMS][sessions] persist add', e)
+      )
+    }
+  }, [])
+
+  const removeSession = useCallback((sessionId) => {
+    const snapshot = (stateRef.current.sessions || []).find((s) => s.id === sessionId)
+    const taskId = snapshot?.taskId ?? snapshot?.task_id
+    const pending = pendingEngineerCompletionRef.current
+    const shouldRpc =
+      USE_SUPABASE_ACTIVE &&
+      pending &&
+      taskId != null &&
+      String(pending.taskId) === String(taskId ?? '')
+
+    dispatch({ type: 'REMOVE_SESSION', payload: sessionId })
+    if (USE_SUPABASE_ACTIVE) {
+      if (shouldRpc) {
+        const record = pending?.record
+        pendingEngineerCompletionRef.current = null
+        approveTaskCompleteViaRpc({
+          taskId,
+          clientSessionId: sessionId,
+          startTime: snapshot?.startTime ?? snapshot?.start_time,
+          expectedMinutes: snapshot?.expectedMinutes ?? snapshot?.expected_minutes,
+          record,
+        }).catch((e) => console.warn('[SARMS][ops] approve_task_complete rpc failed:', e))
+      } else {
+        deleteSessionFromSupabase(sessionId).catch((e) => console.warn('[SARMS][sessions] delete', e))
+      }
+    }
+  }, [])
+
+  const updateSession = useCallback((sessionId, updates) => {
+    dispatch({ type: 'UPDATE_SESSION', payload: { sessionId, updates } })
+    if (USE_SUPABASE_ACTIVE) {
+      const prev = findSessionInList(stateRef.current.sessions, sessionId)
+      if (prev) {
+        const merged = { ...prev, ...updates }
+        const { workers, zones, tasks } = stateRef.current
+        persistSession(merged, workers, zones, tasks).catch((e) =>
+          console.warn('[SARMS][sessions] persist update', e)
+        )
+      }
+    }
+  }, [])
 
   const setInventory = useCallback((items) => dispatch({ type: 'SET_INVENTORY', payload: items }), [])
   const updateInventoryItem = useCallback((itemId, updates) =>
@@ -611,7 +815,13 @@ export function AppStoreProvider({ children }) {
     dispatch({ type: 'UPDATE_WORKER', payload: { workerId, updates } }), [])
 
   const resetToSeed = useCallback(() => {
-    dispatch({ type: 'RESET_TO_SEED', payload: getSeedState() })
+    const seed = getSeedState()
+    dispatch({ type: 'RESET_TO_SEED', payload: seed })
+    if (USE_SUPABASE_ACTIVE) {
+      replaceAllTasks(seed.tasks, seed.workers, seed.zones)
+        .then(() => replaceAllSessions(seed.sessions, seed.workers, seed.zones, seed.tasks))
+        .catch((e) => console.warn('[SARMS][tasks/sessions] reset seed sync', e))
+    }
   }, [])
 
   const value = {
