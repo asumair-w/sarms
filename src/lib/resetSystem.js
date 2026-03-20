@@ -4,6 +4,8 @@
  */
 
 import { supabase, isSupabaseConfigured } from './supabase'
+import { seedDefaultAccounts } from './defaultAccounts'
+import { getInitialZones } from '../data/workerFlow'
 
 const SKIP_HYDRATE_KEY = 'sarms-skip-hydrate'
 
@@ -28,26 +30,8 @@ const SUPABASE_TABLES = [
 /** Step 1 – Clear all SARMS-related browser storage (localStorage + sessionStorage). */
 export function clearBrowserStorage() {
   try {
-    const keysToRemove = []
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i)
-      if (key && (key.startsWith('sarms') || key.startsWith('cache') || key.toLowerCase().includes('sarms'))) {
-        keysToRemove.push(key)
-      }
-    }
-    keysToRemove.forEach((k) => localStorage.removeItem(k))
-    // Also clear known SARMS keys that might not match above
-    const known = [
-      'sarms-workers', 'sarms-records', 'sarms-sessions', 'sarms-zones', 'sarms-tasks',
-      'sarms-batches-by-zone', 'sarms-default-batch-by-zone', 'sarms-inventory',
-      'sarms-inventory-movements', 'sarms-equipment', 'sarms-faults', 'sarms-maintenance-plans',
-      'sarms_lang', 'sarms-skip-hydrate',
-    ]
-    known.forEach((k) => localStorage.removeItem(k))
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const key = localStorage.key(i)
-      if (key && key.startsWith('sarms')) localStorage.removeItem(key)
-    }
+    // Requirement: wipe all localStorage so the app behaves like a fresh install.
+    localStorage.clear()
   } catch (e) {
     console.warn('resetSystem clear localStorage:', e)
   }
@@ -56,6 +40,50 @@ export function clearBrowserStorage() {
   } catch (e) {
     console.warn('resetSystem clear sessionStorage:', e)
   }
+}
+
+/**
+ * Local-only reset: clears localStorage and recreates the 3 default accounts.
+ * (Admin: a1/a1, Engineer: e1/e1, Worker: w1/w1)
+ */
+/**
+ * After a full wipe, write default logins + empty operational data.
+ * If we only seed users/workers, the next load sees missing task/session/record keys
+ * and refills demo seed from getInitial*() — looks like "reset did nothing".
+ */
+export function writeFreshLocalStateAfterReset() {
+  try {
+    seedDefaultAccounts()
+    const zones = getInitialZones()
+    const batchesByZone = {}
+    const defaultBatchByZone = {}
+    zones.forEach((z) => {
+      batchesByZone[z.id] = [{ id: '1', name: 'Batch 1' }]
+      defaultBatchByZone[z.id] = '1'
+    })
+    const empty = '[]'
+    localStorage.setItem('sarms-records', empty)
+    localStorage.setItem('sarms-sessions', empty)
+    localStorage.setItem('sarms-tasks', empty)
+    localStorage.setItem('sarms-zones', JSON.stringify(zones))
+    localStorage.setItem('sarms-batches-by-zone', JSON.stringify(batchesByZone))
+    localStorage.setItem('sarms-default-batch-by-zone', JSON.stringify(defaultBatchByZone))
+    localStorage.setItem('sarms-inventory', empty)
+    localStorage.setItem('sarms-inventory-movements', empty)
+    localStorage.setItem('sarms-equipment', empty)
+    localStorage.setItem('sarms-faults', empty)
+    localStorage.setItem('sarms-maintenance-plans', empty)
+    localStorage.setItem('sarms-resolved-tickets', empty)
+    console.info('[SARMS][reset] fresh local state: empty tasks/sessions/records + default zones/workers')
+  } catch (e) {
+    console.warn('resetSystem writeFreshLocalStateAfterReset:', e)
+  }
+}
+
+export function resetSystem() {
+  console.info('[SARMS][reset] resetSystem() called: clearing storage and reseeding defaults')
+  clearBrowserStorage()
+  writeFreshLocalStateAfterReset()
 }
 
 /** Step 2 – Delete all rows from SARMS Supabase tables (safe: delete by key, no DROP). */
@@ -108,6 +136,7 @@ export async function executeFullReset(adminUserId) {
   logResetEvent(adminUserId)
   clearBrowserStorage()
   await resetSupabaseDatabase()
+  writeFreshLocalStateAfterReset()
   setSkipHydrateBeforeReload()
   try {
     sessionStorage.setItem(RESET_SUCCESS_KEY, '1')

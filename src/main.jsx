@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { LanguageProvider } from './context/LanguageContext'
 import { AppStoreProvider } from './context/AppStoreContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { ensureDefaultAccountsSeeded } from './lib/defaultAccounts'
 import App from './App'
 import './index.css'
 
@@ -21,6 +22,7 @@ function showBootstrapError(message, detail) {
 }
 
 try {
+  ensureDefaultAccountsSeeded()
   const rootEl = document.getElementById('root')
   if (!rootEl) {
     document.body.innerHTML = '<div style="padding:2rem;color:#fca5a5;">No #root element found.</div>'

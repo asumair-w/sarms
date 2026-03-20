@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useLanguage } from '../context/LanguageContext'
 import { getTranslation } from '../i18n/translations'
 import { POWER_BI_STORAGE_KEY } from '../config/powerBi'
+import { resetSystem } from '../lib/resetSystem'
 import styles from './AdminSettings.module.css'
 
 function getStoredPowerBiUrl() {
@@ -43,6 +44,18 @@ export default function AdminSettings() {
       setPowerBiSaved(false)
     }
   }
+
+  function handleResetSystem() {
+    const ok = window.confirm('Are you sure you want to reset the system? This will delete all data.')
+    if (!ok) return
+    try {
+      resetSystem()
+    } finally {
+      window.location.reload()
+    }
+  }
+
+  const isAdmin = account.role === 'admin'
 
   return (
     <div className={styles.page}>
@@ -122,6 +135,23 @@ export default function AdminSettings() {
           <span><span className={styles.accountLabel}>{t('role')}</span> {(account.role && ['admin', 'engineer', 'worker'].includes(account.role)) ? t('role' + account.role.charAt(0).toUpperCase() + account.role.slice(1)) : account.role}</span>
         </div>
       </section>
+
+      {/* System (Admin only) */}
+      {isAdmin && (
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>System</h2>
+          <p className={styles.sectionDesc}>
+            This action will permanently delete all system data and restore default accounts.
+          </p>
+          <button
+            type="button"
+            className={styles.resetSystemBtn}
+            onClick={handleResetSystem}
+          >
+            Reset System
+          </button>
+        </section>
+      )}
     </div>
   )
 }
