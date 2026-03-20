@@ -27,7 +27,6 @@ BEGIN
   INSERT INTO public.operations_log (
     task_id,
     source_session_id,
-    code,
     start_time,
     expected_minutes,
     task_status_at_close,
