@@ -1,4 +1,6 @@
-# Cloudflare Pages — Vite build output (see package.json "deploy")
+# Cloudflare Pages — يُستخدم مع `npm run pages:upload` فقط (رفع dist جاهز).
+# الإنتاج الموصى به: Git integration في Dashboard مع Build command = npm run build و output = dist
+# حتى تُحقَن VITE_* من Environment Variables في Pages عند البناء على السحابة.
 name = "sarms"
 pages_build_output_dir = "dist"
 compatibility_date = "2026-02-02"

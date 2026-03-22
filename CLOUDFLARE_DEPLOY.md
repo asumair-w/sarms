@@ -1,59 +1,72 @@
-# Cloudflare deploy fix
+# Cloudflare Pages — الإنتاج (Git + build على Cloudflare)
 
-Your deploy fails because Cloudflare runs **Deploy command**: `npx wrangler deploy` with no arguments. Wrangler then doesn’t know what to deploy.
+## المبدأ
 
-You have to change the settings in the **Cloudflare dashboard** (the repo cannot override the deploy command). Use one of these:
+متغيرات Vite (`VITE_*`) تُدمَج في الـ JS **عند `npm run build`**. إذا رفعت مجلد `dist` يدوياً بـ `wrangler pages deploy dist`، فالبناء يحدث على جهازك وليس على Cloudflare، و**لن تُستخدم** Environment Variables المعرفة في Pages (ما لم تكن نفس القيم في `.env` محلياً).
 
----
-
-## Option A: Use only Build (recommended if you use Cloudflare Pages)
-
-If this is a **Cloudflare Pages** project:
-
-1. Go to **Workers & Pages** → your project → **Settings** → **Builds & deployments**.
-2. Set **Build command** to: `npm run build`
-3. Set **Build output directory** (or “Build output path”) to: `dist`
-4. **Remove or clear the Deploy command** if there is one, or set it to: `true`
-
-Pages will build and then deploy the `dist` folder automatically. No separate deploy command is needed.
+**الإنتاج الموصى به:** ربط المستودع بـ Cloudflare Pages والاعتماد على **build داخل Cloudflare** بعد كل `git push`.
 
 ---
 
-## Option B: Deploy from the Build command (when a Deploy command is required)
+## 1. ربط GitHub (أو Git)
 
-If your project has a separate “Deploy command” and you can’t remove it:
-
-1. Set **Build command** to:
-   ```bash
-   npm run build:cf
-   ```
-   This builds the app and then runs `npx wrangler deploy --assets=./dist` so the deploy happens in the build step.
-
-2. Set **Deploy command** to:
-   ```bash
-   true
-   ```
-   So the second step does nothing and doesn’t run `npx wrangler deploy` alone.
-
-3. Save and run a new deployment.
+1. Cloudflare Dashboard → **Workers & Pages** → **Create** → **Pages** → **Connect to Git**.
+2. اختر المستودع والفرع **`main`** (أو الفرع الإنتاجي لديك).
 
 ---
 
-## Option C: Fix the Deploy command
+## 2. إعدادات البناء (Build)
 
-If you can edit the Deploy command:
+في **Settings** → **Builds & deployments** → **Build configuration**:
 
-1. Set **Deploy command** to **exactly**:
-   ```bash
-   npx wrangler deploy --assets=./dist --compatibility-date 2026-02-02 --name sarms
-   ```
-   or:
-   ```bash
-   npm run deploy:cf
-   ```
-2. Keep **Build command**: `npm run build`
-3. Save and redeploy.
+| الحقل | القيمة |
+|--------|--------|
+| **Build command** | `npm run build` |
+| **Build output directory** | `dist` |
+| **Root directory** | `/` (أو جذر المشروع إن كان monorepo) |
+
+لا حاجة لأمر Deploy منفصل: Pages ينشر محتويات `dist` بعد نجاح الـ build.
 
 ---
 
-After changing the settings, run a new build from the Cloudflare dashboard.
+## 3. متغيرات البيئة (Production)
+
+في **Settings** → **Environment variables** → **Production**:
+
+| Name | Value | ملاحظة |
+|------|--------|--------|
+| `VITE_SUPABASE_URL` | `https://<project-ref>.supabase.co` | من Supabase → Settings → API |
+| `VITE_SUPABASE_ANON_KEY` | المفتاح anon | نفس المشروع |
+| `VITE_USE_SUPABASE` | `true` | يجب أن يكون النص `true` حرفياً |
+
+بعد تغيير أي متغير: نفّذ **Retry deployment** أو ادفع commit جديد حتى يُعاد الـ build ويُدمَج الـ bundle الجديد.
+
+---
+
+## 4. النشر الروتيني
+
+```bash
+git add .
+git commit -m "Your message"
+git push origin main
+```
+
+Cloudflare يسحب الشفرة، يشغّل `npm run build` مع متغيرات Production، وينشر `dist`.
+
+---
+
+## 5. رفع يدوي طارئ (غير موصى به للإنتاج)
+
+للاختبار أو الطوارئ فقط (يستخدم **build محلي**؛ تأكد من وجود `.env` بنفس القيم أو لن تُحقن مفاتيح Supabase):
+
+```bash
+npm run pages:upload
+```
+
+---
+
+## 6. استكشاف أخطاء قديمة
+
+إذا كان المشروع مضبوطاً سابقاً على **Deploy command** مثل `npx wrangler deploy` بدون سياق Pages:
+
+- لـ **Pages** مع Git: عطّل أو امسح Deploy command الفارغ، واعتمد فقط على **Build command** + **Output directory** كما أعلاه.
