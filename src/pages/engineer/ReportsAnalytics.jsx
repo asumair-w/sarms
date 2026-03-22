@@ -57,6 +57,18 @@ const ALL_TASK_OPTIONS = (() => {
 
 const WORKER_OPTIONS = SEED_WORKERS.filter((w) => w.role === 'worker' || w.role === 'engineer')
 
+/** Chart axis labels: tasks store workerIds as UUID (Supabase) — resolve fullName from store workers, not seed ids only. */
+function workerNameForChart(wid, workersFromStore) {
+  const list = workersFromStore && workersFromStore.length > 0 ? workersFromStore : WORKER_OPTIONS
+  const s = String(wid ?? '').trim()
+  if (!s) return '—'
+  const byId = list.find((w) => String(w.id) === s)
+  if (byId?.fullName) return byId.fullName
+  const lower = s.toLowerCase()
+  const byEmp = list.find((w) => String(w.employeeId || '').toLowerCase() === lower)
+  return byEmp?.fullName ?? wid
+}
+
 const DEFAULT_DATE_FROM = () => new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
 const DEFAULT_DATE_TO = () => new Date().toISOString().slice(0, 10)
 
@@ -1563,7 +1575,7 @@ export default function ReportsAnalytics() {
                         }
                       }
                       return {
-                        labels: sorted.map(([wid]) => WORKER_OPTIONS.find((w) => w.id === wid)?.fullName || wid),
+                        labels: sorted.map(([wid]) => workerNameForChart(wid, workers)),
                         datasets: [{
                           label: 'Tasks',
                           data: sorted.map(([, c]) => c),

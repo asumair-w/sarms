@@ -1,7 +1,24 @@
-/* Executive Overview — grid from sarmsPageShell.statGrid (same as Worker Ranking / Reports KPIs) */
+/* Executive Overview — six charts: 3 + 3 on large screens (not one row of six from auto-fit) */
 
 .chartGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  width: 100%;
+  box-sizing: border-box;
   margin-top: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .chartGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .chartGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 .card {

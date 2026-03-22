@@ -1,9 +1,16 @@
 /* General Reports — page shell from ../../styles/sarmsPageShell.module.css */
 
+/* Match EngineerHome .page: shell.page supplies max-width 1400px + center; vertical gap matches EngineerHome. */
 .pageExtend {
-  max-width: 100%;
   padding-bottom: 1.5rem;
   overflow-x: hidden;
+  gap: 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .pageExtend {
+    gap: 1.5rem;
+  }
 }
 
 .filterStateIndicator {

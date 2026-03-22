@@ -1,7 +1,7 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { jsPDF } from 'jspdf'
-import html2canvas from 'html2canvas'
+import autoTable from 'jspdf-autotable'
 import {
   ROLE_OPTIONS,
   DEPARTMENT_OPTIONS,
@@ -151,7 +151,6 @@ function RegisterManageWorkers() {
     email: '',
   })
   const [createdWorker, setCreatedWorker] = useState(null)
-  const workersTableRef = useRef(null)
 
   const weekStart = useMemo(() => getWeekStart(), [])
 
@@ -297,64 +296,123 @@ function RegisterManageWorkers() {
   }
 
   function exportEmployeesPDF() {
-    const el = workersTableRef.current
-    if (!el) return
-    html2canvas(el, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-    }).then((canvas) => {
-      const imgData = canvas.toDataURL('image/png')
-      const pdf = new jsPDF({
-        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
-        unit: 'mm',
-        format: 'a4',
-      })
-      const pdfW = pdf.internal.pageSize.getWidth()
-      const pdfH = pdf.internal.pageSize.getHeight()
-      const margin = 10
-      const w = pdfW - margin * 2
-      const h = (canvas.height * w) / canvas.width
+    if (filtered.length === 0) return
 
-      pdf.setFontSize(14)
-      pdf.setFont('helvetica', 'bold')
-      pdf.text('Worker List', margin, 12)
-      pdf.setFontSize(9)
-      pdf.setFont('helvetica', 'normal')
-      pdf.text(new Date().toLocaleString(), margin, 18)
+    const margin = 10
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+    const pdfW = pdf.internal.pageSize.getWidth()
+    const w = pdfW - margin * 2
 
-      let y = 24
-      pdf.setFontSize(10)
-      pdf.setFont('helvetica', 'bold')
-      pdf.text('Filters applied:', margin, y)
-      y += 5
-      const roleLabel = filterRole ? (ROLE_LABEL[filterRole] || filterRole) : 'All'
-      const deptLabel = filterDept ? (DEPT_LABEL[filterDept] || filterDept) : 'All'
-      const skillLabel = filterSkill ? (SKILL_OPTIONS.includes(filterSkill) ? filterSkill : filterSkill) : 'All'
-      const accountLabel = filterStatus === 'active' ? t('active') : filterStatus === 'not_active' ? t('notActive') : t('filterAll')
-      const searchValue = search.trim() || '—'
-      pdf.setFont('helvetica', 'normal')
-      pdf.setFontSize(9)
-      const filterLine1 = `Role: ${roleLabel}   ·   Department: ${deptLabel}   ·   Skills: ${skillLabel}   ·   Account: ${accountLabel}`
-      const filterLine2 = `Search: ${searchValue}`
-      const filterLine3 = `Rows: ${filtered.length}`
-      const lineH = 5
-      const split1 = pdf.splitTextToSize(filterLine1, w)
-      split1.forEach((line) => { pdf.text(line, margin, y); y += lineH })
-      pdf.text(filterLine2, margin, y); y += lineH
-      pdf.text(filterLine3, margin, y); y += lineH
-      y += 3
-      pdf.setDrawColor(220, 220, 220)
-      pdf.line(margin, y, margin + w, y)
-      y += 4
-      const headerH = y
-      const imgH = Math.min(h, pdfH - headerH - 4)
-      const imgW = (canvas.width * imgH) / canvas.height
-      const imgX = margin + (w - imgW) / 2
-      pdf.addImage(imgData, 'PNG', imgX, headerH, imgW, imgH)
-      pdf.save(`Workers-${new Date().toISOString().slice(0, 10)}.pdf`)
-    }).catch(() => {})
+    pdf.setFontSize(14)
+    pdf.setFont('helvetica', 'bold')
+    pdf.text(t('registerManageWorkers'), margin, 12)
+    pdf.setFontSize(9)
+    pdf.setFont('helvetica', 'normal')
+    pdf.text(new Date().toLocaleString(), margin, 18)
+
+    let y = 24
+    pdf.setFontSize(10)
+    pdf.setFont('helvetica', 'bold')
+    pdf.text('Filters applied:', margin, y)
+    y += 5
+    const roleLabel = filterRole ? getRoleLabel(filterRole) || ROLE_LABEL[filterRole] || filterRole : t('filterAll')
+    const deptLabel = filterDept ? getDeptLabel(filterDept) || DEPT_LABEL[filterDept] || filterDept : t('filterAll')
+    const skillLabel = filterSkill ? getSkillLabel(filterSkill) : t('filterAll')
+    const accountLabel = filterStatus === 'active' ? t('active') : filterStatus === 'not_active' ? t('notActive') : t('filterAll')
+    const searchValue = search.trim() || '—'
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(9)
+    const filterLine1 = `Role: ${roleLabel}   ·   Department: ${deptLabel}   ·   Skills: ${skillLabel}   ·   Account: ${accountLabel}`
+    const filterLine2 = `Search: ${searchValue}`
+    const filterLine3 = `Rows: ${filtered.length}`
+    const lineH = 5
+    const split1 = pdf.splitTextToSize(filterLine1, w)
+    split1.forEach((line) => {
+      pdf.text(line, margin, y)
+      y += lineH
+    })
+    pdf.text(filterLine2, margin, y)
+    y += lineH
+    pdf.text(filterLine3, margin, y)
+    y += lineH
+    y += 2
+
+    const head = [
+      [
+        t('employeeId'),
+        t('fullName'),
+        t('skills'),
+        t('role'),
+        t('department'),
+        t('account'),
+        t('inTask'),
+        t('tasksThisWeek'),
+        t('overdue'),
+        t('efficiencyPct'),
+      ],
+    ]
+
+    const body = filtered.map((w) => {
+      const accountStatus = getAccountStatus(w)
+      const accLabel = accountStatus === 'active' ? t('active') : t('notActive')
+      const showInTask = IS_WORKER(w.role)
+      const inTask = showInTask && isInTask(w, sessions)
+      const inTaskLabel = showInTask ? (inTask ? t('yes') : t('no')) : '—'
+      const skills = Array.isArray(w.skills) ? w.skills : []
+      const skillsStr = skills.length ? skills.map((s) => getSkillLabel(s)).join(', ') : '—'
+      const tasksWeek = getTasksThisWeek(tasks || [], w.id).length
+      const overdue = getOverdueTasks(tasks || [], w.id, sessions || []).length
+      const eff = getEfficiency(tasks || [], w.id)
+      const effStr = eff != null ? `${eff}%` : '—'
+      return [
+        String(w.employeeId ?? ''),
+        String(w.fullName ?? ''),
+        skillsStr,
+        getRoleLabel(w.role) || w.role || '',
+        getDeptLabel(w.department) || w.department || '',
+        accLabel,
+        inTaskLabel,
+        String(tasksWeek),
+        String(overdue),
+        effStr,
+      ]
+    })
+
+    autoTable(pdf, {
+      startY: y,
+      head,
+      body,
+      showHead: 'everyPage',
+      styles: {
+        font: 'helvetica',
+        fontSize: 7,
+        cellPadding: 1.5,
+        overflow: 'linebreak',
+        valign: 'middle',
+      },
+      headStyles: {
+        fillColor: [92, 123, 92],
+        textColor: 255,
+        fontStyle: 'bold',
+      },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      margin: { left: margin, right: margin },
+      tableWidth: 'auto',
+      columnStyles: {
+        0: { cellWidth: 22 },
+        1: { cellWidth: 36 },
+        2: { cellWidth: 52 },
+        3: { cellWidth: 22 },
+        4: { cellWidth: 26 },
+        5: { cellWidth: 18 },
+        6: { cellWidth: 16 },
+        7: { cellWidth: 18 },
+        8: { cellWidth: 16 },
+        9: { cellWidth: 18 },
+      },
+    })
+
+    pdf.save(`Workers-${new Date().toISOString().slice(0, 10)}.pdf`)
   }
 
   const profileBase = isEngineerRoute ? '/engineer/register/worker' : '/admin/register/worker'
@@ -443,7 +501,7 @@ function RegisterManageWorkers() {
         </button>
       </div>
 
-      <div className={`${shell.surfaceCard} ${styles.tableWrap}`} ref={workersTableRef}>
+      <div className={`${shell.surfaceCard} ${styles.tableWrap}`}>
         <table className={styles.table}>
           <thead>
             <tr>

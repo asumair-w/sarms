@@ -11,6 +11,7 @@ import {
   getTasksForDepartment,
 } from '../data/workerFlow'
 import { SEED_WORKERS } from '../data/engineerWorkers'
+import { clearSessionAuth } from '../auth'
 import { useAppStore } from '../context/AppStoreContext'
 import { useSessionKickCheck } from '../hooks/useSessionKickCheck'
 import { TASK_STATUS, generateTaskId } from '../data/assignTask'
@@ -287,6 +288,10 @@ export default function WorkerInterface() {
       return false
     })
     if (remainingAssigned.length === 0) {
+      try {
+        localStorage.removeItem(WORKER_SESSION_STORAGE_KEY + String(userId ?? '').trim().toLowerCase())
+      } catch (_) {}
+      clearSessionAuth()
       navigate('/login', { replace: true })
     } else {
       setStep(STEPS.DEPARTMENT)
@@ -439,6 +444,10 @@ export default function WorkerInterface() {
     }
     addTask(task)
     setBlockMessage(null)
+    try {
+      localStorage.removeItem(WORKER_SESSION_STORAGE_KEY + String(userId ?? '').trim().toLowerCase())
+    } catch (_) {}
+    clearSessionAuth()
     navigate('/login', { replace: true })
   }
 
@@ -537,6 +546,10 @@ export default function WorkerInterface() {
 
   function handleLogOut() {
     if (completedSession && !recordSavedForCompletion) saveCompletionRecord()
+    try {
+      localStorage.removeItem(WORKER_SESSION_STORAGE_KEY + String(userId ?? '').trim().toLowerCase())
+    } catch (_) {}
+    clearSessionAuth()
     navigate('/login', { replace: true })
   }
 

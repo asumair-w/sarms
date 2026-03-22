@@ -3,9 +3,12 @@ import { isSupabaseConfigured } from '../lib/supabase'
 /**
  * Data backend toggle: Supabase-only vs localStorage-only. No dual-sync.
  * Set in `.env`: VITE_USE_SUPABASE=true
+ * Trim so Cloudflare/dashboard typos like "true " still match.
  */
+const viteUseSupabaseRaw = import.meta.env?.VITE_USE_SUPABASE
 export const USE_SUPABASE =
-  typeof import.meta !== 'undefined' && import.meta.env?.VITE_USE_SUPABASE === 'true'
+  typeof import.meta !== 'undefined' &&
+  String(viteUseSupabaseRaw ?? '').trim() === 'true'
 
 export const USE_SUPABASE_ACTIVE = USE_SUPABASE && isSupabaseConfigured
 

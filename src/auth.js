@@ -85,3 +85,17 @@ export function validateUserIdFromQR(userId, workersOverride) {
 export function getRedirectForRole(role) {
   return ROUTES_BY_ROLE[role] ?? '/login'
 }
+
+const ROLE_KEY = 'sarms-user-role'
+const USER_ID_KEY = 'sarms-user-id'
+const SESSION_ID_KEY = 'sarms-session-id'
+
+/** Clears browser session keys so /login is shown (LoginOrRedirectHome no longer bounces to role home). */
+export function clearSessionAuth() {
+  if (typeof window === 'undefined') return
+  try {
+    sessionStorage.removeItem(ROLE_KEY)
+    sessionStorage.removeItem(USER_ID_KEY)
+    sessionStorage.removeItem(SESSION_ID_KEY)
+  } catch (_) {}
+}
