@@ -1,8 +1,11 @@
 /**
  * SARMS auth: validates credentials, resolves role, enforces routing.
  * No role selection by user – role is always derived from User ID.
- * Uses workers from localStorage (sarms-workers). Default accounts are seeded on bootstrap.
+ * With Supabase: pass `workersOverride` from AppStore (no localStorage).
+ * Legacy mode: reads workers from localStorage (sarms-workers).
  */
+
+import { USE_SUPABASE } from './config/dataBackend'
 
 export const ROLES = {
   WORKER: 'worker',
@@ -25,8 +28,9 @@ function roleToAuthRole(role) {
   return ROLES.WORKER
 }
 
-/** Load workers from localStorage (same key as AppStore). */
+/** Load workers from localStorage (local-only mode). Never reads when VITE_USE_SUPABASE=true. */
 function getStoredWorkers() {
+  if (USE_SUPABASE) return []
   try {
     const raw = localStorage.getItem(WORKERS_STORAGE_KEY)
     if (raw) {
@@ -37,21 +41,21 @@ function getStoredWorkers() {
   return []
 }
 
-/** Find stored worker by employeeId (login ID). */
-function findStoredWorker(userId) {
+/** Find worker by employeeId — uses override list when provided (Supabase). */
+function findStoredWorker(userId, workersOverride) {
   const key = userId?.trim()?.toLowerCase()
   if (!key) return null
-  const workers = getStoredWorkers()
+  const workers = Array.isArray(workersOverride) ? workersOverride : getStoredWorkers()
   return workers.find((w) => (w.employeeId || '').toLowerCase() === key) || null
 }
 
 /**
  * Validate ID + password. Returns { ok, role, error }.
- * Checks stored workers (source of truth when engineer toggles active/inactive).
+ * @param {Array|undefined} workersOverride — from AppStore when using Supabase (single source of truth).
  */
-export function validateCredentials(userId, password) {
+export function validateCredentials(userId, password, workersOverride) {
   if (!userId?.trim()) return { ok: false, error: 'Invalid ID or password' }
-  const worker = findStoredWorker(userId)
+  const worker = findStoredWorker(userId, workersOverride)
   if (worker) {
     const pwd = (worker.tempPassword || '').trim()
     if (pwd !== (password || '').trim()) return { ok: false, error: 'Invalid ID or password' }
@@ -63,11 +67,11 @@ export function validateCredentials(userId, password) {
 
 /**
  * Validate User ID from QR code. Same contract as ID+password (role, status).
- * Checks stored workers (source of truth when engineer toggles active/inactive).
+ * @param {Array|undefined} workersOverride — from AppStore when using Supabase.
  */
-export function validateUserIdFromQR(userId) {
+export function validateUserIdFromQR(userId, workersOverride) {
   if (!userId?.trim()) return { ok: false, error: 'Invalid or expired QR Code' }
-  const worker = findStoredWorker(userId)
+  const worker = findStoredWorker(userId, workersOverride)
   if (worker) {
     if (worker.status !== 'active') return { ok: false, error: 'Inactive or unauthorized user' }
     return { ok: true, role: roleToAuthRole(worker.role) }

@@ -7,6 +7,9 @@ import { useAppStore } from '../../context/AppStoreContext'
 import { useLanguage } from '../../context/LanguageContext'
 import { getTranslation } from '../../i18n/translations'
 import { nextRecordId } from '../../utils/idGenerators'
+import { USE_SUPABASE_ACTIVE } from '../../config/dataBackend'
+import { insertHarvestLog } from '../../lib/supabaseHarvestAdapter'
+import { resolveWorkerUuidByEmployeeLogin } from '../../lib/supabaseTasksAdapter'
 import styles from './RecordProduction.module.css'
 import invStyles from './InventoryEquipment.module.css'
 
@@ -24,7 +27,7 @@ const defaultForm = () => ({
 export default function RecordProduction() {
   const { lang } = useLanguage()
   const t = (key) => getTranslation(lang, 'engineer', key)
-  const { addRecord, updateRecord, removeRecord, records, zones: storeZones } = useAppStore()
+  const { addRecord, updateRecord, removeRecord, records, zones: storeZones, workers } = useAppStore()
   const zonesList = (storeZones && storeZones.length > 0) ? storeZones : getInitialZones()
   /** Zones for harvest record only: exclude Inventory (harvest is from growing zones, not inventory). */
   const harvestZonesList = useMemo(() => zonesList.filter((z) => (z.id || '').toLowerCase() !== 'inventory'), [zonesList])
@@ -373,9 +376,44 @@ export default function RecordProduction() {
     e.preventDefault()
     if (!validateForm()) return
     const record = buildRecord()
+    const snapshot = { ...form }
+    const zoneLabel = ZONE_LABELS[snapshot.zoneId] ?? snapshot.zoneId
     addRecord(record)
     setSaved(record)
     setForm(defaultForm())
+
+    if (USE_SUPABASE_ACTIVE) {
+      void (async () => {
+        try {
+          const login =
+            typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('sarms-user-id') : null
+          const resolvedWorkerUuid = login
+            ? await resolveWorkerUuidByEmployeeLogin(login, workers)
+            : null
+          if (!resolvedWorkerUuid) {
+            console.warn('[SARMS] harvest mirror: could not resolve workers.id UUID for login', login)
+            return
+          }
+          const mappedPayload = {
+            id: crypto.randomUUID(),
+            zone_id: snapshot.zoneId,
+            zone_label: zoneLabel,
+            lines_area: snapshot.linesArea ?? '',
+            recorded_at: snapshot.dateTime
+              ? new Date(snapshot.dateTime).toISOString()
+              : new Date().toISOString(),
+            quantity: Number(snapshot.quantity) || 0,
+            unit: snapshot.unit,
+            notes: snapshot.notes || null,
+            recorded_by: resolvedWorkerUuid,
+          }
+          if (snapshot.imageData) mappedPayload.image_data = snapshot.imageData
+          await insertHarvestLog(mappedPayload)
+        } catch (err) {
+          console.error('Harvest Supabase failed', err)
+        }
+      })()
+    }
   }
 
   function handleCancel() {

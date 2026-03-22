@@ -5,7 +5,9 @@ import { LanguageProvider } from './context/LanguageContext'
 import { AppStoreProvider } from './context/AppStoreContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ensureDefaultAccountsSeeded } from './lib/defaultAccounts'
+import { logSupabaseBackendStatus, USE_SUPABASE, purgeAllSarmsLocalStorageKeys } from './config/dataBackend'
 import App from './App'
+import SupabaseBootstrapShell from './components/SupabaseBootstrapShell'
 import './index.css'
 
 function showBootstrapError(message, detail) {
@@ -22,7 +24,9 @@ function showBootstrapError(message, detail) {
 }
 
 try {
-  ensureDefaultAccountsSeeded()
+  if (USE_SUPABASE) purgeAllSarmsLocalStorageKeys()
+  if (!USE_SUPABASE) ensureDefaultAccountsSeeded()
+  logSupabaseBackendStatus()
   const rootEl = document.getElementById('root')
   if (!rootEl) {
     document.body.innerHTML = '<div style="padding:2rem;color:#fca5a5;">No #root element found.</div>'
@@ -33,7 +37,9 @@ try {
           <LanguageProvider>
             <BrowserRouter>
               <AppStoreProvider>
-                <App />
+                <SupabaseBootstrapShell>
+                  <App />
+                </SupabaseBootstrapShell>
               </AppStoreProvider>
             </BrowserRouter>
           </LanguageProvider>

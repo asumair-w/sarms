@@ -14,6 +14,7 @@ import { useLanguage } from '../../context/LanguageContext'
 import { getTranslation } from '../../i18n/translations'
 import { TASK_STATUS } from '../../data/assignTask'
 import styles from './RegisterManageWorkers.module.css'
+import shell from '../../styles/sarmsPageShell.module.css'
 
 const ROLE_LABEL = Object.fromEntries(ROLE_OPTIONS.map((r) => [r.value, r.label]))
 const DEPT_LABEL = Object.fromEntries(DEPARTMENT_OPTIONS.map((d) => [d.value, d.label]))
@@ -359,11 +360,11 @@ function RegisterManageWorkers() {
   const profileBase = isEngineerRoute ? '/engineer/register/worker' : '/admin/register/worker'
 
   return (
-    <div className={styles.page}>
+    <div className={shell.page}>
       {/* Worker Ranking Widget */}
-      <section className={styles.rankingSection}>
-        <h2 className={styles.rankingTitle}><i className="fas fa-trophy fa-fw" /> {t('workerRanking')}</h2>
-        <div className={styles.rankingGrid}>
+      <section className={shell.surfaceCard}>
+        <h2 className={`${shell.sectionHeading} ${styles.rankingTitle}`}><i className="fas fa-trophy fa-fw" /> {t('workerRanking')}</h2>
+        <div className={shell.statGrid}>
           {ranking.topPerformer ? (
             <Link to={`${profileBase}/${ranking.topPerformer.worker.id}`} className={`${styles.rankingCard} ${styles.rankingCardGold} ${styles.rankingCardLink}`}>
               <span className={styles.rankingLabel}>{t('topPerformerThisWeek')}</span>
@@ -442,7 +443,7 @@ function RegisterManageWorkers() {
         </button>
       </div>
 
-      <div className={styles.tableWrap} ref={workersTableRef}>
+      <div className={`${shell.surfaceCard} ${styles.tableWrap}`} ref={workersTableRef}>
         <table className={styles.table}>
           <thead>
             <tr>

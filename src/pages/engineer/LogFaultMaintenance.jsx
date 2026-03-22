@@ -573,6 +573,8 @@ export default function LogFaultMaintenance() {
     const t = ticketForm
     if (t.ticketType === 'fault') {
       if (!t.description.trim()) return
+      // Mirror equipment status in Supabase before the fault ticket so equipment row exists + UUID resolves (avoids duplicate equipment inserts).
+      updateEquipmentItem(equipmentId, { status: t.stopWork ? EQUIPMENT_STATUS.OUT_OF_SERVICE : EQUIPMENT_STATUS.UNDER_MAINTENANCE })
       addFault({
       id: nextFaultId(faults),
         equipmentId,
@@ -584,7 +586,6 @@ export default function LogFaultMaintenance() {
         status: FAULT_STATUS_OPEN,
         createdAt: new Date().toISOString(),
       })
-      updateEquipmentItem(equipmentId, { status: t.stopWork ? EQUIPMENT_STATUS.OUT_OF_SERVICE : EQUIPMENT_STATUS.UNDER_MAINTENANCE })
     } else {
       let plannedDate = t.plannedDate
       let intervalDays = null

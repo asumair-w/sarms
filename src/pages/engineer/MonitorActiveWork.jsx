@@ -745,6 +745,7 @@ export default function MonitorActiveWork() {
         notes: (s.workerNotes || '').trim() || undefined,
         engineerNotes: engineerNotesStr,
         imageData: s.imageData,
+        flagged: Boolean(s.flagged),
       })
       if (s.taskId) {
         updateTaskStatus(s.taskId, TASK_STATUS.COMPLETED)
@@ -787,6 +788,7 @@ export default function MonitorActiveWork() {
         notes: (sessionData.workerNotes || '').trim() || undefined,
         engineerNotes: engineerNotesStr,
         imageData: sessionData.workerImages?.[0] || sessionData.imageData,
+        flagged: Boolean(sessionData.flagged),
       })
       updateTask(sessionData.taskId, { approvedAt, engineerComment: engineerNotesStr })
     }

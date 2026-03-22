@@ -4,6 +4,7 @@
  */
 
 import { supabase, isSupabaseConfigured } from './supabase'
+import { USE_SUPABASE } from '../config/dataBackend'
 import { seedDefaultAccounts } from './defaultAccounts'
 import { getInitialZones } from '../data/workerFlow'
 
@@ -53,6 +54,10 @@ export function clearBrowserStorage() {
  */
 export function writeFreshLocalStateAfterReset() {
   try {
+    if (USE_SUPABASE) {
+      console.info('[SARMS][reset] Supabase mode — skipping localStorage seed after DB wipe')
+      return
+    }
     seedDefaultAccounts()
     const zones = getInitialZones()
     const batchesByZone = {}

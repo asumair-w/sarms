@@ -8,6 +8,7 @@
 
 import { supabase } from './supabase'
 import { isUuid } from './supabaseSchema'
+import { resolveWorkerUuidByEmployeeLogin } from './supabaseTasksAdapter'
 
 export async function resolveSessionDbIdForClient(clientSessionId) {
   if (!supabase) return null
@@ -44,32 +45,69 @@ function mapOpsLogRowToRecord(row) {
 }
 
 export async function fetchOperationsLogRecords() {
-  if (!supabase) return []
+  if (!supabase) {
+    console.error('[SARMS][Supabase] error', 'fetchOperationsLogRecords', 'no client')
+    return null
+  }
   const { data, error } = await supabase
     .from('operations_log')
     .select('code,data,created_at')
     .order('created_at', { ascending: false })
 
   if (error) {
-    console.warn('[SARMS][ops-adapter] fetchOperationsLogRecords error:', error)
-    return []
+    console.error('[SARMS][Supabase] error', 'fetchOperationsLogRecords', error)
+    return null
   }
 
   return (data || []).map(mapOpsLogRowToRecord).filter(Boolean)
 }
 
-export async function approveTaskCompleteViaRpc({ taskId, clientSessionId, startTime, expectedMinutes, record }) {
-  if (!supabase) return
-  const sessionDbId = await resolveSessionDbIdForClient(clientSessionId)
-  if (!sessionDbId) throw new Error(`[SARMS][ops-adapter] Cannot resolve DB session id for client=${clientSessionId}`)
+export async function approveTaskCompleteViaRpc({
+  taskId,
+  clientSessionId,
+  startTime,
+  expectedMinutes,
+  record,
+  workers,
+}) {
+  if (!supabase) {
+    console.warn('[SARMS][rpc] approve_task_complete skipped: Supabase client not configured (check .env)')
+    return
+  }
 
-  await supabase.rpc('approve_task_complete', {
+  const sessionDbId = await resolveSessionDbIdForClient(clientSessionId)
+  if (!sessionDbId) {
+    const err = new Error(`[SARMS][ops-adapter] Cannot resolve DB session id for client=${clientSessionId}`)
+    console.log('RPC error', err)
+    throw err
+  }
+
+  let pApprovedBy = null
+  try {
+    const login =
+      typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('sarms-user-id') : null
+    if (login) pApprovedBy = await resolveWorkerUuidByEmployeeLogin(login, workers)
+  } catch (_) {}
+
+  const payload = {
     p_task_id: taskId,
     p_session_id: sessionDbId,
     p_start_time: startTime ?? null,
     p_expected_minutes: expectedMinutes ?? 60,
     p_record_id: record?.id ?? null,
     p_record_snapshot: record ?? {},
-  })
+    p_approved_by: pApprovedBy,
+  }
+
+  console.log('Calling RPC approve_task_complete', payload)
+
+  const { data, error } = await supabase.rpc('approve_task_complete', payload)
+
+  if (error) {
+    console.log('RPC error', error)
+    throw error
+  }
+
+  console.log('RPC success', data)
 }
 

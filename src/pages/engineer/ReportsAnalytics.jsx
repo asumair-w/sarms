@@ -32,6 +32,7 @@ import { buildOverviewData, getAutoInsight, percentChange } from '../../utils/an
 import { jsPDF } from 'jspdf'
 import html2canvas from 'html2canvas'
 import styles from './ReportsAnalytics.module.css'
+import shell from '../../styles/sarmsPageShell.module.css'
 
 ChartJS.register(
   CategoryScale,
@@ -1109,13 +1110,13 @@ export default function ReportsAnalytics() {
   }
 
   return (
-    <div ref={pageCaptureRef} className={styles.page}>
-      <header className={styles.pageHeader}>
-        <div className={styles.pageHeaderTitleBlock}>
-          <h1 className={styles.pageTitle}>{t('pageTitleReports')}</h1>
-          <p className={styles.pageSubtitle}>{t('pageSubtitleReports')}</p>
+    <div ref={pageCaptureRef} className={`${shell.page} ${styles.pageExtend}`}>
+      <header className={shell.pageHeader}>
+        <div className={shell.pageHeaderTitleBlock}>
+          <h1 className={shell.pageTitle}>{t('pageTitleReports')}</h1>
+          <p className={shell.pageSubtitle}>{t('pageSubtitleReports')}</p>
         </div>
-        <div className={styles.pageHeaderHealth}>
+        <div className={shell.pageHeaderHealth}>
           <SystemHealthScore overviewData={overviewData} />
         </div>
       </header>
@@ -1243,7 +1244,7 @@ export default function ReportsAnalytics() {
       </section>
 
       {/* KPI cards below Summary Filter – same spec as Equipment / Monitor */}
-      <section className={styles.summaryCardsWrap}>
+      <section className={shell.statGrid}>
         <div className={`${styles.summaryKpiCard} ${styles.summaryKpiCardProduction}`}>
           <span className={styles.metricLabel}>{t('totalProduction')}</span>
           <div className={styles.summaryKpiCardBody}>
@@ -1347,9 +1348,9 @@ export default function ReportsAnalytics() {
         ZONE_LABEL={ZONE_LABEL}
       />
 
-      <section className={styles.explorerSection}>
+      <section className={`${shell.surfaceCard} ${styles.explorerSection}`}>
         <div className={styles.explorerSectionHeader}>
-          <h2 className={styles.sectionTitle}>{t('analyticsCharts')}</h2>
+          <h2 className={`${shell.sectionHeading} ${styles.sectionTitleMerge}`}>{t('analyticsCharts')}</h2>
           <div className={styles.chartsViewTabs}>
             <button
               type="button"

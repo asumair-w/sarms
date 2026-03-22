@@ -34,14 +34,21 @@ async function sessionRowExists(dbId) {
  * Load sessions (workerId = legacy app id).
  */
 export async function fetchSessionsAppShaped() {
-  if (!supabase) return []
-  const { data: dbWorkers } = await supabase.from('workers').select('id, data')
+  if (!supabase) {
+    console.error('[SARMS][Supabase] error', 'fetchSessionsAppShaped', 'no client')
+    return null
+  }
+  const { data: dbWorkers, error: wErr } = await supabase.from('workers').select('id, data')
+  if (wErr) {
+    console.error('[SARMS][Supabase] error', 'fetchSessionsAppShaped.workers', wErr)
+    return null
+  }
   const uuidToLegacy = buildUuidToLegacyMap(dbWorkers || [])
 
   const { data: rows, error } = await supabase.from('sessions').select('*')
   if (error) {
-    console.warn('[SARMS][sessions-adapter] select', error)
-    return []
+    console.error('[SARMS][Supabase] error', 'fetchSessionsAppShaped.sessions', error)
+    return null
   }
 
   return (rows || [])

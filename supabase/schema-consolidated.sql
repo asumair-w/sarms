@@ -36,8 +36,11 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 DO $$ BEGIN
-  CREATE TYPE task_type_enum AS ENUM ('farming', 'maintenance');
+  CREATE TYPE task_type_enum AS ENUM ('farming', 'maintenance', 'inventory');
 EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- Upgrade path: DBs created before 'inventory' existed on task_type_enum (farming+maintenance only).
+ALTER TYPE public.task_type_enum ADD VALUE IF NOT EXISTS 'inventory';
 
 DO $$ BEGIN
   CREATE TYPE task_status_enum AS ENUM (

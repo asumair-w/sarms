@@ -2,12 +2,23 @@ import { createContext, useContext, useReducer, useCallback, useEffect, useRef }
 import { getInitialZones } from '../data/workerFlow'
 import { TASK_STATUS, getInitialTasks, getInitialRecords } from '../data/assignTask'
 import { SEED_WORKERS, getMinimalWorkers } from '../data/engineerWorkers'
-import { getInitialInventory, getInitialEquipment } from '../data/inventory'
-import { getInitialFaults, getInitialMaintenancePlans } from '../data/faults'
+import { getInitialInventory, getInitialEquipment, INVENTORY_MOVEMENT_REASON } from '../data/inventory'
+import {
+  getInitialFaults,
+  getInitialMaintenancePlans,
+  FAULT_STATUS_RESOLVED,
+  FAULT_TYPE_PREVENTIVE_ALERT,
+} from '../data/faults'
 import { getInitialSessions } from '../data/monitorActive'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
-import { fetchSupabaseState, persistAllSupabase } from '../lib/supabaseSchema'
-import { USE_SUPABASE_ACTIVE } from '../config/dataBackend'
+import { EQUIPMENT_MIRROR_ACTIVE_KEY } from '../lib/supabaseEquipmentAdapter'
+import {
+  fetchSupabaseState,
+  persistAllSupabase,
+  fetchWorkersAppShaped,
+  fetchZonesAndSettingsAppShaped,
+} from '../lib/supabaseSchema'
+import { USE_SUPABASE, USE_SUPABASE_ACTIVE } from '../config/dataBackend'
 import { fetchTasksAppShaped, persistTask, replaceAllTasks } from '../lib/supabaseTasksAdapter'
 import {
   fetchSessionsAppShaped,
@@ -16,6 +27,27 @@ import {
   replaceAllSessions,
 } from '../lib/supabaseSessionsAdapter'
 import { fetchOperationsLogRecords, approveTaskCompleteViaRpc } from '../lib/supabaseOperationsLogAdapter'
+import {
+  fetchHarvestLogRecordsAppShaped,
+  mergeOperationsRecordsWithHarvest,
+} from '../lib/supabaseHarvestAdapter'
+import {
+  fetchInventoryAppShaped,
+  fetchInventoryMovementsAppShaped,
+  mirrorUpsertInventoryItem,
+  mirrorInsertInventoryMovement,
+  mirrorDeleteInventoryItem,
+} from '../lib/supabaseInventoryAdapter'
+import {
+  mirrorUpsertEquipmentItem,
+  mirrorDeleteEquipmentItem,
+} from '../lib/supabaseEquipmentAdapter'
+import { mirrorUpsertFaultTicket, mirrorUpsertMaintenanceTicket } from '../lib/supabaseEquipmentTicketsAdapter'
+import { mirrorResolveTicketClose } from '../lib/supabaseResolvedTicketsAdapter'
+import {
+  fetchEquipmentDomainAppShaped,
+  equipmentDomainShouldHydrateReadTest,
+} from '../lib/supabaseEquipmentDomain'
 
 const RECORDS_STORAGE_KEY = 'sarms-records'
 const SESSIONS_STORAGE_KEY = 'sarms-sessions'
@@ -45,6 +77,7 @@ const SARMS_DATA_KEYS = [
   FAULTS_STORAGE_KEY,
   MAINTENANCE_PLANS_STORAGE_KEY,
   RESOLVED_TICKETS_STORAGE_KEY,
+  EQUIPMENT_MIRROR_ACTIVE_KEY,
 ]
 const WORKER_SESSION_PREFIX = 'sarms-worker-session-'
 
@@ -173,9 +206,11 @@ function withoutTechnicians(workers) {
  * that used to replace everyone with 3 default accounts and made new users "disappear".
  */
 function normalizeWorkersList(workers) {
-  if (!Array.isArray(workers) || workers.length === 0) return getMinimalWorkers()
+  if (!Array.isArray(workers)) return USE_SUPABASE ? [] : getMinimalWorkers()
   const filtered = withoutTechnicians(workers)
-  return filtered.length > 0 ? filtered : getMinimalWorkers()
+  if (USE_SUPABASE) return filtered
+  if (filtered.length === 0) return getMinimalWorkers()
+  return filtered
 }
 
 function loadWorkers() {
@@ -283,6 +318,8 @@ function getSeedState() {
     maintenancePlans: getInitialMaintenancePlans(),
     resolvedTickets: [],
     hydrateDone: true,
+    dataStatus: 'ready',
+    dataError: null,
   }
 }
 
@@ -300,10 +337,33 @@ function findSessionInList(sessions, sessionId) {
 }
 
 function getInitialState() {
+  if (USE_SUPABASE) {
+    const misconfigured = !isSupabaseConfigured
+    return {
+      tasks: [],
+      records: [],
+      sessions: [],
+      zones: [],
+      batchesByZone: {},
+      defaultBatchByZone: {},
+      workers: [],
+      inventory: [],
+      inventoryMovements: [],
+      equipment: [],
+      faults: [],
+      maintenancePlans: [],
+      resolvedTickets: [],
+      hydrateDone: false,
+      dataStatus: misconfigured ? 'error' : 'loading',
+      dataError: misconfigured
+        ? 'Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY — cannot load data.'
+        : null,
+    }
+  }
   return {
-    tasks: USE_SUPABASE_ACTIVE ? [] : loadTasks(),
-    records: USE_SUPABASE_ACTIVE ? [] : loadRecords(),
-    sessions: USE_SUPABASE_ACTIVE ? [] : loadSessions(),
+    tasks: loadTasks(),
+    records: loadRecords(),
+    sessions: loadSessions(),
     zones: loadZones(),
     batchesByZone: loadBatchesByZone(),
     defaultBatchByZone: loadDefaultBatchByZone(),
@@ -315,6 +375,8 @@ function getInitialState() {
     maintenancePlans: loadMaintenancePlans(),
     resolvedTickets: loadResolvedTickets(),
     hydrateDone: false,
+    dataStatus: 'ready',
+    dataError: null,
   }
 }
 
@@ -474,16 +536,23 @@ function storeReducer(state, action) {
       for (const key of Object.keys(payload)) {
         const val = payload[key]
         if (Array.isArray(val)) {
-          const arr = val.length > 0 ? val : (state[key] ?? [])
-          merged[key] = key === 'workers' ? normalizeWorkersList(arr) : arr
+          // Authoritative server arrays (including empty) — no "keep stale when empty" merge.
+          merged[key] = key === 'workers' ? normalizeWorkersList(val) : val
         } else if (val != null && typeof val === 'object' && !Array.isArray(val) && Object.keys(val).length > 0) {
           merged[key] = val
         }
       }
       return merged
     }
-    case 'HYDRATE_DONE':
-      return { ...state, hydrateDone: true }
+    case 'HYDRATE_DONE': {
+      const p = action.payload || {}
+      return {
+        ...state,
+        hydrateDone: true,
+        ...(p.dataStatus !== undefined ? { dataStatus: p.dataStatus } : {}),
+        ...(p.dataError !== undefined ? { dataError: p.dataError } : {}),
+      }
+    }
     default:
       return state
   }
@@ -499,43 +568,164 @@ export function AppStoreProvider({ children }) {
   // can execute the engineer approval RPC inside a single transaction.
   const pendingOpsLogRecordRef = useRef(null) // record created by engineer approval
   const pendingEngineerCompletionRef = useRef(null) // { taskId, record }
+  /** After addInventoryMovement, skip duplicate qty movement in updateInventoryItem (modal path). */
+  const inventoryMirrorSkipQtyMovementRef = useRef(null)
   stateRef.current = state
 
-  // Phases 1–2: VITE_USE_SUPABASE — tasks + sessions from Supabase (same shapes as localStorage).
-  useEffect(() => {
+  const refreshSupabaseCoreState = useCallback(async () => {
     if (!USE_SUPABASE_ACTIVE) return
     try {
-      // Phase 1–3: hard-disable localStorage for the migrated domains.
-      // We never read these keys when USE_SUPABASE_ACTIVE=true, but removing avoids any stale keys affecting debugging.
-      localStorage.removeItem(TASKS_STORAGE_KEY)
-      localStorage.removeItem(SESSIONS_STORAGE_KEY)
-      localStorage.removeItem(RECORDS_STORAGE_KEY)
-
-      if (sessionStorage.getItem(SKIP_HYDRATE_KEY)) {
-        sessionStorage.removeItem(SKIP_HYDRATE_KEY)
-        console.info('[SARMS][supabase] skip-hydrate: tasks/sessions hydrate skipped')
-        supabaseHydrateDone.current = true
-        dispatch({ type: 'HYDRATE_DONE' })
+      const [
+        tasks,
+        sessions,
+        opsRecords,
+        zonesSettings,
+        workersRefresh,
+        inventoryApp,
+        movementsApp,
+        equipmentDomain,
+      ] = await Promise.all([
+        fetchTasksAppShaped(),
+        fetchSessionsAppShaped(),
+        fetchOperationsLogRecords(),
+        fetchZonesAndSettingsAppShaped(),
+        fetchWorkersAppShaped(),
+        fetchInventoryAppShaped(),
+        fetchInventoryMovementsAppShaped(),
+        fetchEquipmentDomainAppShaped(),
+      ])
+      if (
+        tasks == null ||
+        sessions == null ||
+        opsRecords == null ||
+        zonesSettings == null ||
+        workersRefresh == null ||
+        inventoryApp == null ||
+        movementsApp == null ||
+        equipmentDomain == null
+      ) {
+        console.error('[SARMS][Supabase] error', 'refreshSupabaseCoreState', 'one or more fetches returned null')
         return
       }
-    } catch (_) {}
+      let harvestApp = []
+      try {
+        harvestApp = await fetchHarvestLogRecordsAppShaped()
+      } catch (e) {
+        console.warn('[SARMS][harvest] fetchHarvestLogRecordsAppShaped failed', e?.message ?? e)
+      }
+      const records = mergeOperationsRecordsWithHarvest(opsRecords, harvestApp)
+      const payload = {
+        tasks,
+        sessions,
+        records,
+        workers: workersRefresh,
+        zones: zonesSettings.zones,
+        batchesByZone: zonesSettings.batchesByZone,
+        defaultBatchByZone: zonesSettings.defaultBatchByZone,
+        inventory: inventoryApp,
+        inventoryMovements: movementsApp,
+        equipment: equipmentDomain.equipment,
+        faults: equipmentDomain.faults,
+        maintenancePlans: equipmentDomain.maintenancePlans,
+        resolvedTickets: equipmentDomain.resolvedTickets,
+      }
+      dispatch({ type: 'HYDRATE', payload })
+    } catch (e) {
+      console.error('[SARMS][Supabase] error', 'refreshSupabaseCoreState', e)
+    }
+  }, [])
+
+  /** Supabase-only bootstrap: no localStorage fallback; failure → error state. */
+  useEffect(() => {
+    if (!USE_SUPABASE || !isSupabaseConfigured) return
     let cancelled = false
-    console.info('[SARMS][supabase] USE_SUPABASE: fetching tasks + sessions + operations_log…')
-    Promise.all([fetchTasksAppShaped(), fetchSessionsAppShaped(), fetchOperationsLogRecords()])
-      .then(([tasks, sessions, records]) => {
-        supabaseHydrateDone.current = true
-        if (cancelled) {
-          dispatch({ type: 'HYDRATE_DONE' })
+    ;(async () => {
+      try {
+        console.info('[SARMS][supabase] bootstrap: fetching all domains from Supabase…')
+        const [
+          tasks,
+          sessions,
+          opsRecords,
+          zonesSettings,
+          workersFromDb,
+          inventoryApp,
+          movementsApp,
+          equipmentDomain,
+        ] = await Promise.all([
+          fetchTasksAppShaped(),
+          fetchSessionsAppShaped(),
+          fetchOperationsLogRecords(),
+          fetchZonesAndSettingsAppShaped(),
+          fetchWorkersAppShaped(),
+          fetchInventoryAppShaped(),
+          fetchInventoryMovementsAppShaped(),
+          fetchEquipmentDomainAppShaped(),
+        ])
+        if (cancelled) return
+        if (
+          tasks == null ||
+          sessions == null ||
+          opsRecords == null ||
+          zonesSettings == null ||
+          workersFromDb == null ||
+          inventoryApp == null ||
+          movementsApp == null ||
+          equipmentDomain == null
+        ) {
+          console.error('[SARMS][Supabase] error', 'bootstrap', 'critical fetch returned null')
+          dispatch({
+            type: 'HYDRATE_DONE',
+            payload: {
+              dataStatus: 'error',
+              dataError: 'فشل الاتصال بالخادم، حاول مرة أخرى',
+            },
+          })
+          supabaseHydrateDone.current = true
           return
         }
-        dispatch({ type: 'HYDRATE', payload: { tasks, sessions, records } })
-        dispatch({ type: 'HYDRATE_DONE' })
-      })
-      .catch(() => {
+        let harvestApp = []
+        try {
+          harvestApp = await fetchHarvestLogRecordsAppShaped()
+        } catch (e) {
+          console.warn('[SARMS][harvest] fetchHarvestLogRecordsAppShaped failed', e?.message ?? e)
+        }
+        const records = mergeOperationsRecordsWithHarvest(opsRecords, harvestApp)
+        const payload = {
+          tasks,
+          sessions,
+          records,
+          workers: workersFromDb,
+          zones: zonesSettings.zones,
+          batchesByZone: zonesSettings.batchesByZone,
+          defaultBatchByZone: zonesSettings.defaultBatchByZone,
+          inventory: inventoryApp,
+          inventoryMovements: movementsApp,
+          equipment: equipmentDomain.equipment,
+          faults: equipmentDomain.faults,
+          maintenancePlans: equipmentDomain.maintenancePlans,
+          resolvedTickets: equipmentDomain.resolvedTickets,
+        }
+        dispatch({ type: 'HYDRATE', payload })
+        dispatch({
+          type: 'HYDRATE_DONE',
+          payload: { dataStatus: 'ready', dataError: null },
+        })
         supabaseHydrateDone.current = true
-        console.info('[SARMS][supabase] tasks/sessions fetch failed; retry with reload')
-        dispatch({ type: 'HYDRATE_DONE' })
-      })
+        console.info('[SARMS][supabase] bootstrap complete')
+      } catch (e) {
+        console.error('[SARMS][Supabase] error', 'bootstrap', e)
+        if (!cancelled) {
+          dispatch({
+            type: 'HYDRATE_DONE',
+            payload: {
+              dataStatus: 'error',
+              dataError: e?.message ?? String(e),
+            },
+          })
+        }
+        supabaseHydrateDone.current = true
+      }
+    })()
     return () => {
       cancelled = true
     }
@@ -543,7 +733,7 @@ export function AppStoreProvider({ children }) {
 
   // Legacy: full-state Supabase hydrate (disabled unless SUPABASE_AUTO_SYNC_ENABLED).
   useEffect(() => {
-    if (USE_SUPABASE_ACTIVE) return
+    if (USE_SUPABASE) return
     if (!isSupabaseConfigured || !SUPABASE_AUTO_SYNC_ENABLED) {
       if (isSupabaseConfigured && !SUPABASE_AUTO_SYNC_ENABLED) {
         console.info('[SARMS][supabase] auto-sync disabled: skipping hydrate on mount')
@@ -581,9 +771,107 @@ export function AppStoreProvider({ children }) {
     return () => { cancelled = true }
   }, [])
 
+  // Read-test: localStorage mode — if harvest_log has rows in Supabase, show those instead of local harvest_form (no row-level merge).
+  useEffect(() => {
+    if (USE_SUPABASE) return
+    if (!isSupabaseConfigured || !state.hydrateDone) return
+    let cancelled = false
+    ;(async () => {
+      let harvestApp = []
+      try {
+        harvestApp = await fetchHarvestLogRecordsAppShaped()
+      } catch (e) {
+        console.warn('[SARMS][harvest] fetchHarvestLogRecordsAppShaped failed', e?.message ?? e)
+        return
+      }
+      if (cancelled || harvestApp.length === 0) return
+      const current = stateRef.current.records || []
+      const nonHarvest = current.filter((r) => r.source !== 'harvest_form')
+      console.info(
+        '[SARMS][harvest] read test: using',
+        harvestApp.length,
+        'harvest_log row(s) from Supabase (local harvest_form entries omitted when DB has data)'
+      )
+      dispatch({ type: 'HYDRATE', payload: { records: [...nonHarvest, ...harvestApp] } })
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [state.hydrateDone])
+
+  // Read-test: localStorage mode — if inventory has rows in Supabase, use that + movements (no merge with local inventory).
+  useEffect(() => {
+    if (USE_SUPABASE) return
+    if (!isSupabaseConfigured || !state.hydrateDone) return
+    let cancelled = false
+    ;(async () => {
+      let inv = []
+      let mov = []
+      try {
+        inv = await fetchInventoryAppShaped()
+        mov = await fetchInventoryMovementsAppShaped()
+      } catch (e) {
+        console.warn('[SARMS][inventory] read test fetch failed', e?.message ?? e)
+        return
+      }
+      if (cancelled || !inv || inv.length === 0 || mov == null) return
+      console.info(
+        '[SARMS][inventory] read test: using Supabase as source —',
+        inv.length,
+        'items,',
+        mov.length,
+        'movements (local inventory replaced when DB has data)'
+      )
+      dispatch({ type: 'HYDRATE', payload: { inventory: inv, inventoryMovements: mov } })
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [state.hydrateDone])
+
+  // Read-test (localStorage mode): if equipment domain has rows in Supabase, use that domain (no merge with local).
+  useEffect(() => {
+    if (USE_SUPABASE) return
+    if (!isSupabaseConfigured || !state.hydrateDone) return
+    let cancelled = false
+    ;(async () => {
+      let domain = null
+      try {
+        domain = await fetchEquipmentDomainAppShaped()
+      } catch (e) {
+        console.warn('[SARMS][equipment] read test fetch failed', e?.message ?? e)
+        return
+      }
+      if (cancelled || !equipmentDomainShouldHydrateReadTest(domain)) return
+      console.info(
+        '[SARMS][equipment] read test: using Supabase —',
+        domain.equipment?.length ?? 0,
+        'equipment,',
+        domain.faults?.length ?? 0,
+        'faults,',
+        domain.maintenancePlans?.length ?? 0,
+        'MP,',
+        domain.resolvedTickets?.length ?? 0,
+        'resolved (local equipment domain replaced when DB has data)'
+      )
+      dispatch({
+        type: 'HYDRATE',
+        payload: {
+          equipment: domain.equipment,
+          faults: domain.faults,
+          maintenancePlans: domain.maintenancePlans,
+          resolvedTickets: domain.resolvedTickets,
+        },
+      })
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [state.hydrateDone])
+
   // Auto-refresh from Supabase every 3s (disabled for clean reset workflows; not used for USE_SUPABASE task mode)
   useEffect(() => {
-    if (USE_SUPABASE_ACTIVE) return
+    if (USE_SUPABASE) return
     if (!isSupabaseConfigured || !SUPABASE_AUTO_SYNC_ENABLED || !state.hydrateDone) return
     const interval = setInterval(() => {
       fetchSupabaseState().then((payload) => {
@@ -597,7 +885,7 @@ export function AppStoreProvider({ children }) {
 
   // Supabase: single debounced persist of full state (production schema: columns + task_workers + UUIDs)
   useEffect(() => {
-    if (USE_SUPABASE_ACTIVE) return
+    if (USE_SUPABASE) return
     if (!supabaseHydrateDone.current || !isSupabaseConfigured || !SUPABASE_AUTO_SYNC_ENABLED || !state.hydrateDone) return
     const t = setTimeout(() => {
       persistAllSupabase(state)
@@ -622,30 +910,27 @@ export function AppStoreProvider({ children }) {
 
   // Always persist batches/default batch to localStorage in local-only mode.
   useEffect(() => {
+    if (USE_SUPABASE) return
     try {
       localStorage.setItem(BATCHES_BY_ZONE_STORAGE_KEY, JSON.stringify(state.batchesByZone))
     } catch (_) {}
   }, [state.batchesByZone, state.hydrateDone])
 
   useEffect(() => {
+    if (USE_SUPABASE) return
     try {
       localStorage.setItem(DEFAULT_BATCH_BY_ZONE_STORAGE_KEY, JSON.stringify(state.defaultBatchByZone))
     } catch (_) {}
   }, [state.defaultBatchByZone, state.hydrateDone])
 
-  // Persist full SARMS state to localStorage (tasks omitted when USE_SUPABASE — Supabase is source for tasks).
+  // Persist full SARMS state to localStorage (local-only mode only).
   useEffect(() => {
+    if (USE_SUPABASE) return
     try {
-      if (!USE_SUPABASE_ACTIVE) {
-        localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(state.records))
-      }
-      if (!USE_SUPABASE_ACTIVE) {
-        localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(state.sessions))
-      }
+      localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(state.records))
+      localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(state.sessions))
       localStorage.setItem(ZONES_STORAGE_KEY, JSON.stringify(state.zones))
-      if (!USE_SUPABASE_ACTIVE) {
-        localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(state.tasks))
-      }
+      localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(state.tasks))
       localStorage.setItem(WORKERS_STORAGE_KEY, JSON.stringify(state.workers))
       localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(state.inventory))
       localStorage.setItem(INVENTORY_MOVEMENTS_STORAGE_KEY, JSON.stringify(state.inventoryMovements))
@@ -764,12 +1049,15 @@ export function AppStoreProvider({ children }) {
           startTime: snapshot?.startTime ?? snapshot?.start_time,
           expectedMinutes: snapshot?.expectedMinutes ?? snapshot?.expected_minutes,
           record,
-        }).catch((e) => console.warn('[SARMS][ops] approve_task_complete rpc failed:', e))
+          workers: stateRef.current.workers,
+        })
+          .then(() => refreshSupabaseCoreState())
+          .catch(() => refreshSupabaseCoreState())
       } else {
         deleteSessionFromSupabase(sessionId).catch((e) => console.warn('[SARMS][sessions] delete', e))
       }
     }
-  }, [])
+  }, [refreshSupabaseCoreState])
 
   const updateSession = useCallback((sessionId, updates) => {
     dispatch({ type: 'UPDATE_SESSION', payload: { sessionId, updates } })
@@ -786,25 +1074,159 @@ export function AppStoreProvider({ children }) {
   }, [])
 
   const setInventory = useCallback((items) => dispatch({ type: 'SET_INVENTORY', payload: items }), [])
-  const updateInventoryItem = useCallback((itemId, updates) =>
-    dispatch({ type: 'UPDATE_INVENTORY_ITEM', payload: { itemId, updates } }), [])
-  const addInventoryItem = useCallback((item) => dispatch({ type: 'ADD_INVENTORY_ITEM', payload: item }), [])
-  const removeInventoryItem = useCallback((itemId) => dispatch({ type: 'REMOVE_INVENTORY_ITEM', payload: itemId }), [])
-  const addInventoryMovement = useCallback((movement) =>
-    dispatch({ type: 'ADD_INVENTORY_MOVEMENT', payload: movement }), [])
+  const updateInventoryItem = useCallback((itemId, updates) => {
+    const prev = stateRef.current.inventory.find((i) => String(i.id) === String(itemId))
+    dispatch({ type: 'UPDATE_INVENTORY_ITEM', payload: { itemId, updates } })
+    if (!USE_SUPABASE_ACTIVE || !prev) return
+    const merged = { ...prev, ...updates, lastUpdated: new Date().toISOString() }
+    void mirrorUpsertInventoryItem(merged, stateRef.current.workers).catch((e) =>
+      console.warn('[SARMS][inventory] mirror upsert failed', e?.message ?? e)
+    )
+    const qtyChanged =
+      updates.quantity !== undefined && Number(prev.quantity) !== Number(updates.quantity)
+    if (qtyChanged) {
+      const skip = inventoryMirrorSkipQtyMovementRef.current === String(itemId)
+      inventoryMirrorSkipQtyMovementRef.current = null
+      if (!skip) {
+        void mirrorInsertInventoryMovement(
+          {
+            itemId,
+            old_quantity: prev.quantity,
+            new_quantity: Number(updates.quantity),
+            reason: INVENTORY_MOVEMENT_REASON.ADJUSTMENT,
+            movementType: 'edit',
+            created_at: new Date().toISOString(),
+            change_amount: Number(updates.quantity) - Number(prev.quantity),
+          },
+          stateRef.current.workers
+        ).catch((e) => console.warn('[SARMS][inventory] mirror qty adjustment movement failed', e?.message ?? e))
+      }
+    } else if (inventoryMirrorSkipQtyMovementRef.current === String(itemId)) {
+      inventoryMirrorSkipQtyMovementRef.current = null
+    }
+  }, [])
+  const addInventoryItem = useCallback((item) => {
+    dispatch({ type: 'ADD_INVENTORY_ITEM', payload: item })
+    if (!USE_SUPABASE_ACTIVE) return
+    void mirrorUpsertInventoryItem(item, stateRef.current.workers).catch((e) =>
+      console.warn('[SARMS][inventory] mirror insert item failed', e?.message ?? e)
+    )
+  }, [])
+  const removeInventoryItem = useCallback((itemId) => {
+    dispatch({ type: 'REMOVE_INVENTORY_ITEM', payload: itemId })
+    if (!USE_SUPABASE_ACTIVE) return
+    void mirrorDeleteInventoryItem(itemId, stateRef.current.workers).catch((e) =>
+      console.warn('[SARMS][inventory] mirror delete failed', e?.message ?? e)
+    )
+  }, [])
+  const addInventoryMovement = useCallback((movement) => {
+    dispatch({ type: 'ADD_INVENTORY_MOVEMENT', payload: movement })
+    if (!USE_SUPABASE_ACTIVE) return
+    inventoryMirrorSkipQtyMovementRef.current = String(movement.itemId ?? movement.item_id ?? '')
+    void mirrorInsertInventoryMovement(movement, stateRef.current.workers).catch((e) =>
+      console.warn('[SARMS][inventory] mirror movement failed', e?.message ?? e)
+    )
+  }, [])
 
-  const updateEquipmentItem = useCallback((equipmentId, updates) =>
-    dispatch({ type: 'UPDATE_EQUIPMENT_ITEM', payload: { equipmentId, updates } }), [])
-  const addEquipmentItem = useCallback((item) => dispatch({ type: 'ADD_EQUIPMENT', payload: item }), [])
-  const removeEquipmentItem = useCallback((equipmentId) => dispatch({ type: 'REMOVE_EQUIPMENT', payload: equipmentId }), [])
+  const updateEquipmentItem = useCallback((equipmentId, updates) => {
+    dispatch({ type: 'UPDATE_EQUIPMENT_ITEM', payload: { equipmentId, updates } })
+    if (!isSupabaseConfigured) return
+    const prev = stateRef.current.equipment.find(
+      (e) => String(e.id) === String(equipmentId)
+    )
+    if (!prev) return
+    // Never insert a new equipment row on edit (e.g. ticket flow updates status only).
+    void mirrorUpsertEquipmentItem({ ...prev, ...updates }, { allowInsert: false }).catch((e) =>
+      console.warn('[SARMS][equipment] mirror update failed', e?.message ?? e)
+    )
+  }, [])
+  const addEquipmentItem = useCallback((item) => {
+    dispatch({ type: 'ADD_EQUIPMENT', payload: item })
+    if (isSupabaseConfigured) {
+      void mirrorUpsertEquipmentItem(item, { allowInsert: true }).catch((e) =>
+        console.warn('[SARMS][equipment] mirror add failed', e?.message ?? e)
+      )
+    }
+  }, [])
+  const removeEquipmentItem = useCallback((equipmentId) => {
+    dispatch({ type: 'REMOVE_EQUIPMENT', payload: equipmentId })
+    if (isSupabaseConfigured) {
+      void mirrorDeleteEquipmentItem(equipmentId).catch((e) =>
+        console.warn('[SARMS][equipment] mirror delete failed', e?.message ?? e)
+      )
+    }
+  }, [])
 
-  const addResolvedTicket = useCallback((ticket) => dispatch({ type: 'ADD_RESOLVED_TICKET', payload: ticket }), [])
-  const addFault = useCallback((fault) => dispatch({ type: 'ADD_FAULT', payload: fault }), [])
-  const updateFault = useCallback((faultId, updates) =>
-    dispatch({ type: 'UPDATE_FAULT', payload: { faultId, updates } }), [])
-  const addMaintenancePlan = useCallback((plan) => dispatch({ type: 'ADD_MAINTENANCE_PLAN', payload: plan }), [])
-  const updateMaintenancePlan = useCallback((planId, updates) =>
-    dispatch({ type: 'UPDATE_MAINTENANCE_PLAN', payload: { planId, updates } }), [])
+  const addResolvedTicket = useCallback((ticket) => {
+    dispatch({ type: 'ADD_RESOLVED_TICKET', payload: ticket })
+    if (isSupabaseConfigured) {
+      const source = ticket.faultId != null ? 'fault' : 'maintenance'
+      void mirrorResolveTicketClose({
+        resolvedPayload: ticket,
+        source,
+        ticketType: ticket.ticketType,
+        workers: stateRef.current.workers,
+      }).catch((e) => console.warn('[SARMS][resolved_tickets] mirror failed', e?.message ?? e))
+    }
+  }, [])
+  const addFault = useCallback((fault) => {
+    dispatch({ type: 'ADD_FAULT', payload: fault })
+    if (isSupabaseConfigured) {
+      if (fault.auto_generated || fault.type === FAULT_TYPE_PREVENTIVE_ALERT) return
+      mirrorUpsertFaultTicket(fault, stateRef.current.workers)
+        .then(() => {
+          // Re-sync equipment after the ticket row exists (fixes status when first mirror ran before equipment row existed).
+          setTimeout(() => {
+            const eq = stateRef.current.equipment.find((e) => String(e.id) === String(fault.equipmentId))
+            if (eq) {
+              void mirrorUpsertEquipmentItem(eq, { allowInsert: false }).catch((e) =>
+                console.warn('[SARMS][equipment] post-fault equipment sync failed', e?.message ?? e)
+              )
+            }
+          }, 0)
+        })
+        .catch((e) => console.warn('[SARMS][equipment_tickets] mirror add fault failed', e?.message ?? e))
+    }
+  }, [])
+  const updateFault = useCallback((faultId, updates) => {
+    dispatch({ type: 'UPDATE_FAULT', payload: { faultId, updates } })
+    if (!isSupabaseConfigured) return
+    if (updates.status === FAULT_STATUS_RESOLVED) return
+    const prev = stateRef.current.faults.find((f) => f.id === faultId)
+    if (!prev) return
+    const merged = { ...prev, ...updates }
+    if (merged.auto_generated || merged.type === FAULT_TYPE_PREVENTIVE_ALERT) return
+    void mirrorUpsertFaultTicket(merged, stateRef.current.workers).catch((e) =>
+      console.warn('[SARMS][equipment_tickets] mirror update fault failed', e?.message ?? e)
+    )
+  }, [])
+  const addMaintenancePlan = useCallback((plan) => {
+    dispatch({ type: 'ADD_MAINTENANCE_PLAN', payload: plan })
+    if (isSupabaseConfigured) {
+      mirrorUpsertMaintenanceTicket(plan, stateRef.current.workers)
+        .then(() => {
+          setTimeout(() => {
+            const eq = stateRef.current.equipment.find((e) => String(e.id) === String(plan.equipmentId))
+            if (eq) {
+              void mirrorUpsertEquipmentItem(eq, { allowInsert: false }).catch((e) =>
+                console.warn('[SARMS][equipment] post-maintenance-ticket equipment sync failed', e?.message ?? e)
+              )
+            }
+          }, 0)
+        })
+        .catch((e) => console.warn('[SARMS][equipment_tickets] mirror add MP failed', e?.message ?? e))
+    }
+  }, [])
+  const updateMaintenancePlan = useCallback((planId, updates) => {
+    dispatch({ type: 'UPDATE_MAINTENANCE_PLAN', payload: { planId, updates } })
+    if (!isSupabaseConfigured) return
+    if (updates.status === 'completed') return
+    const prev = stateRef.current.maintenancePlans.find((p) => p.id === planId)
+    if (!prev) return
+    void mirrorUpsertMaintenanceTicket({ ...prev, ...updates }, stateRef.current.workers).catch((e) =>
+      console.warn('[SARMS][equipment_tickets] mirror update MP failed', e?.message ?? e)
+    )
+  }, [])
   const addZone = useCallback((zone) => dispatch({ type: 'ADD_ZONE', payload: zone }), [])
   const removeZone = useCallback((zoneId) => dispatch({ type: 'REMOVE_ZONE', payload: zoneId }), [])
   const setBatchesByZone = useCallback((payload) => dispatch({ type: 'SET_BATCHES_BY_ZONE', payload }), [])
@@ -870,23 +1292,31 @@ export function useAppStore() {
   return ctx
 }
 
-/** Resolve login userId (e.g. w1) to worker id for task assignment. Checks stored workers then minimal/seed. */
-export function getWorkerIdFromUserId(userId) {
+/**
+ * Resolve login userId (e.g. w1) to worker id for task assignment.
+ * With Supabase: pass `workersList` from App Store (no sarms-workers localStorage).
+ */
+export function getWorkerIdFromUserId(userId, workersList) {
   const key = userId?.trim()?.toLowerCase()
   if (!key) return null
-  try {
-    const raw = localStorage.getItem(WORKERS_STORAGE_KEY)
-    if (raw) {
-      const list = JSON.parse(raw)
-      if (Array.isArray(list)) {
-        const w = list.find((x) => (x.employeeId || '').toLowerCase() === key)
-        if (w) return w.id
+  let list = workersList
+  if (!Array.isArray(list)) {
+    if (USE_SUPABASE) return null
+    try {
+      const raw = localStorage.getItem(WORKERS_STORAGE_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) list = parsed
       }
-    }
-  } catch (_) {}
-  const minimal = getMinimalWorkers()
-  const w = minimal.find((x) => (x.employeeId || '').toLowerCase() === key)
+    } catch (_) {}
+  }
+  if (!Array.isArray(list)) list = []
+  const w = list.find((x) => (x.employeeId || '').toLowerCase() === key)
   if (w) return w.id
+  if (USE_SUPABASE) return null
+  const minimal = getMinimalWorkers()
+  const w2 = minimal.find((x) => (x.employeeId || '').toLowerCase() === key)
+  if (w2) return w2.id
   const fallback = SEED_WORKERS.find((x) => (x.employeeId || '').toLowerCase() === key)
   return fallback?.id ?? null
 }

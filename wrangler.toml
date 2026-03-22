@@ -1,7 +1,4 @@
+# Cloudflare Pages — Vite build output (see package.json "deploy")
 name = "sarms"
+pages_build_output_dir = "dist"
 compatibility_date = "2026-02-02"
-
-# Static site (Vite build output) with SPA fallback — no Worker script needed
-[assets]
-directory = "./dist"
-not_found_handling = "single-page-application"

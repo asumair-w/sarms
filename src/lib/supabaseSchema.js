@@ -46,6 +46,21 @@ function fromDbWorker(r) {
   }
 }
 
+/**
+ * Workers table → app-shaped list. Use when Supabase is the backend so UI matches the database
+ * (localStorage `sarms-workers` may still hold old demo seeds until hydrate runs).
+ * @returns {null|Array} null if fetch failed or no client; array (maybe empty) on success
+ */
+export async function fetchWorkersAppShaped() {
+  if (!supabase) return null
+  const { data, error } = await supabase.from('workers').select('*')
+  if (error) {
+    console.error('[SARMS][Supabase] error', 'fetchWorkersAppShaped', error)
+    return null
+  }
+  return (data || []).map(fromDbWorker).filter(Boolean)
+}
+
 function toDbWorker(item) {
   const id = ensureUuid(item.id) || item.id
   return {
@@ -90,6 +105,37 @@ function toDbZone(item) {
   }
 }
 
+const BATCHES_BY_ZONE_SETTINGS_KEY = 'sarms-batches-by-zone'
+const DEFAULT_BATCH_BY_ZONE_SETTINGS_KEY = 'sarms-default-batch-by-zone'
+
+/** Zones + batch settings from `zones` + `settings`. */
+export async function fetchZonesAndSettingsAppShaped() {
+  if (!supabase) return null
+  try {
+    const { data: settingsRows, error: sErr } = await supabase.from('settings').select('key, value')
+    if (sErr) {
+      console.error('[SARMS][Supabase] error', 'fetchZonesAndSettingsAppShaped.settings', sErr)
+      return null
+    }
+    const rows = settingsRows || []
+    const batchesRow = rows.find((r) => r.key === BATCHES_BY_ZONE_SETTINGS_KEY)
+    const defaultRow = rows.find((r) => r.key === DEFAULT_BATCH_BY_ZONE_SETTINGS_KEY)
+    const batchesByZone = batchesRow && typeof batchesRow.value === 'object' ? batchesRow.value : {}
+    const defaultBatchByZone = defaultRow && typeof defaultRow.value === 'object' ? defaultRow.value : {}
+
+    const { data: zonesData, error: zErr } = await supabase.from('zones').select('*')
+    if (zErr) {
+      console.error('[SARMS][Supabase] error', 'fetchZonesAndSettingsAppShaped.zones', zErr)
+      return null
+    }
+    const zones = (zonesData || []).map(fromDbZone).filter(Boolean)
+    return { zones, batchesByZone, defaultBatchByZone }
+  } catch (e) {
+    console.error('[SARMS][Supabase] error', 'fetchZonesAndSettingsAppShaped', e)
+    return null
+  }
+}
+
 // ----- Tasks + task_workers -----
 function fromDbTask(r, workerIds = []) {
   if (!r) return null
@@ -115,6 +161,13 @@ function fromDbTask(r, workerIds = []) {
   }
 }
 
+/** DB enum task_type_enum — must match Supabase (see schema-consolidated.sql). */
+function normalizeTaskTypeForDb(v) {
+  const t = String(v ?? 'farming').toLowerCase()
+  if (t === 'farming' || t === 'maintenance' || t === 'inventory') return t
+  return 'farming'
+}
+
 function toDbTask(item) {
   // tasks.id in DB is TEXT (e.g. T001); do not coerce non-UUID strings to random UUIDs
   const rawId = item.id
@@ -129,7 +182,7 @@ function toDbTask(item) {
     code: item.code ?? null,
     zone_id: item.zoneId ?? item.zone_id ?? '',
     batch_id: item.batchId ?? item.batch_id ?? '',
-    task_type: item.taskType ?? item.task_type ?? 'farming',
+    task_type: normalizeTaskTypeForDb(item.taskType ?? item.task_type),
     department_id: item.departmentId ?? item.department_id ?? 'farming',
     task_id: item.taskId ?? item.task_id ?? '',
     priority: item.priority ?? 'medium',

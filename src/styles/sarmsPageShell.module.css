@@ -1,0 +1,88 @@
+/**
+ * Shared page shell: same max-width, vertical rhythm, grids, and surface cards
+ * as Register Manage Workers & Engineer pages — use for Reports (admin/engineer) and related views.
+ */
+
+.page {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+  box-sizing: border-box;
+  transition: all 0.3s ease;
+}
+
+@media (min-width: 768px) {
+  .page {
+    gap: 1.5rem;
+  }
+}
+
+.page :global(.fa-fw) {
+  margin-right: 0.35em;
+}
+
+/* White section container — matches .rankingSection / .tableWrap / .explorerSection */
+.surfaceCard {
+  width: 100%;
+  box-sizing: border-box;
+  background: #fff;
+  border-radius: 16px;
+  padding: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e2e8f0;
+}
+
+/* Responsive KPI / ranking / chart grid — same as Worker Ranking .rankingGrid */
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.sectionHeading {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.pageHeaderTitleBlock {
+  flex: 1;
+  min-width: 0;
+}
+
+.pageTitle {
+  margin: 0 0 0.25rem;
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.03em;
+}
+
+.pageSubtitle {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #64748b;
+  max-width: 640px;
+}
+
+.pageHeaderHealth {
+  flex-shrink: 0;
+  align-self: flex-start;
+}

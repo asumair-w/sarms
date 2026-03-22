@@ -87,6 +87,8 @@ body {
   height: 100%;
   min-height: 100vh;
   min-height: 100dvh;
+  /* Block layout: vertical flex centering on #root caused empty space above/below full-height layouts on phones/tablets */
+  display: block;
 }
 
 img, video, iframe {

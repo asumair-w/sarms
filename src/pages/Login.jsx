@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { validateCredentials, validateUserIdFromQR, getRedirectForRole } from '../auth'
 import { useLanguage } from '../context/LanguageContext'
+import { useAppStore } from '../context/AppStoreContext'
 import { getTranslation } from '../i18n/translations'
 import { setActiveSessionForUser } from '../lib/supabaseSchema'
 import LoginStyles from './Login.module.css'
@@ -17,6 +18,7 @@ const ERROR_KEYS = {
 export default function Login() {
   const navigate = useNavigate()
   const { lang, setLang, syncLangFromUser } = useLanguage()
+  const { workers } = useAppStore()
   const t = (key) => getTranslation(lang, 'login', key)
 
   useEffect(() => {
@@ -33,7 +35,7 @@ export default function Login() {
     e.preventDefault()
     setError('')
     setLoading(true)
-    const result = validateCredentials(userId, password)
+    const result = validateCredentials(userId, password, workers)
     if (!result.ok) {
       setLoading(false)
       const errKey = ERROR_KEYS[result.error] || 'errorInvalid'
@@ -52,7 +54,7 @@ export default function Login() {
 
   async function handleQRSuccess(resolvedUserId) {
     setError('')
-    const result = validateUserIdFromQR(resolvedUserId)
+    const result = validateUserIdFromQR(resolvedUserId, workers)
     if (!result.ok) {
       const errKey = ERROR_KEYS[result.error] || 'errorQR'
       setError(t(errKey))

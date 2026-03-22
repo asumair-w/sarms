@@ -132,6 +132,20 @@ export async function ensureWorkersForTasks(workers) {
   return { legacyToUuid: buildLegacyToUuidMap(list, dbRows), dbWorkers: dbRows }
 }
 
+/** Resolve DB UUID for the logged-in employee id (e.g. e1) after ensureWorkersForTasks. */
+export async function resolveWorkerUuidByEmployeeLogin(employeeLogin, appWorkers) {
+  if (!supabase || !employeeLogin) return null
+  const key = String(employeeLogin).trim().toLowerCase()
+  const { legacyToUuid } = await ensureWorkersForTasks(appWorkers || [])
+  for (const w of appWorkers || []) {
+    const e = (w.employeeId || w.employee_id || '').trim().toLowerCase()
+    if (e === key && legacyToUuid[String(w.id)]) return legacyToUuid[String(w.id)]
+  }
+  const { data: rows } = await supabase.from('workers').select('id, employee_id')
+  const row = (rows || []).find((r) => r.employee_id?.toLowerCase() === key)
+  return row?.id ?? null
+}
+
 export function resolveWorkerUuid(wid, appWorkers, legacyToUuid) {
   const s = String(wid ?? '').trim()
   if (!s) return null
@@ -147,17 +161,42 @@ export function resolveWorkerUuid(wid, appWorkers, legacyToUuid) {
   return null
 }
 
+/** One row per worker UUID — duplicate workerIds would otherwise violate task_workers_pkey (23505). */
+function buildDedupedTaskWorkerRows(taskId, workerIds, workers, legacyToUuid) {
+  const wids = workerIds || []
+  const seen = new Set()
+  const out = []
+  for (const wid of wids) {
+    const uuid = resolveWorkerUuid(wid, workers, legacyToUuid)
+    if (uuid && !seen.has(uuid)) {
+      seen.add(uuid)
+      out.push({ task_id: taskId, worker_id: uuid })
+    }
+  }
+  return out
+}
+
 /**
  * Load tasks in the same shape as localStorage (workerIds = app worker ids).
  */
 export async function fetchTasksAppShaped() {
-  if (!supabase) return []
+  if (!supabase) {
+    console.error('[SARMS][Supabase] error', 'fetchTasksAppShaped', 'no client')
+    return null
+  }
 
-  const { data: dbWorkers } = await supabase.from('workers').select('id, data')
+  const { data: dbWorkers, error: wErr } = await supabase.from('workers').select('id, data')
+  if (wErr) {
+    console.error('[SARMS][Supabase] error', 'fetchTasksAppShaped.workers', wErr)
+    return null
+  }
   const uuidToLegacy = buildUuidToLegacyMap(dbWorkers || [])
 
   const { data: twRows, error: twErr } = await supabase.from('task_workers').select('task_id, worker_id')
-  if (twErr) console.warn('[SARMS][tasks-adapter] task_workers', twErr)
+  if (twErr) {
+    console.error('[SARMS][Supabase] error', 'fetchTasksAppShaped.task_workers', twErr)
+    return null
+  }
 
   const taskToUuids = {}
   for (const row of twRows || []) {
@@ -167,8 +206,8 @@ export async function fetchTasksAppShaped() {
 
   const { data: tasksRows, error } = await supabase.from('tasks').select('*')
   if (error) {
-    console.warn('[SARMS][tasks-adapter] tasks select', error)
-    return []
+    console.error('[SARMS][Supabase] error', 'fetchTasksAppShaped.tasks', error)
+    return null
   }
 
   return (tasksRows || [])
@@ -192,16 +231,15 @@ export async function persistTask(task, workers, zones) {
   const { error: upErr } = await supabase.from('tasks').upsert(row, { onConflict: 'id' })
   if (upErr) console.warn('[SARMS][tasks-adapter] task upsert', upErr)
 
-  await supabase.from('task_workers').delete().eq('task_id', task.id)
-  const wids = task.workerIds || task.worker_ids || []
-  const twRows = []
-  for (const wid of wids) {
-    const uuid = resolveWorkerUuid(wid, workers, legacyToUuid)
-    if (uuid) twRows.push({ task_id: task.id, worker_id: uuid })
-  }
+  const { error: delErr } = await supabase.from('task_workers').delete().eq('task_id', task.id)
+  if (delErr) console.warn('[SARMS][tasks-adapter] task_workers delete', delErr)
+
+  const twRows = buildDedupedTaskWorkerRows(task.id, task.workerIds || task.worker_ids, workers, legacyToUuid)
   if (twRows.length) {
-    const { error: insErr } = await supabase.from('task_workers').insert(twRows)
-    if (insErr) console.warn('[SARMS][tasks-adapter] task_workers insert', insErr)
+    const { error: insErr } = await supabase
+      .from('task_workers')
+      .upsert(twRows, { onConflict: 'task_id,worker_id' })
+    if (insErr) console.warn('[SARMS][tasks-adapter] task_workers upsert', insErr)
   }
 }
 
@@ -226,13 +264,14 @@ export async function replaceAllTasks(tasks, workers, zones) {
 
   const twRows = []
   for (const task of tasks) {
-    for (const wid of task.workerIds || task.worker_ids || []) {
-      const uuid = resolveWorkerUuid(wid, workers, legacyToUuid)
-      if (uuid) twRows.push({ task_id: task.id, worker_id: uuid })
-    }
+    twRows.push(
+      ...buildDedupedTaskWorkerRows(task.id, task.workerIds || task.worker_ids, workers, legacyToUuid)
+    )
   }
   if (twRows.length) {
-    const { error: twErr } = await supabase.from('task_workers').insert(twRows)
-    if (twErr) console.warn('[SARMS][tasks-adapter] task_workers bulk', twErr)
+    const { error: twErr } = await supabase
+      .from('task_workers')
+      .upsert(twRows, { onConflict: 'task_id,worker_id' })
+    if (twErr) console.warn('[SARMS][tasks-adapter] task_workers bulk upsert', twErr)
   }
 }

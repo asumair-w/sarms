@@ -59,7 +59,13 @@ export default function WorkerInterface() {
 
   useSessionKickCheck()
 
-  const userId = location.state?.userId ?? (typeof window !== 'undefined' ? sessionStorage.getItem('sarms-user-id') : null) ?? 'worker'
+  useEffect(() => {
+    const uid = (typeof window !== 'undefined' ? sessionStorage.getItem('sarms-user-id') : '')?.trim()
+    if (!uid) navigate('/login', { replace: true })
+  }, [navigate])
+
+  const userId =
+    location.state?.userId ?? (typeof window !== 'undefined' ? sessionStorage.getItem('sarms-user-id') : null) ?? ''
   const worker = useMemo(() => {
     const key = userId?.trim()?.toLowerCase()
     if (!key) return null

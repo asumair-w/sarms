@@ -1,3 +1,5 @@
+import { USE_SUPABASE } from '../config/dataBackend'
+
 const USERS_STORAGE_KEY = 'users'
 const WORKERS_STORAGE_KEY = 'sarms-workers'
 
@@ -73,6 +75,7 @@ export function seedDefaultWorkers() {
 }
 
 export function ensureDefaultAccountsSeeded() {
+  if (USE_SUPABASE) return
   // Non-destructive bootstrap: only seed if storage is empty OR required keys are missing.
   // Never overwrite existing developer testing data. Use resetSystem() to force overwrite.
   if (typeof window !== 'undefined') {
@@ -95,7 +98,7 @@ export function ensureDefaultAccountsSeeded() {
       seedDefaultUsers()
       console.info('[SARMS][seed] missing key → seeded default users:', USERS_STORAGE_KEY)
     }
-    if (!hasWorkers) {
+    if (!hasWorkers && !USE_SUPABASE) {
       seedDefaultWorkers()
       console.info('[SARMS][seed] missing key → seeded default workers:', WORKERS_STORAGE_KEY)
     }

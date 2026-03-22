@@ -26,9 +26,14 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
 const LABELS = ['Pending', 'In Progress', 'Completed', 'Delayed']
 
+const STATUS_LABEL_KEYS = ['opStatusPending', 'opStatusInProgress', 'opStatusCompleted', 'opStatusDelayed']
+
 function getStatusLabels(t) {
   if (!t) return LABELS
-  return [t('chartPending'), t('chartInProgress'), t('chartCompleted'), t('chartDelayed')]
+  return STATUS_LABEL_KEYS.map((key, i) => {
+    const v = t(key)
+    return v && v !== key ? v : LABELS[i]
+  })
 }
 
 /** Per-category colors: Pending, In Progress, Completed, Delayed */

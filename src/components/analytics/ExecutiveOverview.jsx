@@ -5,6 +5,7 @@ import RiskRadarChart from './charts/RiskRadarChart'
 import InventoryHealthChart from './charts/InventoryHealthChart'
 import EquipmentLoadChart from './charts/EquipmentLoadChart'
 import styles from './ExecutiveOverview.module.css'
+import shell from '../../styles/sarmsPageShell.module.css'
 
 /**
  * Executive Overview – layout container for the six analytical charts.
@@ -31,7 +32,7 @@ export default function ExecutiveOverview({ data = {}, t = noopT, onDrillDown, z
   } = data
 
   return (
-    <div className={styles.grid} role="region" aria-label="Executive overview charts">
+    <div className={`${shell.statGrid} ${styles.chartGrid}`} role="region" aria-label="Executive overview charts">
       <div className={styles.card}>
         <h3 className={styles.cardTitle}>{t('operationalStatus')}</h3>
         <div className={styles.chartWrap}>

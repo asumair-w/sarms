@@ -1,23 +1,7 @@
-/* Executive Overview – responsive grid layout, chart containers fit chart + legend */
+/* Executive Overview — grid from sarmsPageShell.statGrid (same as Worker Ranking / Reports KPIs) */
 
-.grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1rem;
+.chartGrid {
   margin-top: 0.75rem;
-}
-
-@media (min-width: 768px) {
-  .grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (min-width: 1200px) {
-  .grid {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1.25rem;
-  }
 }
 
 .card {
