@@ -1,0 +1,34 @@
+---
+description: Cloudflare Pages manual deploy — localhost updates do not affect the live site until deploy
+alwaysApply: true
+---
+
+# SARMS — نشر Cloudflare Pages
+
+الموقع المنشور **لا يتحدّث** تلقائياً مع `git push`. التعديلات تظهر في **localhost** فقط حتى يُرفع build جديد.
+
+## عند جاهزية التعديلات للإنتاج
+
+من جذر المشروع `SARMS`:
+
+```bash
+npm run pages:upload
+```
+
+هذا ينفّذ `npm run build` ثم يرفع مجلد `dist` إلى مشروع Cloudflare Pages اسمه `sarms`.
+
+إذا ظهر خطأ صلاحيات أو تسجيل دخول:
+
+```bash
+npx wrangler login
+```
+
+ثم أعد تشغيل `npm run pages:upload`.
+
+## اختياري — نشر تلقائي
+
+في لوحة **Cloudflare Pages**: ربط المستودع بـ **GitHub** وتفعيل **Deploy on push** لفرع `main` حتى كل `git push` يبني وينشر دون تشغيل الأمر يدوياً.
+
+## للمساعد (Cursor)
+
+بعد إتمام تعديلات واجهة/منطق يفترض أن تظهر على الموقع العام، **اقترح أو نفّذ** `npm run pages:upload` من جذر المشروع إذا طلب المستخدم تحديث الموقع المنشور أو أكّد أن التعديلات لا تظهر إلا بعد نشر.
