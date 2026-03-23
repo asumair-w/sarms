@@ -2,13 +2,24 @@ import { isSupabaseConfigured } from '../lib/supabase'
 
 /**
  * Data backend toggle: Supabase-only vs localStorage-only. No dual-sync.
- * Set in `.env`: VITE_USE_SUPABASE=true
- * Trim so Cloudflare/dashboard typos like "true " still match.
+ *
+ * Behavior:
+ * - VITE_USE_SUPABASE=true  -> force Supabase mode
+ * - VITE_USE_SUPABASE=false -> force local mode
+ * - VITE_USE_SUPABASE unset -> auto-enable Supabase when URL+anon key exist
+ *
+ * This prevents production regressions where URL/key are set but the optional
+ * flag was not added in the deploy environment.
  */
 const viteUseSupabaseRaw = import.meta.env?.VITE_USE_SUPABASE
-export const USE_SUPABASE =
-  typeof import.meta !== 'undefined' &&
-  String(viteUseSupabaseRaw ?? '').trim() === 'true'
+const viteUseSupabase = String(viteUseSupabaseRaw ?? '').trim().toLowerCase()
+
+export const USE_SUPABASE = (() => {
+  if (typeof import.meta === 'undefined') return false
+  if (viteUseSupabase === 'true') return true
+  if (viteUseSupabase === 'false') return false
+  return isSupabaseConfigured
+})()
 
 export const USE_SUPABASE_ACTIVE = USE_SUPABASE && isSupabaseConfigured
 
@@ -45,6 +56,12 @@ export function purgeAllSarmsLocalStorageKeys() {
 if (USE_SUPABASE && !isSupabaseConfigured) {
   console.warn(
     '[SARMS] VITE_USE_SUPABASE is true but VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are missing. Core data (tasks, sessions, operations_log) will stay empty until credentials are set — no localStorage fallback for those domains.'
+  )
+}
+
+if (!USE_SUPABASE && isSupabaseConfigured) {
+  console.warn(
+    '[SARMS] Supabase credentials are present but backend is forced to local mode (VITE_USE_SUPABASE=false).'
   )
 }
 

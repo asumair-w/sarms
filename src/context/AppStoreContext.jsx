@@ -26,7 +26,11 @@ import {
   deleteSessionFromSupabase,
   replaceAllSessions,
 } from '../lib/supabaseSessionsAdapter'
-import { fetchOperationsLogRecords, approveTaskCompleteViaRpc } from '../lib/supabaseOperationsLogAdapter'
+import {
+  fetchOperationsLogRecords,
+  approveTaskCompleteViaRpc,
+  insertOperationsLogRecord,
+} from '../lib/supabaseOperationsLogAdapter'
 import {
   fetchHarvestLogRecordsAppShaped,
   mergeOperationsRecordsWithHarvest,
@@ -48,6 +52,7 @@ import {
   fetchEquipmentDomainAppShaped,
   equipmentDomainShouldHydrateReadTest,
 } from '../lib/supabaseEquipmentDomain'
+import { upsertWorker, syncWorkersSnapshot } from '../lib/supabaseWorkersAdapter'
 
 const RECORDS_STORAGE_KEY = 'sarms-records'
 const SESSIONS_STORAGE_KEY = 'sarms-sessions'
@@ -82,6 +87,20 @@ const SARMS_DATA_KEYS = [
 const WORKER_SESSION_PREFIX = 'sarms-worker-session-'
 
 const SKIP_HYDRATE_KEY = 'sarms-skip-hydrate'
+const ROLE_KEY = 'sarms-user-role'
+const USER_ID_KEY = 'sarms-user-id'
+const POLLING_INTERVAL_MS = 15000
+
+function hasActiveSessionAuth() {
+  if (typeof window === 'undefined') return false
+  try {
+    const userId = sessionStorage.getItem(USER_ID_KEY)?.trim()
+    const role = sessionStorage.getItem(ROLE_KEY)?.trim()
+    return Boolean(userId && role)
+  } catch (_) {
+    return false
+  }
+}
 
 /**
  * Critical for clean-workflow testing:
@@ -564,6 +583,8 @@ export function AppStoreProvider({ children }) {
   const [state, dispatch] = useReducer(storeReducer, undefined, getInitialState)
   const supabaseHydrateDone = useRef(false)
   const stateRef = useRef(state)
+  const pollingIntervalRef = useRef(null)
+  const pollingInFlightRef = useRef(false)
   // Phase 3: keep the exact record snapshot from `addRecord` so `removeSession`
   // can execute the engineer approval RPC inside a single transaction.
   const pendingOpsLogRecordRef = useRef(null) // record created by engineer approval
@@ -575,6 +596,7 @@ export function AppStoreProvider({ children }) {
   const refreshSupabaseCoreState = useCallback(async () => {
     if (!USE_SUPABASE_ACTIVE) return
     try {
+      console.log('[Polling] fetching latest data...')
       const [
         tasks,
         sessions,
@@ -630,7 +652,9 @@ export function AppStoreProvider({ children }) {
         resolvedTickets: equipmentDomain.resolvedTickets,
       }
       dispatch({ type: 'HYDRATE', payload })
+      console.log('[Polling] updated successfully')
     } catch (e) {
+      console.error('[Polling] error', e)
       console.error('[SARMS][Supabase] error', 'refreshSupabaseCoreState', e)
     }
   }, [])
@@ -798,6 +822,34 @@ export function AppStoreProvider({ children }) {
       cancelled = true
     }
   }, [state.hydrateDone])
+
+  // Central Supabase polling every 15s (whole app). Single interval; do NOT clear on logout
+  // (otherwise polling never restarts after re-login — effect deps don't change).
+  useEffect(() => {
+    if (!USE_SUPABASE_ACTIVE) return
+    if (!isSupabaseConfigured || !state.hydrateDone) return
+    if (pollingIntervalRef.current) return
+
+    const tick = () => {
+      if (!USE_SUPABASE_ACTIVE) return
+      if (!hasActiveSessionAuth()) return
+      if (pollingInFlightRef.current) return
+      pollingInFlightRef.current = true
+      void refreshSupabaseCoreState().finally(() => {
+        pollingInFlightRef.current = false
+      })
+    }
+
+    pollingIntervalRef.current = setInterval(tick, POLLING_INTERVAL_MS)
+    tick()
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+        pollingIntervalRef.current = null
+      }
+    }
+  }, [state.hydrateDone, refreshSupabaseCoreState])
 
   // Read-test: localStorage mode — if inventory has rows in Supabase, use that + movements (no merge with local inventory).
   useEffect(() => {
@@ -1001,17 +1053,39 @@ export function AppStoreProvider({ children }) {
   }, [])
 
   const addRecord = useCallback((record) => {
+    const isProduction = record?.recordType === 'production'
+    const isHarvest = record?.source === 'harvest_form'
+    const isEngineerApprovalRecord =
+      USE_SUPABASE_ACTIVE &&
+      isProduction &&
+      !isHarvest &&
+      record &&
+      record.duration != null &&
+      record.startTime
+    if (USE_SUPABASE_ACTIVE && isProduction && !isHarvest && !isEngineerApprovalRecord) {
+      const taskId = record.taskId ?? record.task_id
+      const sourceSessionId = record.sourceSessionId ?? record.source_session_id ?? null
+      if (!taskId) {
+        console.warn('[SARMS][ops] skip local addRecord in Supabase mode: missing taskId for operations_log insert')
+        return
+      }
+      void insertOperationsLogRecord({
+        taskId,
+        sourceSessionId,
+        startTime: record.startTime ?? record.dateTime,
+        expectedMinutes: record.expectedMinutes ?? 60,
+        record,
+        workers: stateRef.current.workers,
+      })
+        .then(() => refreshSupabaseCoreState())
+        .catch((e) => console.warn('[SARMS][ops] direct operations_log insert failed', e?.message ?? e))
+      return
+    }
     dispatch({ type: 'ADD_RECORD', payload: record })
     // In engineer approval flow, `addRecord` is followed by:
     //   updateTaskStatus(taskId, completed) → updateTask(taskId, { approvedAt, engineerComment }) → removeSession(sessionId)
     // We capture the record snapshot so `removeSession` can execute the RPC inside a single transaction.
-    if (
-      USE_SUPABASE_ACTIVE &&
-      record &&
-      record.recordType === 'production' &&
-      record.duration != null &&
-      record.startTime
-    ) {
+    if (isEngineerApprovalRecord) {
       pendingOpsLogRecordRef.current = record
     }
   }, [])
@@ -1130,7 +1204,7 @@ export function AppStoreProvider({ children }) {
 
   const updateEquipmentItem = useCallback((equipmentId, updates) => {
     dispatch({ type: 'UPDATE_EQUIPMENT_ITEM', payload: { equipmentId, updates } })
-    if (!isSupabaseConfigured) return
+    if (!USE_SUPABASE_ACTIVE) return
     const prev = stateRef.current.equipment.find(
       (e) => String(e.id) === String(equipmentId)
     )
@@ -1142,7 +1216,7 @@ export function AppStoreProvider({ children }) {
   }, [])
   const addEquipmentItem = useCallback((item) => {
     dispatch({ type: 'ADD_EQUIPMENT', payload: item })
-    if (isSupabaseConfigured) {
+    if (USE_SUPABASE_ACTIVE) {
       void mirrorUpsertEquipmentItem(item, { allowInsert: true }).catch((e) =>
         console.warn('[SARMS][equipment] mirror add failed', e?.message ?? e)
       )
@@ -1150,7 +1224,7 @@ export function AppStoreProvider({ children }) {
   }, [])
   const removeEquipmentItem = useCallback((equipmentId) => {
     dispatch({ type: 'REMOVE_EQUIPMENT', payload: equipmentId })
-    if (isSupabaseConfigured) {
+    if (USE_SUPABASE_ACTIVE) {
       void mirrorDeleteEquipmentItem(equipmentId).catch((e) =>
         console.warn('[SARMS][equipment] mirror delete failed', e?.message ?? e)
       )
@@ -1159,7 +1233,7 @@ export function AppStoreProvider({ children }) {
 
   const addResolvedTicket = useCallback((ticket) => {
     dispatch({ type: 'ADD_RESOLVED_TICKET', payload: ticket })
-    if (isSupabaseConfigured) {
+    if (USE_SUPABASE_ACTIVE) {
       const source = ticket.faultId != null ? 'fault' : 'maintenance'
       void mirrorResolveTicketClose({
         resolvedPayload: ticket,
@@ -1171,7 +1245,7 @@ export function AppStoreProvider({ children }) {
   }, [])
   const addFault = useCallback((fault) => {
     dispatch({ type: 'ADD_FAULT', payload: fault })
-    if (isSupabaseConfigured) {
+    if (USE_SUPABASE_ACTIVE) {
       if (fault.auto_generated || fault.type === FAULT_TYPE_PREVENTIVE_ALERT) return
       mirrorUpsertFaultTicket(fault, stateRef.current.workers)
         .then(() => {
@@ -1190,7 +1264,7 @@ export function AppStoreProvider({ children }) {
   }, [])
   const updateFault = useCallback((faultId, updates) => {
     dispatch({ type: 'UPDATE_FAULT', payload: { faultId, updates } })
-    if (!isSupabaseConfigured) return
+    if (!USE_SUPABASE_ACTIVE) return
     if (updates.status === FAULT_STATUS_RESOLVED) return
     const prev = stateRef.current.faults.find((f) => f.id === faultId)
     if (!prev) return
@@ -1202,7 +1276,7 @@ export function AppStoreProvider({ children }) {
   }, [])
   const addMaintenancePlan = useCallback((plan) => {
     dispatch({ type: 'ADD_MAINTENANCE_PLAN', payload: plan })
-    if (isSupabaseConfigured) {
+    if (USE_SUPABASE_ACTIVE) {
       mirrorUpsertMaintenanceTicket(plan, stateRef.current.workers)
         .then(() => {
           setTimeout(() => {
@@ -1219,7 +1293,7 @@ export function AppStoreProvider({ children }) {
   }, [])
   const updateMaintenancePlan = useCallback((planId, updates) => {
     dispatch({ type: 'UPDATE_MAINTENANCE_PLAN', payload: { planId, updates } })
-    if (!isSupabaseConfigured) return
+    if (!USE_SUPABASE_ACTIVE) return
     if (updates.status === 'completed') return
     const prev = stateRef.current.maintenancePlans.find((p) => p.id === planId)
     if (!prev) return
@@ -1232,9 +1306,23 @@ export function AppStoreProvider({ children }) {
   const setBatchesByZone = useCallback((payload) => dispatch({ type: 'SET_BATCHES_BY_ZONE', payload }), [])
   const setDefaultBatch = useCallback((zoneId, batchId) =>
     dispatch({ type: 'SET_DEFAULT_BATCH', payload: { zoneId, batchId } }), [])
-  const setWorkers = useCallback((payload) => dispatch({ type: 'SET_WORKERS', payload }), [])
-  const updateWorker = useCallback((workerId, updates) =>
-    dispatch({ type: 'UPDATE_WORKER', payload: { workerId, updates } }), [])
+  const setWorkers = useCallback((payload) => {
+    const prevWorkers = stateRef.current.workers || []
+    dispatch({ type: 'SET_WORKERS', payload })
+    if (!USE_SUPABASE_ACTIVE) return
+    void syncWorkersSnapshot(payload, prevWorkers).catch((e) =>
+      console.warn('[SARMS][workers] sync snapshot failed', e?.message ?? e)
+    )
+  }, [])
+  const updateWorker = useCallback((workerId, updates) => {
+    dispatch({ type: 'UPDATE_WORKER', payload: { workerId, updates } })
+    if (!USE_SUPABASE_ACTIVE) return
+    const prev = (stateRef.current.workers || []).find((w) => String(w.id) === String(workerId))
+    if (!prev) return
+    void upsertWorker({ ...prev, ...updates }).catch((e) =>
+      console.warn('[SARMS][workers] mirror update failed', e?.message ?? e)
+    )
+  }, [])
 
   const resetToSeed = useCallback(() => {
     const seed = getSeedState()

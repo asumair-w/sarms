@@ -27,3 +27,6 @@ Thumbs.db
 
 # Vite
 *.local
+
+# Local scratch / debug bundles
+tmp-prod-bundle.js

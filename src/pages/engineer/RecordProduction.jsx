@@ -7,7 +7,7 @@ import { getTranslation } from '../../i18n/translations'
 import { nextRecordId } from '../../utils/idGenerators'
 import { escapeHtmlForPrint, buildSarmsPrintHtml, openSarmsPrintWindow } from '../../utils/sarmsPrintHtml'
 import { USE_SUPABASE_ACTIVE } from '../../config/dataBackend'
-import { insertHarvestLog } from '../../lib/supabaseHarvestAdapter'
+import { insertHarvestLog, updateHarvestLog, deleteHarvestLog } from '../../lib/supabaseHarvestAdapter'
 import { resolveWorkerUuidByEmployeeLogin } from '../../lib/supabaseTasksAdapter'
 import styles from './RecordProduction.module.css'
 import invStyles from './InventoryEquipment.module.css'
@@ -402,10 +402,6 @@ export default function RecordProduction() {
     const record = buildRecord()
     const snapshot = { ...form }
     const zoneLabel = ZONE_LABELS[snapshot.zoneId] ?? snapshot.zoneId
-    addRecord(record)
-    setSaved(record)
-    setForm(defaultForm())
-
     if (USE_SUPABASE_ACTIVE) {
       void (async () => {
         try {
@@ -432,12 +428,22 @@ export default function RecordProduction() {
             recorded_by: resolvedWorkerUuid,
           }
           if (snapshot.imageData) mappedPayload.image_data = snapshot.imageData
-          await insertHarvestLog(mappedPayload)
+          const inserted = await insertHarvestLog(mappedPayload)
+          const row = inserted?.[0] ?? null
+          const withDbId = row ? { ...record, id: String(row.id) } : record
+          addRecord(withDbId)
+          setSaved(withDbId)
+          setForm(defaultForm())
         } catch (err) {
           console.error('Harvest Supabase failed', err)
         }
       })()
+      return
     }
+
+    addRecord(record)
+    setSaved(record)
+    setForm(defaultForm())
   }
 
   function handleCancel() {
@@ -474,7 +480,7 @@ export default function RecordProduction() {
     e.preventDefault()
     if (!editHarvestRecord || !editForm) return
     if (!editForm.zoneId?.trim() || editForm.quantity === '' || editForm.quantity == null) return
-    updateRecord(editHarvestRecord.id, {
+    const nextPatch = {
       zone: ZONE_LABELS[editForm.zoneId] ?? editForm.zoneId,
       zoneId: editForm.zoneId,
       linesArea: editForm.linesArea,
@@ -483,7 +489,40 @@ export default function RecordProduction() {
       unit: editForm.unit,
       notes: editForm.notes,
       imageData: editForm.imageData || undefined,
-    })
+    }
+    if (USE_SUPABASE_ACTIVE) {
+      void (async () => {
+        try {
+          const login =
+            typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('sarms-user-id') : null
+          const resolvedWorkerUuid = login
+            ? await resolveWorkerUuidByEmployeeLogin(login, workers)
+            : null
+          const dbPatch = {
+            zone_id: editForm.zoneId,
+            zone_label: ZONE_LABELS[editForm.zoneId] ?? editForm.zoneId,
+            lines_area: editForm.linesArea ?? '',
+            recorded_at: editForm.dateTime
+              ? new Date(editForm.dateTime).toISOString()
+              : new Date().toISOString(),
+            quantity: Number(editForm.quantity) || 0,
+            unit: editForm.unit,
+            notes: editForm.notes || null,
+            image_data: editForm.imageData || null,
+            updated_at: new Date().toISOString(),
+            ...(resolvedWorkerUuid ? { updated_by: resolvedWorkerUuid } : {}),
+          }
+          await updateHarvestLog(editHarvestRecord.id, dbPatch)
+          updateRecord(editHarvestRecord.id, nextPatch)
+          setEditHarvestRecord(null)
+          setEditForm(null)
+        } catch (err) {
+          console.error('Harvest update failed', err)
+        }
+      })()
+      return
+    }
+    updateRecord(editHarvestRecord.id, nextPatch)
     setEditHarvestRecord(null)
     setEditForm(null)
   }
@@ -491,6 +530,19 @@ export default function RecordProduction() {
   function handleDeleteHarvestFromEdit() {
     if (!editHarvestRecord) return
     if (window.confirm('Delete this record? This cannot be undone.')) {
+      if (USE_SUPABASE_ACTIVE) {
+        void (async () => {
+          try {
+            await deleteHarvestLog(editHarvestRecord.id)
+            removeRecord(editHarvestRecord.id)
+            setEditHarvestRecord(null)
+            setEditForm(null)
+          } catch (err) {
+            console.error('Harvest delete failed', err)
+          }
+        })()
+        return
+      }
       removeRecord(editHarvestRecord.id)
       setEditHarvestRecord(null)
       setEditForm(null)

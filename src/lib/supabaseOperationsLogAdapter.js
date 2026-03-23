@@ -111,3 +111,49 @@ export async function approveTaskCompleteViaRpc({
   console.log('RPC success', data)
 }
 
+export async function insertOperationsLogRecord({
+  taskId,
+  sourceSessionId,
+  startTime,
+  expectedMinutes,
+  record,
+  workers,
+}) {
+  if (!supabase) throw new Error('Supabase client not configured')
+  if (!taskId || String(taskId).trim() === '') {
+    throw new Error('insertOperationsLogRecord: taskId is required')
+  }
+  const fallbackSessionId =
+    typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : null
+  if (!sourceSessionId && !fallbackSessionId) {
+    throw new Error('insertOperationsLogRecord: sourceSessionId required')
+  }
+  let approvedBy = null
+  try {
+    const login =
+      typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('sarms-user-id') : null
+    if (login) approvedBy = await resolveWorkerUuidByEmployeeLogin(login, workers)
+  } catch (_) {}
+
+  const row = {
+    task_id: String(taskId),
+    source_session_id: sourceSessionId || fallbackSessionId,
+    start_time: startTime ?? record?.startTime ?? record?.dateTime ?? new Date().toISOString(),
+    expected_minutes: Number(expectedMinutes ?? record?.expectedMinutes ?? 60) || 60,
+    task_status_at_close: 'completed',
+    flagged: Boolean(record?.flagged),
+    worker_notes: record?.notes ?? null,
+    engineer_notes: record?.engineerNotes ?? null,
+    approved_by: approvedBy,
+    approved_at: record?.dateTime ?? new Date().toISOString(),
+    data: record ?? {},
+    task_snapshot: record ?? {},
+    session_snapshot: {
+      source: 'direct_insert',
+    },
+  }
+  const { data, error } = await supabase.from('operations_log').insert(row).select().single()
+  if (error) throw error
+  return data
+}
+

@@ -460,8 +460,10 @@ export default function WorkerInterface() {
       setBlockMessage(t('inventoryNotesRequired'))
       return
     }
+    const sessionInStore = activeSession._sessionId
+      ? (sessions || []).find((s) => s.id === activeSession._sessionId)
+      : null
     if (activeSession._sessionId) {
-      const sessionInStore = (sessions || []).find((s) => s.id === activeSession._sessionId)
       if (sessionInStore?.taskId) {
         const endTimeIso = new Date().toISOString()
         updateTaskStatus(sessionInStore.taskId, TASK_STATUS.FINISHED_BY_WORKER)
@@ -485,7 +487,7 @@ export default function WorkerInterface() {
     const startTime = new Date(activeSession.start_time)
     const durationMs = endTime - startTime
     const durationMins = Math.round(durationMs / 60000)
-    const latestSession = (sessions || []).find((ss) => ss.id === activeSession._sessionId)
+    const latestSession = sessionInStore
     const engineerNotesStr = (latestSession?.notes?.length)
       ? latestSession.notes.map((n) => (n.text || '').trim()).filter(Boolean).join('\n')
       : undefined
@@ -495,6 +497,8 @@ export default function WorkerInterface() {
       end_time: endTime.toISOString(),
       status: 'finished_by_worker',
       duration: durationMins,
+      taskId: sessionInStore?.taskId ?? null,
+      sourceSessionId: activeSession._sessionId ?? null,
     }
     setRecordSavedForCompletion(true)
     setCompletedSession(completed)
@@ -527,6 +531,8 @@ export default function WorkerInterface() {
       notes: completionNotes.trim() || undefined,
       engineerNotes: engineerNotesStr,
       imageData: completionImage || undefined,
+      taskId: completedSession.taskId ?? null,
+      sourceSessionId: completedSession.sourceSessionId ?? null,
     }
     addRecord(record)
   }

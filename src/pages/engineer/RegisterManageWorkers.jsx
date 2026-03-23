@@ -271,7 +271,10 @@ function RegisterManageWorkers() {
     const list = workers || []
     const employeeId = generateEmployeeId(addForm.role, list)
     const tempPassword = employeeId
-    const newId = list.length > 0 ? String(Math.max(...list.map((w) => parseInt(w.id, 10) || 0)) + 1) : '1'
+    const newId =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `w-${Date.now()}-${Math.floor(Math.random() * 1e6)}`
     const newWorker = {
       id: newId,
       employeeId,

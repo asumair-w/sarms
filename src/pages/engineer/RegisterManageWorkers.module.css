@@ -710,3 +710,138 @@
   padding: 1.25rem;
   font-size: 0.82rem;
 }
+
+/* Extra compact admin density (Manage Workers) */
+.registerAdmin .filtersAdmin {
+  gap: 0.35rem;
+  row-gap: 0.35rem;
+  align-items: center;
+}
+
+.registerAdmin .search {
+  min-width: 135px;
+  padding: 0.28rem 0.45rem;
+  font-size: 0.78rem;
+  min-height: 32px;
+  border-radius: 7px;
+}
+
+.registerAdmin .filter {
+  padding: 0.28rem 0.45rem;
+  font-size: 0.78rem;
+  min-height: 32px;
+  border-radius: 7px;
+}
+
+.registerAdmin .addWorkerBtn,
+.registerAdmin .exportPdfBtn {
+  min-height: 32px;
+  padding: 0.28rem 0.65rem;
+  font-size: 0.78rem;
+  border-radius: 9px;
+}
+
+.registerAdmin .adminRankingSurface {
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+}
+
+.registerAdmin .adminRankingHeading {
+  font-size: 0.98rem;
+  margin-bottom: 0.45rem;
+}
+
+.registerAdmin .rankingStatGridAdmin {
+  gap: 0.42rem;
+}
+
+/* Admin modal: "Add New Worker" */
+.registerAdmin .overlay {
+  padding: 0.75rem;
+}
+
+.registerAdmin .panel {
+  max-width: 420px;
+  border-radius: 10px;
+}
+
+.registerAdmin .panelHeader {
+  padding: 0.75rem 0.85rem;
+}
+
+.registerAdmin .panelHeader h2 {
+  font-size: 1.05rem;
+}
+
+.registerAdmin .closeBtn {
+  font-size: 1.35rem;
+  padding: 0 0.15rem;
+}
+
+.registerAdmin .form {
+  padding: 0.95rem;
+}
+
+.registerAdmin .label {
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+}
+
+.registerAdmin .input {
+  padding: 0.42rem 0.6rem;
+  font-size: 0.88rem;
+  margin-bottom: 0.75rem;
+}
+
+.registerAdmin .skillCheckboxGrid {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.4rem;
+  margin-bottom: 0.85rem;
+  max-height: 170px;
+}
+
+.registerAdmin .skillCheckbox {
+  font-size: 0.78rem;
+  gap: 0.35rem;
+}
+
+.registerAdmin .formActions {
+  gap: 0.55rem;
+  margin-top: 0.75rem;
+}
+
+.registerAdmin .primaryBtn,
+.registerAdmin .secondaryBtn {
+  min-height: 36px;
+  padding: 0.42rem 0.8rem;
+  font-size: 0.85rem;
+  border-radius: 9px;
+}
+
+/* Hide scrollbars (keep scroll functionality) for zoom=100% comfort */
+.registerAdmin .tableWrap {
+  scrollbar-width: none; /* Firefox */
+}
+
+.registerAdmin .tableWrap::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.registerAdmin .panel {
+  scrollbar-width: none; /* Firefox */
+}
+
+.registerAdmin .panel::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.registerAdmin .skillCheckboxGrid {
+  scrollbar-width: none; /* Firefox */
+}
+
+.registerAdmin .skillCheckboxGrid::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}

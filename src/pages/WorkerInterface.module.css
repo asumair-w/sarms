@@ -7,7 +7,7 @@
   height: 100vh;
   height: 100dvh;
   background: var(--sarms-bg);
-  padding: 1rem;
+  padding: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -108,11 +108,11 @@
 
 .screen {
   width: 100%;
-  max-width: 720px;
+  max-width: 680px;
   min-width: 0;
   background: var(--sarms-card);
-  border-radius: 12px;
-  padding: 1.5rem;
+  border-radius: 10px;
+  padding: 1.25rem;
   position: relative;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
   border: 1px solid var(--sarms-border);
@@ -122,15 +122,15 @@
 /* Small phones: single column, tighter padding */
 @media (max-width: 480px) {
   .page {
-    padding: 0.75rem;
+    padding: 0.6rem;
   }
   .screen {
-    padding: 1.25rem;
-    border-radius: 20px;
+    padding: 1rem;
+    border-radius: 18px;
   }
   .screenTitle {
-    font-size: 1.25rem;
-    margin-bottom: 1rem;
+    font-size: 1.1rem;
+    margin-bottom: 0.85rem;
   }
   .deptGrid,
   .taskGrid,
@@ -142,40 +142,40 @@
 /* Tablet (768px–1024px): primary device – optimized layout */
 @media (min-width: 768px) and (max-width: 1024px) {
   .page {
-    padding: 2rem;
+    padding: 1.25rem;
   }
   .screen {
-    padding: 2rem;
-    max-width: 700px;
-    border-radius: 24px;
+    padding: 1.5rem;
+    max-width: 680px;
+    border-radius: 20px;
   }
   .screenTitle {
-    font-size: 1.5rem;
-    margin-bottom: 1.5rem;
+    font-size: 1.35rem;
+    margin-bottom: 1.25rem;
   }
   .deptGrid,
   .taskGrid,
   .zoneGrid {
-    gap: 1.25rem;
+    gap: 1rem;
   }
   .deptCard,
   .taskCard,
   .zoneCard {
-    min-height: 88px;
+    min-height: 78px;
   }
 }
 
 /* Desktop: comfortable width and spacing */
 @media (min-width: 1025px) {
   .page {
-    padding: 2rem;
+    padding: 1.25rem;
   }
   .screen {
-    padding: 2.25rem;
-    max-width: 720px;
+    padding: 1.75rem;
+    max-width: 680px;
   }
   .screenTitle {
-    font-size: 1.6rem;
+    font-size: 1.4rem;
   }
 }
 
@@ -183,12 +183,12 @@
   position: absolute;
   top: 1rem;
   right: 1rem;
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 1.5rem;
+  height: 1.5rem;
   border-radius: 6px;
   background: var(--sarms-primary);
   color: #fff;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -197,9 +197,9 @@
 }
 
 .stepIcon {
-  width: 1.1rem;
-  height: 1.1rem;
-  margin-inline-end: 0.5rem;
+  width: 1rem;
+  height: 1rem;
+  margin-inline-end: 0.4rem;
   vertical-align: -0.15em;
   color: inherit;
 }
@@ -211,9 +211,9 @@
 }
 
 .confirmIcon {
-  width: 1.5rem;
-  height: 1.5rem;
-  margin-inline-end: 0.5rem;
+  width: 1.3rem;
+  height: 1.3rem;
+  margin-inline-end: 0.4rem;
   vertical-align: -0.25em;
   color: var(--sarms-text);
 }
@@ -227,15 +227,15 @@
   position: absolute;
   top: 1rem;
   left: 1rem;
-  min-height: 44px;
-  min-width: 44px;
-  padding: 0.6rem 1rem;
-  font-size: 0.9rem;
+  min-height: 40px;
+  min-width: 40px;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: var(--sarms-text);
   background: var(--sarms-bg);
   border: 1px solid var(--sarms-border);
-  border-radius: 8px;
+  border-radius: 7px;
   cursor: pointer;
   transition: background 0.2s, border-color 0.2s;
   display: inline-flex;
@@ -254,8 +254,8 @@
 }
 
 .screenTitle {
-  margin: 0 0 1.25rem;
-  font-size: 1.35rem;
+  margin: 0 0 1rem;
+  font-size: 1.2rem;
   font-weight: 700;
   color: var(--sarms-text);
   text-align: center;
@@ -264,14 +264,14 @@
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 0.25rem;
+  gap: 0.2rem;
 }
 
 /* Department selection – tablet-first 2-col grid, touch targets */
 .deptGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 /* Last card (e.g. Inventory) fills the full row when it sits alone */
@@ -281,7 +281,7 @@
 
 @media (min-width: 768px) {
   .deptGrid {
-    gap: 1.25rem;
+    gap: 1rem;
   }
 }
 
@@ -290,14 +290,14 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  min-height: 80px;
-  padding: 1.25rem 1rem;
-  border-radius: 10px;
+  gap: 0.45rem;
+  min-height: 72px;
+  padding: 1rem 0.85rem;
+  border-radius: 9px;
   border: 1px solid var(--sarms-border);
   background: var(--sarms-card);
   color: var(--sarms-text);
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
@@ -306,9 +306,9 @@
 
 @media (min-width: 768px) {
   .deptCard {
-    min-height: 84px;
-    padding: 1.25rem 1rem;
-    font-size: 1.05rem;
+    min-height: 76px;
+    padding: 1rem 0.85rem;
+    font-size: 0.98rem;
   }
 }
 
@@ -322,8 +322,8 @@
 }
 
 .deptIcon {
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 1.5rem;
+  height: 1.5rem;
   flex-shrink: 0;
   color: var(--sarms-text);
 }
@@ -341,26 +341,26 @@
 .taskGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 @media (min-width: 768px) {
   .taskGrid {
-    gap: 1.25rem;
+    gap: 1rem;
   }
 }
 
 .taskCard {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  min-height: 52px;
-  padding: 1rem 1rem;
-  border-radius: 10px;
+  gap: 0.5rem;
+  min-height: 46px;
+  padding: 0.85rem 0.85rem;
+  border-radius: 9px;
   border: 1px solid var(--sarms-border);
   background: var(--sarms-card);
   color: var(--sarms-text);
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   text-align: left;
@@ -374,8 +374,8 @@
 
 @media (min-width: 768px) {
   .taskCard {
-    min-height: 56px;
-    font-size: 1.05rem;
+    min-height: 50px;
+    font-size: 0.98rem;
   }
 }
 
@@ -389,8 +389,8 @@
 }
 
 .taskIcon {
-  width: 1.15rem;
-  height: 1.15rem;
+  width: 1rem;
+  height: 1rem;
   flex-shrink: 0;
   color: var(--sarms-text);
 }
@@ -404,9 +404,9 @@
 .assignedCard {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 1rem;
-  border-radius: 10px;
+  gap: 0.6rem;
+  padding: 0.9rem;
+  border-radius: 9px;
   border: 1px solid var(--sarms-border);
   background: var(--sarms-card);
   text-align: left;
@@ -417,20 +417,20 @@
 .assignedInfo {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.2rem;
 }
 .assignedDept {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--sarms-muted);
   font-weight: 500;
 }
 .assignedTask {
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--sarms-text);
 }
 .assignedZone {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: var(--sarms-muted);
 }
 
@@ -442,7 +442,7 @@
 .zoneGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .zoneGrid button:nth-child(5) {
@@ -452,14 +452,14 @@
 .zoneCard {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  min-height: 52px;
-  padding: 1rem 1rem;
-  border-radius: 10px;
+  gap: 0.5rem;
+  min-height: 46px;
+  padding: 0.85rem 0.85rem;
+  border-radius: 9px;
   border: 1px solid var(--sarms-border);
   background: var(--sarms-card);
   color: var(--sarms-text);
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   text-align: left;
@@ -473,8 +473,8 @@
 
 @media (min-width: 768px) {
   .zoneCard {
-    min-height: 56px;
-    font-size: 1.05rem;
+    min-height: 50px;
+    font-size: 0.98rem;
   }
 }
 
@@ -488,8 +488,8 @@
 }
 
 .zoneIcon {
-  width: 1.15rem;
-  height: 1.15rem;
+  width: 1rem;
+  height: 1rem;
   flex-shrink: 0;
   color: var(--sarms-text);
 }
@@ -505,22 +505,22 @@
 
 /* Lines – same structure as execution card (1–40, From / To + Start) */
 .linesCard {
-  margin-bottom: 1.25rem;
-  padding: 1.25rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
   background: var(--sarms-bg);
-  border-radius: 10px;
+  border-radius: 9px;
   border: 1px solid var(--sarms-border);
 }
 
 .linesForm {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1rem;
 }
 
 .linesHint {
-  margin: 0 0 0.5rem;
-  font-size: 0.9rem;
+  margin: 0 0 0.35rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--sarms-text-muted);
   text-align: center;
@@ -540,34 +540,34 @@
 
 .linesDash {
   flex: 0 0 auto;
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: #64748b;
-  padding-bottom: 0.5rem;
+  padding-bottom: 0.4rem;
   line-height: 1;
 }
 
 .linesField {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.35rem;
 }
 
 .linesLabel {
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--sarms-text);
 }
 
 .linesInput {
   width: 100%;
-  padding: 0.75rem 1rem;
-  font-size: 1.05rem;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--sarms-text);
   background: var(--sarms-card);
   border: 1px solid var(--sarms-border);
-  border-radius: 8px;
+  border-radius: 7px;
   transition: border-color 0.2s;
 }
 
@@ -597,15 +597,15 @@
 
 .linesForm .primaryButton {
   align-self: center;
-  min-width: 160px;
+  min-width: 140px;
 }
 
 /* Execution screen – task details (system palette) */
 .executionCard {
-  margin-bottom: 1.5rem;
-  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+  padding: 1.05rem;
   background: var(--sarms-bg);
-  border-radius: 14px;
+  border-radius: 12px;
   border: 1px solid var(--sarms-border);
 }
 
@@ -613,9 +613,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.5rem 0;
-  font-size: 1rem;
+  gap: 0.6rem;
+  padding: 0.35rem 0;
+  font-size: 0.95rem;
   border-bottom: 1px solid var(--sarms-border);
 }
 
@@ -650,12 +650,12 @@
 
 /* Alert when user already has an active task (muted danger) */
 .blockMessage {
-  margin: 0 0 1rem;
-  padding: 0.75rem 1rem;
+  margin: 0 0 0.85rem;
+  padding: 0.6rem 0.85rem;
   background: #fef2f2;
   color: #a65d5d;
-  border-radius: 8px;
-  font-size: 0.95rem;
+  border-radius: 7px;
+  font-size: 0.85rem;
   font-weight: 500;
   text-align: center;
   border: 1px solid #e8c4c4;
@@ -665,7 +665,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1rem;
+  gap: 0.85rem;
 }
 
 .executionActions {
@@ -679,13 +679,13 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 1rem 1.75rem;
-  font-size: 1.125rem;
+  padding: 0.85rem 1.2rem;
+  font-size: 1rem;
   font-weight: 600;
   color: #fff;
   background: var(--sarms-primary);
   border: none;
-  border-radius: 14px;
+  border-radius: 12px;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   transition: transform 0.15s, background 0.15s, box-shadow 0.15s;
@@ -705,13 +705,13 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 1rem 1.75rem;
-  font-size: 1.125rem;
+  padding: 0.85rem 1.2rem;
+  font-size: 1rem;
   font-weight: 600;
   color: #fff;
   background: #a65d5d;
   border: none;
-  border-radius: 14px;
+  border-radius: 12px;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   transition: transform 0.15s, background 0.15s, box-shadow 0.15s;
@@ -736,15 +736,15 @@
 }
 
 .primaryButton {
-  min-height: 44px;
-  min-width: 120px;
-  padding: 0.875rem 1.5rem;
-  font-size: 1rem;
+  min-height: 40px;
+  min-width: 110px;
+  padding: 0.75rem 1.1rem;
+  font-size: 0.92rem;
   font-weight: 600;
   color: #fff;
   background: var(--sarms-primary);
   border: none;
-  border-radius: 8px;
+  border-radius: 7px;
   cursor: pointer;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
   transition: background 0.15s, box-shadow 0.15s;
@@ -753,7 +753,7 @@
 
 @media (min-width: 768px) {
   .primaryButton {
-    font-size: 1.05rem;
+    font-size: 0.98rem;
   }
 }
 
@@ -767,15 +767,15 @@
 }
 
 .secondaryButton {
-  min-height: 44px;
-  min-width: 120px;
-  padding: 0.875rem 1.5rem;
-  font-size: 1rem;
+  min-height: 40px;
+  min-width: 110px;
+  padding: 0.75rem 1.1rem;
+  font-size: 0.92rem;
   font-weight: 600;
   color: var(--sarms-text);
   background: var(--sarms-bg);
   border: 1px solid var(--sarms-border);
-  border-radius: 8px;
+  border-radius: 7px;
   cursor: pointer;
   transition: background 0.2s, border-color 0.2s;
   -webkit-tap-highlight-color: transparent;
@@ -788,18 +788,18 @@
 
 /* Confirmation */
 .confirmTitle {
-  margin: 0 0 1.5rem;
-  font-size: 1.5rem;
+  margin: 0 0 1.25rem;
+  font-size: 1.3rem;
   font-weight: 700;
   color: var(--sarms-primary);
   text-align: center;
 }
 
 .summaryCard {
-  margin-bottom: 1.5rem;
-  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+  padding: 1rem;
   background: var(--sarms-bg);
-  border-radius: 14px;
+  border-radius: 12px;
   border: 1px solid var(--sarms-border);
 }
 
@@ -807,9 +807,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.4rem 0;
-  font-size: 1rem;
+  gap: 0.6rem;
+  padding: 0.3rem 0;
+  font-size: 0.95rem;
 }
 
 .summaryRow span:last-child {
@@ -823,28 +823,28 @@
 }
 
 .completionExtra {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.85rem;
 }
 
 .completionNotesLabel {
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: var(--sarms-text);
 }
 
 .completionNotesInput {
   width: 100%;
-  padding: 0.75rem;
-  font-size: 1rem;
+  padding: 0.6rem;
+  font-size: 0.95rem;
   border: 1px solid var(--sarms-border);
-  border-radius: 10px;
+  border-radius: 9px;
   background: var(--sarms-card);
   color: var(--sarms-text);
   resize: vertical;
-  min-height: 80px;
+  min-height: 70px;
   box-sizing: border-box;
 }
 
@@ -859,7 +859,7 @@
 }
 
 .completionPhotoLabel {
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: var(--sarms-text);
 }
@@ -868,12 +868,12 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.6rem 1rem;
-  font-size: 1rem;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.95rem;
   font-weight: 500;
   color: var(--sarms-primary);
   border: 2px dashed var(--sarms-border);
-  border-radius: 10px;
+  border-radius: 9px;
   background: var(--sarms-bg);
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s;
@@ -913,11 +913,11 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.4rem 0.75rem;
-  font-size: 0.9rem;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
   color: var(--sarms-text);
   border: 1px solid var(--sarms-border);
-  border-radius: 8px;
+  border-radius: 7px;
   background: var(--sarms-bg);
   cursor: pointer;
 }
@@ -931,6 +931,6 @@
 .confirmActions {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: 0.75rem;
   justify-content: center;
 }

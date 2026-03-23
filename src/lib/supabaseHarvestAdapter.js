@@ -76,3 +76,23 @@ export async function insertHarvestLog(payload) {
   console.log('✅ harvest_log inserted', data)
   return data
 }
+
+export async function updateHarvestLog(id, patch) {
+  if (!supabase) throw new Error('Supabase client not configured')
+  if (!id) throw new Error('updateHarvestLog: id is required')
+  const { data, error } = await supabase
+    .from('harvest_log')
+    .update(patch)
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteHarvestLog(id) {
+  if (!supabase) throw new Error('Supabase client not configured')
+  if (!id) throw new Error('deleteHarvestLog: id is required')
+  const { error } = await supabase.from('harvest_log').delete().eq('id', id)
+  if (error) throw error
+}
