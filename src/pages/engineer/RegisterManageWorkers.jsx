@@ -1,7 +1,5 @@
 import { useState, useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { jsPDF } from 'jspdf'
-import autoTable from 'jspdf-autotable'
 import {
   ROLE_OPTIONS,
   DEPARTMENT_OPTIONS,
@@ -13,6 +11,7 @@ import { useAppStore } from '../../context/AppStoreContext'
 import { useLanguage } from '../../context/LanguageContext'
 import { getTranslation } from '../../i18n/translations'
 import { TASK_STATUS } from '../../data/assignTask'
+import { escapeHtmlForPrint, buildSarmsPrintHtml, openSarmsPrintWindow } from '../../utils/sarmsPrintHtml'
 import styles from './RegisterManageWorkers.module.css'
 import shell from '../../styles/sarmsPageShell.module.css'
 
@@ -126,6 +125,7 @@ function efficiencyClass(pct) {
 function RegisterManageWorkers() {
   const location = useLocation()
   const isEngineerRoute = location.pathname.startsWith('/engineer')
+  const isAdminRoute = location.pathname.startsWith('/admin')
   const { lang } = useLanguage()
   const t = (key) => getTranslation(lang, 'engineer', key)
   const getSkillLabel = (skill) => t(SKILL_KEY_MAP[skill] || skill)
@@ -298,61 +298,14 @@ function RegisterManageWorkers() {
   function exportEmployeesPDF() {
     if (filtered.length === 0) return
 
-    const margin = 10
-    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-    const pdfW = pdf.internal.pageSize.getWidth()
-    const w = pdfW - margin * 2
-
-    pdf.setFontSize(14)
-    pdf.setFont('helvetica', 'bold')
-    pdf.text(t('registerManageWorkers'), margin, 12)
-    pdf.setFontSize(9)
-    pdf.setFont('helvetica', 'normal')
-    pdf.text(new Date().toLocaleString(), margin, 18)
-
-    let y = 24
-    pdf.setFontSize(10)
-    pdf.setFont('helvetica', 'bold')
-    pdf.text('Filters applied:', margin, y)
-    y += 5
+    const dir = lang === 'ar' ? 'rtl' : 'ltr'
     const roleLabel = filterRole ? getRoleLabel(filterRole) || ROLE_LABEL[filterRole] || filterRole : t('filterAll')
     const deptLabel = filterDept ? getDeptLabel(filterDept) || DEPT_LABEL[filterDept] || filterDept : t('filterAll')
     const skillLabel = filterSkill ? getSkillLabel(filterSkill) : t('filterAll')
     const accountLabel = filterStatus === 'active' ? t('active') : filterStatus === 'not_active' ? t('notActive') : t('filterAll')
     const searchValue = search.trim() || '—'
-    pdf.setFont('helvetica', 'normal')
-    pdf.setFontSize(9)
-    const filterLine1 = `Role: ${roleLabel}   ·   Department: ${deptLabel}   ·   Skills: ${skillLabel}   ·   Account: ${accountLabel}`
-    const filterLine2 = `Search: ${searchValue}`
-    const filterLine3 = `Rows: ${filtered.length}`
-    const lineH = 5
-    const split1 = pdf.splitTextToSize(filterLine1, w)
-    split1.forEach((line) => {
-      pdf.text(line, margin, y)
-      y += lineH
-    })
-    pdf.text(filterLine2, margin, y)
-    y += lineH
-    pdf.text(filterLine3, margin, y)
-    y += lineH
-    y += 2
 
-    const head = [
-      [
-        t('employeeId'),
-        t('fullName'),
-        t('skills'),
-        t('role'),
-        t('department'),
-        t('account'),
-        t('inTask'),
-        t('tasksThisWeek'),
-        t('overdue'),
-        t('efficiencyPct'),
-      ],
-    ]
-
-    const body = filtered.map((w) => {
+    const rowsHtml = filtered.map((w) => {
       const accountStatus = getAccountStatus(w)
       const accLabel = accountStatus === 'active' ? t('active') : t('notActive')
       const showInTask = IS_WORKER(w.role)
@@ -364,65 +317,58 @@ function RegisterManageWorkers() {
       const overdue = getOverdueTasks(tasks || [], w.id, sessions || []).length
       const eff = getEfficiency(tasks || [], w.id)
       const effStr = eff != null ? `${eff}%` : '—'
-      return [
-        String(w.employeeId ?? ''),
-        String(w.fullName ?? ''),
-        skillsStr,
-        getRoleLabel(w.role) || w.role || '',
-        getDeptLabel(w.department) || w.department || '',
-        accLabel,
-        inTaskLabel,
-        String(tasksWeek),
-        String(overdue),
-        effStr,
-      ]
-    })
+      return `<tr>
+        <td>${escapeHtmlForPrint(String(w.employeeId ?? ''))}</td>
+        <td>${escapeHtmlForPrint(String(w.fullName ?? ''))}</td>
+        <td>${escapeHtmlForPrint(skillsStr)}</td>
+        <td>${escapeHtmlForPrint(getRoleLabel(w.role) || w.role || '')}</td>
+        <td>${escapeHtmlForPrint(getDeptLabel(w.department) || w.department || '')}</td>
+        <td>${escapeHtmlForPrint(accLabel)}</td>
+        <td>${escapeHtmlForPrint(inTaskLabel)}</td>
+        <td>${escapeHtmlForPrint(String(tasksWeek))}</td>
+        <td>${escapeHtmlForPrint(String(overdue))}</td>
+        <td>${escapeHtmlForPrint(effStr)}</td>
+      </tr>`
+    }).join('')
 
-    autoTable(pdf, {
-      startY: y,
-      head,
-      body,
-      showHead: 'everyPage',
-      styles: {
-        font: 'helvetica',
-        fontSize: 7,
-        cellPadding: 1.5,
-        overflow: 'linebreak',
-        valign: 'middle',
-      },
-      headStyles: {
-        fillColor: [92, 123, 92],
-        textColor: 255,
-        fontStyle: 'bold',
-      },
-      alternateRowStyles: { fillColor: [248, 250, 252] },
-      margin: { left: margin, right: margin },
-      tableWidth: 'auto',
-      columnStyles: {
-        0: { cellWidth: 22 },
-        1: { cellWidth: 36 },
-        2: { cellWidth: 52 },
-        3: { cellWidth: 22 },
-        4: { cellWidth: 26 },
-        5: { cellWidth: 18 },
-        6: { cellWidth: 16 },
-        7: { cellWidth: 18 },
-        8: { cellWidth: 16 },
-        9: { cellWidth: 18 },
-      },
-    })
+    const filtersInnerHtml = `<div><strong>${escapeHtmlForPrint(t('monitorFiltersApplied'))}</strong></div>
+<div>${escapeHtmlForPrint(t('role'))}: ${escapeHtmlForPrint(roleLabel)} · ${escapeHtmlForPrint(t('department'))}: ${escapeHtmlForPrint(deptLabel)} · ${escapeHtmlForPrint(t('skills'))}: ${escapeHtmlForPrint(skillLabel)} · ${escapeHtmlForPrint(t('account'))}: ${escapeHtmlForPrint(accountLabel)}</div>
+<div>${escapeHtmlForPrint(t('searchPlaceholder'))}: ${escapeHtmlForPrint(searchValue)}</div>
+<div>${escapeHtmlForPrint(t('monitorRows'))}: ${filtered.length}</div>`
 
-    pdf.save(`Workers-${new Date().toISOString().slice(0, 10)}.pdf`)
+    const theadRowHtml = [
+      t('employeeId'),
+      t('fullName'),
+      t('skills'),
+      t('role'),
+      t('department'),
+      t('account'),
+      t('inTask'),
+      t('tasksThisWeek'),
+      t('overdue'),
+      t('efficiencyPct'),
+    ].map((label) => `<th>${escapeHtmlForPrint(label)}</th>`).join('')
+
+    const html = buildSarmsPrintHtml({
+      title: t('registerManageWorkers'),
+      metaLine: new Date().toLocaleString(),
+      filtersInnerHtml,
+      theadRowHtml,
+      tbodyHtml: rowsHtml,
+      dir,
+      lang,
+    })
+    openSarmsPrintWindow(html)
   }
 
   const profileBase = isEngineerRoute ? '/engineer/register/worker' : '/admin/register/worker'
 
   return (
-    <div className={shell.page}>
+    <div className={`${shell.page} ${isAdminRoute ? styles.registerAdmin : ''}`}>
       {/* Worker Ranking Widget */}
-      <section className={shell.surfaceCard}>
-        <h2 className={`${shell.sectionHeading} ${styles.rankingTitle}`}><i className="fas fa-trophy fa-fw" /> {t('workerRanking')}</h2>
-        <div className={shell.statGrid}>
+      <section className={`${shell.surfaceCard} ${isAdminRoute ? styles.adminRankingSurface : ''}`}>
+        <h2 className={`${shell.sectionHeading} ${styles.rankingTitle} ${isAdminRoute ? styles.adminRankingHeading : ''}`}><i className="fas fa-trophy fa-fw" /> {t('workerRanking')}</h2>
+        <div className={`${shell.statGrid} ${isAdminRoute ? styles.rankingStatGridAdmin : ''}`}>
           {ranking.topPerformer ? (
             <Link to={`${profileBase}/${ranking.topPerformer.worker.id}`} className={`${styles.rankingCard} ${styles.rankingCardGold} ${styles.rankingCardLink}`}>
               <span className={styles.rankingLabel}>{t('topPerformerThisWeek')}</span>
@@ -462,7 +408,7 @@ function RegisterManageWorkers() {
         </div>
       </section>
 
-      <div className={styles.filters}>
+      <div className={`${styles.filters} ${isAdminRoute ? styles.filtersAdmin : ''}`}>
         <input
           type="search"
           className={styles.search}
@@ -501,7 +447,7 @@ function RegisterManageWorkers() {
         </button>
       </div>
 
-      <div className={`${shell.surfaceCard} ${styles.tableWrap}`}>
+      <div className={`${shell.surfaceCard} ${styles.tableWrap} ${isAdminRoute ? styles.adminTableSurface : ''}`}>
         <table className={styles.table}>
           <thead>
             <tr>

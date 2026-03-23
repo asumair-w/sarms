@@ -20,7 +20,7 @@ import styles from './ExecutiveOverview.module.css'
  */
 const noopT = (k) => k
 
-export default function ExecutiveOverview({ data = {}, t = noopT, onDrillDown, zoneIds = [] }) {
+export default function ExecutiveOverview({ data = {}, t = noopT, onDrillDown, zoneIds = [], compact = false }) {
   const {
     operationalStatus,
     productionTrend,
@@ -30,41 +30,46 @@ export default function ExecutiveOverview({ data = {}, t = noopT, onDrillDown, z
     equipmentLoad,
   } = data
 
+  const gridClass = compact ? `${styles.chartGrid} ${styles.chartGridCompact}` : styles.chartGrid
+  const cardClass = compact ? `${styles.card} ${styles.cardCompact}` : styles.card
+  const titleClass = compact ? `${styles.cardTitle} ${styles.cardTitleCompact}` : styles.cardTitle
+  const wrapClass = compact ? `${styles.chartWrap} ${styles.chartWrapCompact}` : styles.chartWrap
+
   return (
-    <div className={styles.chartGrid} role="region" aria-label="Executive overview charts">
-      <div className={styles.card}>
-        <h3 className={styles.cardTitle}>{t('operationalStatus')}</h3>
-        <div className={styles.chartWrap}>
+    <div className={gridClass} role="region" aria-label="Executive overview charts">
+      <div className={cardClass}>
+        <h3 className={titleClass}>{t('operationalStatus')}</h3>
+        <div className={wrapClass}>
           <OperationalStatusChart data={operationalStatus} t={t} onSegmentClick={onDrillDown ? (payload) => onDrillDown({ chart: 'operationalStatus', ...payload }) : undefined} />
         </div>
       </div>
-      <div className={styles.card}>
-        <h3 className={styles.cardTitle}>{t('productionTrend')}</h3>
-        <div className={styles.chartWrap}>
+      <div className={cardClass}>
+        <h3 className={titleClass}>{t('productionTrend')}</h3>
+        <div className={wrapClass}>
           <ProductionTrendChart data={productionTrend} t={t} onSegmentClick={onDrillDown ? (payload) => onDrillDown({ chart: 'productionTrend', ...payload }) : undefined} />
         </div>
       </div>
-      <div className={styles.card}>
-        <h3 className={styles.cardTitle}>{t('activityByZone')}</h3>
-        <div className={styles.chartWrap}>
+      <div className={cardClass}>
+        <h3 className={titleClass}>{t('activityByZone')}</h3>
+        <div className={wrapClass}>
           <ZoneDistributionChart data={zoneDistribution} t={t} zoneIds={zoneIds} onSegmentClick={onDrillDown ? (payload) => onDrillDown({ chart: 'zoneDistribution', ...payload }) : undefined} />
         </div>
       </div>
-      <div className={styles.card}>
-        <h3 className={styles.cardTitle}>{t('systemRisk')}</h3>
-        <div className={styles.chartWrap}>
+      <div className={cardClass}>
+        <h3 className={titleClass}>{t('systemRisk')}</h3>
+        <div className={wrapClass}>
           <RiskRadarChart data={riskMetrics} t={t} onSegmentClick={onDrillDown ? (payload) => onDrillDown({ chart: 'riskRadar', ...payload }) : undefined} />
         </div>
       </div>
-      <div className={styles.card}>
-        <h3 className={styles.cardTitle}>{t('inventoryHealth')}</h3>
-        <div className={styles.chartWrap}>
+      <div className={cardClass}>
+        <h3 className={titleClass}>{t('inventoryHealth')}</h3>
+        <div className={wrapClass}>
           <InventoryHealthChart data={inventoryHealth} t={t} onSegmentClick={onDrillDown ? (payload) => onDrillDown({ chart: 'inventoryHealth', ...payload }) : undefined} />
         </div>
       </div>
-      <div className={styles.card}>
-        <h3 className={styles.cardTitle}>{t('equipmentLoad')}</h3>
-        <div className={styles.chartWrap}>
+      <div className={cardClass}>
+        <h3 className={titleClass}>{t('equipmentLoad')}</h3>
+        <div className={wrapClass}>
           <EquipmentLoadChart data={equipmentLoad} t={t} onSegmentClick={onDrillDown ? (payload) => onDrillDown({ chart: 'equipmentLoad', ...payload }) : undefined} />
         </div>
       </div>

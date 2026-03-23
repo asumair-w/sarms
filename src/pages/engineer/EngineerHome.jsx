@@ -310,16 +310,16 @@ export default function EngineerHome() {
 
   /* ECharts options – optimized for card space, balanced and readable */
   const chartOptionTasksByType = useMemo(() => ({
-    grid: { left: 16, right: 16, top: 28, bottom: 28, containLabel: true },
+    grid: { left: 12, right: 12, top: 22, bottom: 22, containLabel: true },
     xAxis: {
       type: 'category',
       data: typeChartData.map((d) => d.label),
-      axisLabel: { fontSize: 13, fontWeight: 600, color: '#334155', interval: 0 },
+      axisLabel: { fontSize: 11, fontWeight: 600, color: '#334155', interval: 0 },
     },
     yAxis: {
       type: 'value',
       splitLine: { show: true, lineStyle: { color: CHART_GRID } },
-      axisLabel: { fontSize: 12, fontWeight: 500, color: '#475569' },
+      axisLabel: { fontSize: 10, fontWeight: 500, color: '#475569' },
     },
     series: [{
       type: 'bar',
@@ -328,7 +328,7 @@ export default function EngineerHome() {
         itemStyle: { color: d.color },
         emphasis: { itemStyle: { color: d.hoverColor } },
       })),
-      barMaxWidth: 72,
+      barMaxWidth: 56,
     }],
     tooltip: { trigger: 'axis', confine: true },
   }), [typeChartData])
@@ -342,8 +342,8 @@ export default function EngineerHome() {
       endAngle: -20,
       min: 0,
       max: 100,
-      progress: { show: true, width: 22, roundCap: true, itemStyle: { color: CHART_HEX.success } },
-      axisLine: { lineStyle: { width: 22, color: [[1, CHART_GRID]] } },
+      progress: { show: true, width: 18, roundCap: true, itemStyle: { color: CHART_HEX.success } },
+      axisLine: { lineStyle: { width: 18, color: [[1, CHART_GRID]] } },
       axisTick: { show: false },
       splitLine: { show: false },
       axisLabel: { show: false },
@@ -351,14 +351,14 @@ export default function EngineerHome() {
       detail: {
         valueAnimation: true,
         offsetCenter: [0, '-5%'],
-        fontSize: 34,
+        fontSize: 28,
         fontWeight: 'bold',
         formatter: '{value}%',
         color: CHART_HEX.success,
       },
       title: {
         offsetCenter: [0, '16%'],
-        fontSize: 15,
+        fontSize: 12,
         fontWeight: 600,
         color: '#334155',
         formatter: '{name}',
@@ -385,7 +385,7 @@ export default function EngineerHome() {
         itemGap: 12,
         itemWidth: 10,
         itemHeight: 10,
-        textStyle: { fontSize: 12, fontWeight: 600, color: '#1e293b' },
+        textStyle: { fontSize: 10, fontWeight: 600, color: '#1e293b' },
         data: legendData,
       },
       series: [{
@@ -417,7 +417,7 @@ export default function EngineerHome() {
         indicator: indicators,
         center: ['50%', '52%'],
         radius: '58%',
-        axisName: { fontSize: 11, fontWeight: 600, color: '#334155' },
+        axisName: { fontSize: 9, fontWeight: 600, color: '#334155' },
         splitArea: { areaStyle: { color: ['rgba(92, 123, 92, 0.08)', 'rgba(92, 123, 92, 0.04)'] } },
         splitLine: { lineStyle: { color: CHART_GRID } },
         axisLine: { lineStyle: { color: CHART_GRID } },
@@ -527,7 +527,7 @@ export default function EngineerHome() {
     <div className={styles.page}>
       <header className={styles.pageHeader}>
         <h1 className={styles.pageTitle}>{t('pageTitleHome')}</h1>
-        <SystemHealthScore overviewData={overviewData} />
+        <SystemHealthScore overviewData={overviewData} compact />
       </header>
 
       {/* KPI row – aligned with Reports/Inventory card style */}
@@ -581,7 +581,7 @@ export default function EngineerHome() {
             <div className={styles.chartCardBody}>
               <div className={styles.chartEchartsWrap}>
                 {chartsMounted && (
-                  <ReactECharts option={chartOptionTasksByType} style={{ width: '100%', height: '100%', minHeight: 220 }} opts={{ renderer: 'canvas' }} notMerge />
+                  <ReactECharts option={chartOptionTasksByType} style={{ width: '100%', height: '100%', minHeight: 176 }} opts={{ renderer: 'canvas' }} notMerge />
                 )}
               </div>
             </div>
@@ -592,7 +592,7 @@ export default function EngineerHome() {
               <div className={styles.chartCardBodyCol}>
                 <div className={styles.chartEchartsWrap}>
                   {chartsMounted && (
-                    <ReactECharts option={chartOptionWeeklyProgress} style={{ width: '100%', height: '100%', minHeight: 220 }} opts={{ renderer: 'canvas' }} notMerge />
+                    <ReactECharts option={chartOptionWeeklyProgress} style={{ width: '100%', height: '100%', minHeight: 176 }} opts={{ renderer: 'canvas' }} notMerge />
                   )}
                 </div>
                 <p className={styles.chartCardCaption}>{t('homeWeeklyProgressCaption')}</p>
@@ -604,7 +604,7 @@ export default function EngineerHome() {
             <div className={styles.chartCardBody}>
               <div className={styles.chartEchartsWrap}>
                 {chartsMounted && (
-                  <ReactECharts option={chartOptionTaskStatus} style={{ width: '100%', height: '100%', minHeight: 220 }} opts={{ renderer: 'canvas' }} notMerge />
+                  <ReactECharts option={chartOptionTaskStatus} style={{ width: '100%', height: '100%', minHeight: 176 }} opts={{ renderer: 'canvas' }} notMerge />
                 )}
               </div>
             </div>
@@ -614,7 +614,7 @@ export default function EngineerHome() {
             <div className={styles.chartCardBody}>
               <div className={styles.chartEchartsWrap}>
                 {chartsMounted && (
-                  <ReactECharts option={chartOptionTasksByZone} style={{ width: '100%', height: '100%', minHeight: 220 }} opts={{ renderer: 'canvas' }} notMerge />
+                  <ReactECharts option={chartOptionTasksByZone} style={{ width: '100%', height: '100%', minHeight: 176 }} opts={{ renderer: 'canvas' }} notMerge />
                 )}
               </div>
             </div>
@@ -685,7 +685,7 @@ export default function EngineerHome() {
           aria-expanded={recentFaultsExpanded}
         >
           <i className={`fas fa-fw ${recentFaultsExpanded ? 'fa-chevron-down' : lang === 'ar' ? 'fa-chevron-left' : 'fa-chevron-right'}`} />
-          <h2 className={styles.sectionTitleCollapse}><i className="fas fa-wrench fa-fw" /> {t('homeRecentFaultLogs')}</h2>
+          <h2 className={styles.sectionTitleCollapse}>{t('homeRecentFaultLogs')}</h2>
           {equipmentTicketsForHome.length > 0 && <span className={styles.collapseBadge}>{equipmentTicketsForHome.length}</span>}
         </button>
         {recentFaultsExpanded && (

@@ -468,3 +468,132 @@
 .collapseHeader[aria-expanded="false"] .collapseCaret {
   transform: rotate(-90deg);
 }
+
+/* Equipment Control compact density (tickets + completed list) */
+.page {
+  max-width: none;
+  margin: 0;
+  gap: 0.65rem;
+}
+
+@media (min-width: 768px) {
+  .page {
+    gap: 0.8rem;
+  }
+}
+
+.section,
+.analyticsSection {
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
+}
+
+.sectionTitle {
+  margin: 0 0 0.45rem;
+  font-size: 0.92rem;
+}
+
+.subTitle {
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+  gap: 0.35rem;
+}
+
+.hint {
+  font-size: 0.72rem;
+}
+
+.filterBadge {
+  gap: 0.2rem;
+  padding: 0.12rem 0.35rem;
+  font-size: 0.62rem;
+  border-radius: 999px;
+}
+
+.filterBadgeClear {
+  font-size: 0.85rem;
+}
+
+.ticketCards {
+  gap: 0.45rem;
+}
+
+.ticketCard {
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  border-width: 1px;
+  gap: 0.22rem;
+}
+
+.ticketCardUrgencyGreen,
+.ticketCardUrgencyYellow,
+.ticketCardUrgencyRed,
+.ticketCardUrgencyOverdue,
+.ticketCardUrgencyFault,
+.ticketCardCompleted {
+  border-left-width: 3px;
+}
+
+.ticketCardTitle {
+  font-size: 0.8rem;
+}
+
+.ticketCardMeta {
+  font-size: 0.68rem;
+}
+
+.ticketCardType {
+  padding: 0.12rem 0.35rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
+}
+
+.ticketCardActions {
+  margin-top: 0.2rem;
+}
+
+.ticketCardViewHint {
+  font-size: 0.62rem;
+  margin-top: 0.2rem;
+}
+
+.collapseHeader {
+  gap: 0.35rem;
+  margin-top: 0.65rem;
+  margin-bottom: 0.4rem;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.72rem;
+  border-radius: 7px;
+}
+
+.collapseCaret {
+  font-size: 0.62rem;
+}
+
+.completedFilters {
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+}
+
+.completedFilterLabel {
+  font-size: 0.65rem;
+}
+
+.completedFilterSelect,
+.completedFilterInput {
+  min-width: 120px;
+  padding: 0.28rem 0.45rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+}
+
+.resolvePhotoPreview {
+  max-height: 140px;
+  margin-top: 0.35rem;
+}
+
+.resolutionPhoto {
+  max-height: 220px;
+}

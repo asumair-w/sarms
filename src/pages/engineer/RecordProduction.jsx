@@ -1,12 +1,11 @@
-import { useState, useMemo, useRef } from 'react'
-import { jsPDF } from 'jspdf'
-import html2canvas from 'html2canvas'
+import { useState, useMemo } from 'react'
 import { UNITS } from '../../data/recordEvent'
 import { getInitialZones } from '../../data/workerFlow'
 import { useAppStore } from '../../context/AppStoreContext'
 import { useLanguage } from '../../context/LanguageContext'
 import { getTranslation } from '../../i18n/translations'
 import { nextRecordId } from '../../utils/idGenerators'
+import { escapeHtmlForPrint, buildSarmsPrintHtml, openSarmsPrintWindow } from '../../utils/sarmsPrintHtml'
 import { USE_SUPABASE_ACTIVE } from '../../config/dataBackend'
 import { insertHarvestLog } from '../../lib/supabaseHarvestAdapter'
 import { resolveWorkerUuidByEmployeeLogin } from '../../lib/supabaseTasksAdapter'
@@ -55,8 +54,6 @@ export default function RecordProduction() {
     const d = new Date()
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   }) // 'YYYY-MM' when custom
-  const harvestTableRef = useRef(null)
-
   /** Summary period bounds: current period and previous equivalent period (full month or 7d). */
   const summaryPeriodBounds = useMemo(() => {
     const now = new Date()
@@ -306,39 +303,66 @@ export default function RecordProduction() {
   }, [harvestRecords, harvestFilterZone, harvestFilterSearch, harvestFilterPeriod, harvestDateFrom, harvestDateTo])
 
   function exportHarvestLogPDF() {
-    const el = harvestTableRef.current
-    if (!el) return
-    html2canvas(el, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-    }).then((canvas) => {
-      const imgData = canvas.toDataURL('image/png')
-      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-      const margin = 12
-      const pageW = pdf.internal.pageSize.getWidth()
-      const pageH = pdf.internal.pageSize.getHeight()
-      const w = pageW - margin * 2
-      const h = (canvas.height * w) / canvas.width
+    if (filteredHarvestRecords.length === 0) return
 
-      pdf.setFontSize(14)
-      pdf.setFont('helvetica', 'bold')
-      pdf.text(t('rpHarvestLog'), margin, 10)
-      pdf.setFontSize(9)
-      pdf.setFont('helvetica', 'normal')
-      const periodLabel = harvestFilterPeriod === '7d' ? t('rpLast7Days') : harvestFilterPeriod === '30d' ? t('rpLast30Days') : harvestFilterPeriod === 'custom' ? `${harvestDateFrom || '—'} ${t('monitorTo')} ${harvestDateTo || '—'}` : t('allTime')
-      const filterLine = `${t('rpGenerated')}: ${new Date().toLocaleString()}  |  ${t('rpFilters')}: ${t('rpZone')} ${harvestFilterZone ? (ZONE_LABELS[harvestFilterZone] || harvestFilterZone) : t('monitorAll')}  |  ${t('rpPeriod')} ${periodLabel}${harvestFilterSearch.trim() ? `  |  ${t('searchPlaceholder')}: ${harvestFilterSearch.trim()}` : ''}`
-      const splitLines = pdf.splitTextToSize(filterLine, w)
-      let y = 16
-      splitLines.forEach((line) => { pdf.text(line, margin, y); y += 5 })
-      y += 4
-      const imgH = Math.min(h, pageH - y - margin)
-      const imgW = (canvas.width * imgH) / canvas.height
-      const imgX = margin + (w - imgW) / 2
-      pdf.addImage(imgData, 'PNG', imgX, y, imgW, imgH)
-      pdf.save(`Harvest-log-${new Date().toISOString().slice(0, 10)}.pdf`)
-    }).catch(() => {})
+    const dir = lang === 'ar' ? 'rtl' : 'ltr'
+    const periodLabel =
+      harvestFilterPeriod === '7d'
+        ? t('rpLast7Days')
+        : harvestFilterPeriod === '30d'
+          ? t('rpLast30Days')
+          : harvestFilterPeriod === 'custom'
+            ? `${harvestDateFrom || '—'} ${t('monitorTo')} ${harvestDateTo || '—'}`
+            : t('allTime')
+    const zoneLabel = harvestFilterZone ? (ZONE_LABELS[harvestFilterZone] || harvestFilterZone) : t('monitorAll')
+    const searchLine = harvestFilterSearch.trim() || '—'
+
+    const rowsHtml = filteredHarvestRecords.map((r) => {
+      const zoneStr = r.zone || r.zoneId || '—'
+      const linesStr = r.linesArea || r.lines || '—'
+      const dtStr = r.dateTime
+        ? new Date(r.dateTime).toLocaleString()
+        : r.createdAt
+          ? new Date(r.createdAt).toLocaleString()
+          : '—'
+      const qtyStr = r.quantity != null ? String(r.quantity) : '—'
+      const unitStr = r.unit || '—'
+      const notesStr = (r.notes || '').trim() || '—'
+      return `<tr>
+        <td>${escapeHtmlForPrint(String(zoneStr))}</td>
+        <td>${escapeHtmlForPrint(String(linesStr))}</td>
+        <td>${escapeHtmlForPrint(dtStr)}</td>
+        <td>${escapeHtmlForPrint(qtyStr)}</td>
+        <td>${escapeHtmlForPrint(unitStr)}</td>
+        <td>${escapeHtmlForPrint(notesStr)}</td>
+      </tr>`
+    }).join('')
+
+    const filtersInnerHtml = `<div><strong>${escapeHtmlForPrint(t('monitorFiltersApplied'))}</strong></div>
+<div>${escapeHtmlForPrint(t('rpGenerated'))}: ${escapeHtmlForPrint(new Date().toLocaleString())}</div>
+<div>${escapeHtmlForPrint(t('rpZone'))}: ${escapeHtmlForPrint(zoneLabel)} · ${escapeHtmlForPrint(t('rpPeriod'))}: ${escapeHtmlForPrint(periodLabel)}</div>
+<div>${escapeHtmlForPrint(t('searchPlaceholder'))}: ${escapeHtmlForPrint(searchLine)}</div>
+<div>${escapeHtmlForPrint(t('monitorRows'))}: ${filteredHarvestRecords.length}</div>`
+
+    const theadRowHtml = [
+      t('rpZone'),
+      t('rpLinesAreaRange'),
+      t('rpDateTime'),
+      t('rpQuantity'),
+      t('rpUnit'),
+      t('rpComment'),
+    ].map((label) => `<th>${escapeHtmlForPrint(label)}</th>`).join('')
+
+    const html = buildSarmsPrintHtml({
+      title: t('rpHarvestLog'),
+      metaLine: new Date().toLocaleString(),
+      filtersInnerHtml,
+      theadRowHtml,
+      tbodyHtml: rowsHtml,
+      dir,
+      lang,
+    })
+    openSarmsPrintWindow(html)
   }
 
   function validateForm() {
@@ -696,7 +720,7 @@ export default function RecordProduction() {
         <div className={`${styles.sectionHeader} ${styles.sectionHeaderStatic}`}>
           <h2 className={styles.sectionTitle}><i className="fas fa-wheat-awn fa-fw" /> {t('rpHarvestLog')}</h2>
         </div>
-        <div className={invStyles.harvestFilters}>
+        <div className={`${invStyles.harvestFilters} ${styles.rpHarvestFilters}`}>
               <select
                 value={harvestFilterZone}
                 onChange={(e) => setHarvestFilterZone(e.target.value)}
@@ -744,19 +768,19 @@ export default function RecordProduction() {
                 placeholder={t('searchZonePlaceholder')}
                 className={invStyles.filterInput}
               />
-              <div className={invStyles.filtersBarExport}>
-                <button type="button" className={invStyles.btnSecondary} onClick={exportHarvestLogPDF} disabled={filteredHarvestRecords.length === 0} title="Download as PDF">
+              <div className={styles.rpHarvestExportWrap}>
+                <button type="button" className={styles.rpExportPdfBtn} onClick={exportHarvestLogPDF} disabled={filteredHarvestRecords.length === 0} title="Download as PDF">
                   <i className="fas fa-file-pdf fa-fw" /> {t('rpExportPdf')}
                 </button>
               </div>
             </div>
             {filteredHarvestRecords.length === 0 ? (
-              <p className={invStyles.harvestEmpty}>
+              <p className={`${invStyles.harvestEmpty} ${styles.rpHarvestEmpty}`}>
                 {harvestRecords.length === 0 ? t('rpNoHarvestInventoryYet') : t('rpNoRecordsMatchFilter')}
               </p>
             ) : (
-              <div className={invStyles.harvestTableWrap} ref={harvestTableRef}>
-                <table className={invStyles.table}>
+              <div className={`${invStyles.harvestTableWrap} ${styles.rpHarvestTableWrap}`}>
+                <table className={`${invStyles.table} ${styles.rpHarvestTable}`}>
                   <thead>
                     <tr>
                       <th>{t('rpZone')}</th>
@@ -777,10 +801,10 @@ export default function RecordProduction() {
                         <td>{r.dateTime ? new Date(r.dateTime).toLocaleString() : (r.createdAt ? new Date(r.createdAt).toLocaleString() : '—')}</td>
                         <td>{r.quantity != null ? r.quantity : '—'}</td>
                         <td>{r.unit || '—'}</td>
-                        <td className={invStyles.cellNotes}>{r.notes || '—'}</td>
+                        <td className={`${invStyles.cellNotes} ${styles.rpCellNotes}`}>{r.notes || '—'}</td>
                         <td>
                           {r.imageData ? (
-                            <button type="button" className={invStyles.photoThumb} onClick={() => setViewHarvestImage(r.imageData)}>
+                            <button type="button" className={`${invStyles.photoThumb} ${styles.rpPhotoThumb}`} onClick={() => setViewHarvestImage(r.imageData)}>
                               <img src={r.imageData} alt="" />
                             </button>
                           ) : '—'}

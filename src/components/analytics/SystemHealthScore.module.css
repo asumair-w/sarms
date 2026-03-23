@@ -60,3 +60,21 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+
+.wrapCompact {
+  gap: 0.15rem;
+}
+
+.ringCompact {
+  width: 56px;
+  height: 56px;
+}
+
+.wrapCompact .value {
+  font-size: 0.78rem;
+}
+
+.wrapCompact .label {
+  font-size: 0.58rem;
+  letter-spacing: 0.028em;
+}

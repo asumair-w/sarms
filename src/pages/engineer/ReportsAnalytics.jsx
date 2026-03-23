@@ -151,6 +151,7 @@ export default function ReportsAnalytics() {
   const location = useLocation()
   const { lang } = useLanguage()
   const namespace = location.pathname.startsWith('/admin') ? 'admin' : 'engineer'
+  const isAdmin = namespace === 'admin'
   const t = (key) => getTranslation(lang, namespace, key)
   const formatMessage = (str, params) => {
     if (!params || typeof str !== 'string') return str
@@ -1122,14 +1123,14 @@ export default function ReportsAnalytics() {
   }
 
   return (
-    <div ref={pageCaptureRef} className={`${shell.page} ${styles.pageExtend}`}>
-      <header className={shell.pageHeader}>
+    <div ref={pageCaptureRef} className={`${shell.page} ${styles.pageExtend} ${isAdmin ? styles.reportsAdmin : ''}`}>
+      <header className={`${shell.pageHeader} ${isAdmin ? styles.reportsAdminPageHeader : ''}`}>
         <div className={shell.pageHeaderTitleBlock}>
-          <h1 className={shell.pageTitle}>{t('pageTitleReports')}</h1>
-          <p className={shell.pageSubtitle}>{t('pageSubtitleReports')}</p>
+          <h1 className={`${shell.pageTitle} ${isAdmin ? styles.reportsAdminPageTitle : ''}`}>{t('pageTitleReports')}</h1>
+          <p className={`${shell.pageSubtitle} ${isAdmin ? styles.reportsAdminPageSubtitle : ''}`}>{t('pageSubtitleReports')}</p>
         </div>
         <div className={shell.pageHeaderHealth}>
-          <SystemHealthScore overviewData={overviewData} />
+          <SystemHealthScore overviewData={overviewData} compact={isAdmin} />
         </div>
       </header>
 
@@ -1232,20 +1233,20 @@ export default function ReportsAnalytics() {
               <div className={styles.filterGroup}>
                 <label>{t('sessionStatus')}</label>
                 <select value={filters.sessionStatus} onChange={(e) => setFilters((f) => ({ ...f, sessionStatus: e.target.value }))} className={styles.select}>
-                  <option value="">All statuses</option>
-                  <option value={SESSION_STATUS.ON_TIME}>On time</option>
-                  <option value={SESSION_STATUS.DELAYED}>Delayed</option>
-                  <option value={SESSION_STATUS.FLAGGED}>Flagged</option>
+                  <option value="">{t('allStatuses')}</option>
+                  <option value={SESSION_STATUS.ON_TIME}>{t('onTime')}</option>
+                  <option value={SESSION_STATUS.DELAYED}>{t('delayed')}</option>
+                  <option value={SESSION_STATUS.FLAGGED}>{t('flagged')}</option>
                 </select>
               </div>
             </div>
             <div className={styles.filterActions}>
-              <button type="button" className={styles.applyBtn} onClick={applyFilters}>Apply filters</button>
-              <button type="button" className={styles.clearBtn} onClick={clearFilters}>Clear filters</button>
+              <button type="button" className={styles.applyBtn} onClick={applyFilters}>{t('applyFilters')}</button>
+              <button type="button" className={styles.clearBtn} onClick={clearFilters}>{t('clearFilters')}</button>
             </div>
             {activeFilterLabels.length > 0 && (
               <div className={styles.filterStateIndicator}>
-                <span className={styles.filterStateLabel}>Active filters:</span>
+                <span className={styles.filterStateLabel}>{t('activeFiltersLabel')}</span>
                 {activeFilterLabels.map((l) => (
                   <span key={l} className={styles.filterStateChip}>{l}</span>
                 ))}
@@ -1256,7 +1257,7 @@ export default function ReportsAnalytics() {
       </section>
 
       {/* KPI cards below Summary Filter – same spec as Equipment / Monitor */}
-      <section className={shell.statGrid}>
+      <section className={`${shell.statGrid} ${isAdmin ? styles.statGridAdmin : ''}`}>
         <div className={`${styles.summaryKpiCard} ${styles.summaryKpiCardProduction}`}>
           <span className={styles.metricLabel}>{t('totalProduction')}</span>
           <div className={styles.summaryKpiCardBody}>
@@ -1360,9 +1361,9 @@ export default function ReportsAnalytics() {
         ZONE_LABEL={ZONE_LABEL}
       />
 
-      <section className={`${shell.surfaceCard} ${styles.explorerSection}`}>
-        <div className={styles.explorerSectionHeader}>
-          <h2 className={`${shell.sectionHeading} ${styles.sectionTitleMerge}`}>{t('analyticsCharts')}</h2>
+      <section className={`${shell.surfaceCard} ${styles.explorerSection} ${isAdmin ? styles.explorerSectionAdmin : ''}`}>
+        <div className={`${styles.explorerSectionHeader} ${isAdmin ? styles.explorerSectionHeaderAdmin : ''}`}>
+          <h2 className={`${shell.sectionHeading} ${styles.sectionTitleMerge} ${isAdmin ? styles.reportsAdminSectionHeading : ''}`}>{t('analyticsCharts')}</h2>
           <div className={styles.chartsViewTabs}>
             <button
               type="button"
@@ -1415,7 +1416,7 @@ export default function ReportsAnalytics() {
           <div ref={reportsContentRef}>
             {openExplorer === 'executive' && (
               <>
-                <ExecutiveOverview data={overviewData} t={t} onDrillDown={handleDrillDown} zoneIds={zonesList.map((z) => z.id)} />
+                <ExecutiveOverview data={overviewData} t={t} onDrillDown={handleDrillDown} zoneIds={zonesList.map((z) => z.id)} compact={isAdmin} />
                 <div className={styles.autoInsightBox} data-type={autoInsight?.type ?? 'stable'}>
                   <span className={styles.autoInsightIcon}>
                     {autoInsight?.type === 'warning' && <i className="fas fa-exclamation-triangle" />}

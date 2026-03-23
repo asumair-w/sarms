@@ -21,6 +21,25 @@
   }
 }
 
+/* Admin dashboard: ~80% zoom density — tighter grid and shorter chart cells */
+.chartGridCompact {
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+@media (min-width: 640px) {
+  .chartGridCompact {
+    gap: 0.55rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .chartGridCompact {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.58rem;
+  }
+}
+
 .card {
   background: #f1f5f9;
   border-radius: 12px;
@@ -44,4 +63,26 @@
   min-height: 280px;
   height: 320px;
   box-sizing: border-box;
+}
+
+.cardCompact {
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+}
+
+.cardTitleCompact {
+  margin-bottom: 0.32rem;
+  font-size: 0.72rem;
+}
+
+.chartWrapCompact {
+  min-height: 168px;
+  height: 184px;
+}
+
+@media (min-width: 1024px) {
+  .chartWrapCompact {
+    min-height: 176px;
+    height: 192px;
+  }
 }

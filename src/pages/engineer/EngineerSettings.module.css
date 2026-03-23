@@ -5,14 +5,14 @@
 }
 
 .page {
-  max-width: 1400px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   padding: 0;
-  padding-bottom: 1.5rem;
+  padding-bottom: 0.8rem;
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 0.65rem;
   box-sizing: border-box;
 }
 
@@ -22,17 +22,17 @@
 
 .pageTitle {
   margin: 0;
-  font-size: 1.75rem;
-  font-weight: 800;
+  font-size: 0.92rem;
+  font-weight: 700;
   color: #0f172a;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
 }
 
 /* Cards grid – General & Account side by side on desktop */
 .settingsGrid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 1.25rem;
+  gap: 0.65rem;
   width: 100%;
   box-sizing: border-box;
 }
@@ -40,7 +40,7 @@
 @media (min-width: 640px) {
   .settingsGrid {
     grid-template-columns: repeat(2, 1fr);
-    gap: 1.5rem;
+    gap: 0.8rem;
   }
 }
 
@@ -54,15 +54,15 @@
   width: 100%;
   box-sizing: border-box;
   background: #fff;
-  border-radius: 16px;
-  padding: 1.5rem;
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   border: 1px solid #e2e8f0;
 }
 
 .sectionTitle {
-  margin: 0 0 0.5rem;
-  font-size: 1.15rem;
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
   font-weight: 700;
   color: #0f172a;
   letter-spacing: -0.02em;
@@ -77,8 +77,8 @@
 }
 
 .sectionDesc {
-  margin: 0 0 1.25rem;
-  font-size: 0.9rem;
+  margin: 0 0 0.45rem;
+  font-size: 0.68rem;
   color: #64748b;
   line-height: 1.5;
 }
@@ -87,11 +87,11 @@
 .row {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.3rem;
 }
 
 .label {
-  font-size: 0.875rem;
+  font-size: 0.65rem;
   font-weight: 600;
   color: #334155;
 }
@@ -101,7 +101,7 @@
   display: inline-flex;
   align-items: stretch;
   align-self: center;
-  border-radius: 8px;
+  border-radius: 6px;
   overflow: hidden;
   background: #ebebeb;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
@@ -109,9 +109,9 @@
 
 .langBtn,
 .langBtnActive {
-  min-height: 32px;
-  padding: 0.3rem 0.85rem;
-  font-size: 0.8rem;
+  min-height: 0;
+  padding: 0.22rem 0.6rem;
+  font-size: 0.68rem;
   font-weight: 600;
   border: none;
   cursor: pointer;
@@ -148,7 +148,7 @@
 .accountRow {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.35rem;
 }
 
 .accountItem {
@@ -156,14 +156,14 @@
   align-items: baseline;
   gap: 0.5rem;
   flex-wrap: wrap;
-  font-size: 0.95rem;
+  font-size: 0.72rem;
   color: #475569;
 }
 
 .accountLabel {
   font-weight: 600;
   color: #334155;
-  min-width: 4.5rem;
+  min-width: 3.8rem;
 }
 
 .accountValue {

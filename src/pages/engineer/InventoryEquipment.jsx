@@ -1,7 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { jsPDF } from 'jspdf'
-import html2canvas from 'html2canvas'
 import {
   INVENTORY_CATEGORIES,
   INVENTORY_STATUS,
@@ -14,6 +12,7 @@ import { useAppStore } from '../../context/AppStoreContext'
 import { useLanguage } from '../../context/LanguageContext'
 import { getTranslation } from '../../i18n/translations'
 import { nextMovementId, nextInventoryItemId, nextFaultId } from '../../utils/idGenerators'
+import { escapeHtmlForPrint, buildSarmsPrintHtml, openSarmsPrintWindow } from '../../utils/sarmsPrintHtml'
 import styles from './InventoryEquipment.module.css'
 
 /** Today's date (local timezone) as YYYY-MM-DD for comparison */
@@ -205,63 +204,51 @@ export default function InventoryEquipment() {
   const categoryLabel = (i) => (i.category === 'other' && (i.customCategory || '')) ? i.customCategory : (CAT_LABELS[i.category] ?? i.category)
 
   function exportInventoryPDF() {
-    const el = stockTableRef.current
-    if (!el) return
-    html2canvas(el, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-    }).then((canvas) => {
-      const imgData = canvas.toDataURL('image/png')
-      const pdf = new jsPDF({
-        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
-        unit: 'mm',
-        format: 'a4',
-      })
-      const pdfW = pdf.internal.pageSize.getWidth()
-      const pdfH = pdf.internal.pageSize.getHeight()
-      const margin = 10
-      const w = pdfW - margin * 2
-      const h = (canvas.height * w) / canvas.width
+    if (filteredInventory.length === 0) return
 
-      pdf.setFontSize(14)
-      pdf.setFont('helvetica', 'bold')
-      pdf.text(t('invManageStock'), margin, 12)
-      pdf.setFontSize(9)
-      pdf.setFont('helvetica', 'normal')
-      pdf.text(new Date().toLocaleString(), margin, 18)
+    const dir = lang === 'ar' ? 'rtl' : 'ltr'
+    const categoryLabelVal = filterCategory ? getCategoryDisplayLabel(filterCategory) : t('invAll')
+    const statusLabelVal = filterStatus ? getStatusDisplayLabel(filterStatus) : t('invAll')
+    const searchValue = filterSearch.trim() || '—'
 
-      let y = 24
-      pdf.setFontSize(10)
-      pdf.setFont('helvetica', 'bold')
-      pdf.text('Filters applied:', margin, y)
-      y += 5
-      const categoryLabelVal = filterCategory ? getCategoryDisplayLabel(filterCategory) : t('invAll')
-      const statusLabelVal = filterStatus ? getStatusDisplayLabel(filterStatus) : t('invAll')
-      const searchValue = filterSearch.trim() || '—'
-      pdf.setFont('helvetica', 'normal')
-      pdf.setFontSize(9)
-      const filterLine1 = `${t('invCategory')}: ${categoryLabelVal}   ·   ${t('invStatus')}: ${statusLabelVal}`
-      const filterLine2 = `Search: ${searchValue}`
-      const filterLine3 = `Needs refill only: ${filterNeedsRefillOnly ? 'Yes' : 'No'}   ·   Updated last 7 days: ${filterUpdatedLast7Days ? 'Yes' : 'No'}   ·   Rows: ${filteredInventory.length}`
-      const lineH = 5
-      const split1 = pdf.splitTextToSize(filterLine1, w)
-      split1.forEach((line) => { pdf.text(line, margin, y); y += lineH })
-      pdf.text(filterLine2, margin, y); y += lineH
-      const split3 = pdf.splitTextToSize(filterLine3, w)
-      split3.forEach((line) => { pdf.text(line, margin, y); y += lineH })
-      y += 3
-      pdf.setDrawColor(220, 220, 220)
-      pdf.line(margin, y, margin + w, y)
-      y += 4
-      const headerH = y
-      const imgH = Math.min(h, pdfH - headerH - 4)
-      const imgW = (canvas.width * imgH) / canvas.height
-      const imgX = margin + (w - imgW) / 2
-      pdf.addImage(imgData, 'PNG', imgX, headerH, imgW, imgH)
-      pdf.save(`Manage-Stock-${new Date().toISOString().slice(0, 10)}.pdf`)
-    }).catch(() => {})
+    const rowsHtml = filteredInventory.map((i) => {
+      const catDisplay =
+        i.category === 'other' && (i.customCategory || '') ? i.customCategory : getCategoryDisplayLabel(i.category)
+      const lastStr = i.lastUpdated ? new Date(i.lastUpdated).toLocaleString() : '—'
+      return `<tr>
+        <td>${escapeHtmlForPrint(String(i.name ?? ''))}</td>
+        <td>${escapeHtmlForPrint(String(catDisplay ?? ''))}</td>
+        <td>${escapeHtmlForPrint(String(i.quantity != null ? i.quantity : '—'))}</td>
+        <td>${escapeHtmlForPrint(String(i.unit ?? '—'))}</td>
+        <td>${escapeHtmlForPrint(getStatusDisplayLabel(i.status))}</td>
+        <td>${escapeHtmlForPrint(lastStr)}</td>
+      </tr>`
+    }).join('')
+
+    const filtersInnerHtml = `<div><strong>${escapeHtmlForPrint(t('monitorFiltersApplied'))}</strong></div>
+<div>${escapeHtmlForPrint(t('invCategory'))}: ${escapeHtmlForPrint(categoryLabelVal)} · ${escapeHtmlForPrint(t('invStatus'))}: ${escapeHtmlForPrint(statusLabelVal)}</div>
+<div>${escapeHtmlForPrint(t('invSearch'))}: ${escapeHtmlForPrint(searchValue)}</div>
+<div>${escapeHtmlForPrint(t('needsRefill'))}: ${escapeHtmlForPrint(filterNeedsRefillOnly ? t('yes') : t('no'))} · ${escapeHtmlForPrint(t('invFilterByLast7Days'))}: ${escapeHtmlForPrint(filterUpdatedLast7Days ? t('yes') : t('no'))} · ${escapeHtmlForPrint(t('monitorRows'))}: ${filteredInventory.length}</div>`
+
+    const theadRowHtml = [
+      t('itemName'),
+      t('invCategory'),
+      t('invQuantity'),
+      t('invUnit'),
+      t('invStatus'),
+      t('lastUpdated'),
+    ].map((label) => `<th>${escapeHtmlForPrint(label)}</th>`).join('')
+
+    const html = buildSarmsPrintHtml({
+      title: t('invManageStock'),
+      metaLine: new Date().toLocaleString(),
+      filtersInnerHtml,
+      theadRowHtml,
+      tbodyHtml: rowsHtml,
+      dir,
+      lang,
+    })
+    openSarmsPrintWindow(html)
   }
 
   function handleSaveEdit(e) {

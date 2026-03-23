@@ -1,7 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import html2canvas from 'html2canvas'
-import { jsPDF } from 'jspdf'
 import { useNavigate } from 'react-router-dom'
 import {
   getSessionStatus,
@@ -14,6 +12,7 @@ import { DEPARTMENT_OPTIONS, getQRCodeUrl } from '../../data/engineerWorkers'
 import { TASK_STATUS } from '../../data/assignTask'
 import { useAppStore } from '../../context/AppStoreContext'
 import { nextRecordId } from '../../utils/idGenerators'
+import { escapeHtmlForPrint, buildSarmsPrintHtml, openSarmsPrintWindow } from '../../utils/sarmsPrintHtml'
 import { useLanguage } from '../../context/LanguageContext'
 import { getTranslation } from '../../i18n/translations'
 import {
@@ -116,7 +115,6 @@ export default function MonitorActiveWork() {
   const [filterZone, setFilterZone] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [searchWorker, setSearchWorker] = useState('')
-  const activeWorkersTableRef = useRef(null)
   const opsLogListRef = useRef(null)
   const [clickedCard, setClickedCard] = useState(null)
   const [viewSession, setViewSession] = useState(null)
@@ -302,24 +300,22 @@ export default function MonitorActiveWork() {
 
   function exportOpsLogPDF() {
     if (filteredOpsLog.length === 0) return
-    const wrap = document.createElement('div')
-    wrap.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;padding:8px;font-family:system-ui,-apple-system,sans-serif;font-size:12px;direction:ltr;'
-    const table = document.createElement('table')
-    table.style.cssText = 'border-collapse:collapse;width:100%;min-width:1150px;'
-    const thead = document.createElement('thead')
-    const headerRow = document.createElement('tr')
-    const headers = ['#', t('monitorWorker'), t('assignZone'), t('monitorLines'), t('monitorDateTime'), t('monitorDuration'), t('monitorQuantity'), t('monitorNotesLabel')]
-    headers.forEach((h) => {
-      const th = document.createElement('th')
-      th.textContent = h
-      th.style.cssText = 'text-align:left;padding:6px 8px;border:1px solid #b4b4b4;background:#f1f5f9;font-weight:bold;'
-      headerRow.appendChild(th)
-    })
-    thead.appendChild(headerRow)
-    table.appendChild(thead)
-    const tbody = document.createElement('tbody')
-    const cellStyle = 'text-align:left;padding:5px 8px;border:1px solid #b4b4b4;'
-    filteredOpsLog.forEach((r, i) => {
+
+    const reportTitle = t('opsLog')
+    const dir = lang === 'ar' ? 'rtl' : 'ltr'
+    const periodLabel =
+      opsFilterPeriod === '7d'
+        ? t('last7Days')
+        : opsFilterPeriod === '30d'
+          ? t('last30Days')
+          : opsFilterPeriod === 'custom'
+            ? `${opsFilterDateFrom || '—'} ${t('monitorTo')} ${opsFilterDateTo || '—'}`
+            : t('allTime')
+    const zoneLabel = opsFilterZone ? (ZONE_LABELS[opsFilterZone] || opsFilterZone) : t('allZones')
+    const workerLabel = opsFilterWorker || t('allWorkers')
+    const searchLine = opsFilterSearch.trim() || '—'
+
+    const rowsHtml = filteredOpsLog.map((r, i) => {
       const dt = r.dateTime || r.createdAt
       const dateStr = dt ? new Date(dt).toLocaleString() : '—'
       const durationStr = r.duration != null ? `${r.duration} min` : '—'
@@ -327,79 +323,37 @@ export default function MonitorActiveWork() {
       const notesPart = (r.notes || '').trim()
       const engPart = (r.engineerNotes || '').trim()
       const notesStr = notesPart && engPart ? `${notesPart} | ${engPart}` : notesPart || engPart || '—'
-      const row = document.createElement('tr')
-      const cells = [
-        i + 1,
-        (r.worker || '—').trim(),
-        (r.zone || r.zoneId || '—').trim(),
-        (r.linesArea || r.lines || '—').trim(),
-        dateStr,
-        durationStr,
-        qtyStr,
-        notesStr,
-      ]
-      cells.forEach((val) => {
-        const td = document.createElement('td')
-        td.textContent = String(val)
-        td.style.cssText = cellStyle
-        row.appendChild(td)
-      })
-      tbody.appendChild(row)
+      return `<tr>
+        <td>${escapeHtmlForPrint(String(i + 1))}</td>
+        <td>${escapeHtmlForPrint((r.worker || '—').trim())}</td>
+        <td>${escapeHtmlForPrint(String((r.zone || r.zoneId || '—').trim()))}</td>
+        <td>${escapeHtmlForPrint(String((r.linesArea || r.lines || '—').trim()))}</td>
+        <td>${escapeHtmlForPrint(dateStr)}</td>
+        <td>${escapeHtmlForPrint(durationStr)}</td>
+        <td>${escapeHtmlForPrint(qtyStr)}</td>
+        <td>${escapeHtmlForPrint(notesStr)}</td>
+      </tr>`
+    }).join('')
+
+    const filtersInnerHtml = `<div><strong>${escapeHtmlForPrint(t('monitorFiltersApplied'))}</strong></div>
+<div>${escapeHtmlForPrint(t('assignZone'))}: ${escapeHtmlForPrint(zoneLabel)} · ${escapeHtmlForPrint(t('monitorWorker'))}: ${escapeHtmlForPrint(workerLabel)} · ${escapeHtmlForPrint(t('timePeriod'))}: ${escapeHtmlForPrint(periodLabel)}</div>
+<div>${escapeHtmlForPrint(t('searchWorkerZonePlaceholder'))}: ${escapeHtmlForPrint(searchLine)}</div>
+<div>${escapeHtmlForPrint(t('monitorRows'))}: ${filteredOpsLog.length}</div>`
+
+    const theadRowHtml = ['#', t('monitorWorker'), t('assignZone'), t('monitorLines'), t('monitorDateTime'), t('monitorDuration'), t('monitorQuantity'), t('monitorNotesLabel')]
+      .map((label) => `<th>${escapeHtmlForPrint(label)}</th>`)
+      .join('')
+
+    const html = buildSarmsPrintHtml({
+      title: reportTitle,
+      metaLine: new Date().toLocaleString(),
+      filtersInnerHtml,
+      theadRowHtml,
+      tbodyHtml: rowsHtml,
+      dir,
+      lang,
     })
-    table.appendChild(tbody)
-    wrap.appendChild(table)
-    document.body.appendChild(wrap)
-    html2canvas(wrap, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-    }).then((canvas) => {
-      document.body.removeChild(wrap)
-      const tEn = (key) => getTranslation('en', 'engineer', key)
-      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-      const margin = 12
-      const pageW = pdf.internal.pageSize.getWidth()
-      const pageH = pdf.internal.pageSize.getHeight()
-      const w = pageW - margin * 2
-      pdf.setFontSize(14)
-      pdf.setFont('helvetica', 'bold')
-      pdf.text(tEn('opsLog'), margin, 10)
-      pdf.setFontSize(9)
-      pdf.setFont('helvetica', 'normal')
-      const periodLabel = opsFilterPeriod === '7d' ? tEn('last7Days') : opsFilterPeriod === '30d' ? tEn('last30Days') : opsFilterPeriod === 'custom' ? `${opsFilterDateFrom || '—'} ${tEn('monitorTo')} ${opsFilterDateTo || '—'}` : tEn('allTime')
-      const filterLine = `${tEn('monitorGenerated')}: ${new Date().toLocaleString()}  |  ${tEn('assignZone')}: ${opsFilterZone ? (ZONE_LABELS[opsFilterZone] || opsFilterZone) : tEn('allZones')}  |  ${tEn('monitorWorker')}: ${opsFilterWorker || tEn('allWorkers')}  |  ${tEn('timePeriod')}: ${periodLabel}`
-      const splitLines = pdf.splitTextToSize(filterLine, w)
-      let y = 16
-      splitLines.forEach((line) => { pdf.text(line, margin, y); y += 5 })
-      y += 4
-      const availableH = pageH - y - margin
-      const imgW = w
-      const imgH = (canvas.height * w) / canvas.width
-      if (imgH <= availableH) {
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', margin, y, imgW, imgH)
-      } else {
-        const sliceHpx = (availableH / imgH) * canvas.height
-        let srcY = 0
-        let isFirstPage = true
-        while (srcY < canvas.height) {
-          if (!isFirstPage) pdf.addPage('a4', 'landscape')
-          const sliceHeight = Math.min(sliceHpx, canvas.height - srcY)
-          const sliceCanvas = document.createElement('canvas')
-          sliceCanvas.width = canvas.width
-          sliceCanvas.height = sliceHeight
-          const ctx = sliceCanvas.getContext('2d')
-          ctx.fillStyle = '#ffffff'
-          ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height)
-          ctx.drawImage(canvas, 0, srcY, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight)
-          const sliceHmm = (sliceHeight / canvas.height) * imgH
-          pdf.addImage(sliceCanvas.toDataURL('image/png'), 'PNG', margin, isFirstPage ? y : margin, imgW, sliceHmm)
-          srcY += sliceHeight
-          isFirstPage = false
-        }
-      }
-      pdf.save(`Operations-log-${new Date().toISOString().slice(0, 10)}.pdf`)
-    }).catch(() => { document.body.removeChild(wrap) })
+    openSarmsPrintWindow(html)
   }
 
   useEffect(() => {
@@ -820,67 +774,78 @@ export default function MonitorActiveWork() {
   }
 
   function exportActiveWorkersPDF() {
-    const el = activeWorkersTableRef.current
-    if (!el) return
-    html2canvas(el, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-    }).then((canvas) => {
-      const tEn = (key) => getTranslation('en', 'engineer', key)
-      const imgData = canvas.toDataURL('image/png')
-      const pdf = new jsPDF({
-        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
-        unit: 'mm',
-        format: 'a4',
-      })
-      const pdfW = pdf.internal.pageSize.getWidth()
-      const pdfH = pdf.internal.pageSize.getHeight()
-      const margin = 10
-      const w = pdfW - margin * 2
-      const h = (canvas.height * w) / canvas.width
-      pdf.setFontSize(14)
-      pdf.setFont('helvetica', 'bold')
-      const reportTitle = clickedCard === 'delayed' ? tEn('monitorDelayedTasks') : clickedCard === 'flagged' ? tEn('monitorFlaggedIssues') : clickedCard === 'on_time' ? tEn('monitorOnTimeTasks') : tEn('monitorActiveWorkers')
-      pdf.text(reportTitle, margin, 12)
-      pdf.setFontSize(9)
-      pdf.setFont('helvetica', 'normal')
-      pdf.text(new Date().toLocaleString(), margin, 18)
-      let y = 24
-      pdf.setFontSize(10)
-      pdf.setFont('helvetica', 'bold')
-      pdf.text(tEn('monitorFiltersApplied'), margin, y)
-      y += 5
-      const deptLabel = filterDept ? (getDepartment(filterDept)?.labelEn ?? getDepartment(filterDept)?.labelAr ?? filterDept) : tEn('monitorAll')
-      const taskLabel = filterTaskId ? (taskLabelByLang(getTaskById(filterTaskId), 'en') || filterTaskId) : tEn('monitorAll')
-      const zoneLabel = filterZone ? (ZONE_LABELS[filterZone] || filterZone) : tEn('monitorAll')
-      const statusLabel = filterStatus ? (filterStatus === 'completed' ? tEn('monitorCompleted') : filterStatus === SESSION_STATUS.ON_TIME ? tEn('monitorOnTime') : filterStatus === SESSION_STATUS.DELAYED ? tEn('monitorDelayed') : filterStatus === SESSION_STATUS.FLAGGED ? tEn('monitorFlagged') : (SESSION_STATUS_LABELS[filterStatus] ?? filterStatus)) : tEn('monitorAll')
-      const workerSearch = searchWorker.trim() || '—'
-      const sortCol = sortBy === 'workerName' ? tEn('monitorWorkerName') : sortBy === 'department' ? tEn('assignDepartment') : sortBy === 'task' ? tEn('assignTask') : sortBy === 'zone' ? tEn('assignZone') : sortBy === 'startTime' ? tEn('monitorStartTime') : sortBy === 'elapsedMinutes' ? tEn('monitorDuration') : sortBy === 'status' ? tEn('monitorStatus') : sortBy
-      const sortDir = sortOrder === 'asc' ? 'asc' : 'desc'
-      const sortLabel = sortBy ? `${sortCol} (${sortDir})` : '—'
-      pdf.setFont('helvetica', 'normal')
-      pdf.setFontSize(9)
-      const filterLine1 = `${tEn('assignDepartment')}: ${deptLabel}   ·   ${tEn('assignTask')}: ${taskLabel}   ·   ${tEn('assignZone')}: ${zoneLabel}   ·   ${tEn('monitorStatus')}: ${statusLabel}`
-      const filterLine2 = `${tEn('monitorWorkerSearch')}: ${workerSearch}`
-      const filterLine3 = `${tEn('monitorSort')}: ${sortLabel}   ·   ${tEn('monitorRows')}: ${sortedFiltered.length}`
-      const lineH = 5
-      const split1 = pdf.splitTextToSize(filterLine1, w)
-      split1.forEach((line) => { pdf.text(line, margin, y); y += lineH })
-      pdf.text(filterLine2, margin, y); y += lineH
-      pdf.text(filterLine3, margin, y); y += lineH
-      y += 3
-      pdf.setDrawColor(220, 220, 220)
-      pdf.line(margin, y, margin + w, y)
-      y += 4
-      const headerH = y
-      const imgH = Math.min(h, pdfH - headerH - 4)
-      const imgW = (canvas.width * imgH) / canvas.height
-      const imgX = margin + (w - imgW) / 2
-      pdf.addImage(imgData, 'PNG', imgX, headerH, imgW, imgH)
-      pdf.save(`Active-Workers-${new Date().toISOString().slice(0, 10)}.pdf`)
-    }).catch(() => {})
+    if (sortedFiltered.length === 0) return
+
+    const tEn = (key) => getTranslation('en', 'engineer', key)
+    const reportTitle = clickedCard === 'delayed' ? t('monitorDelayedTasks') : clickedCard === 'flagged' ? t('monitorFlaggedIssues') : clickedCard === 'on_time' ? t('monitorOnTimeTasks') : t('monitorActiveWorkers')
+
+    const deptLabel = filterDept ? (getDepartment(filterDept)?.labelEn ?? getDepartment(filterDept)?.labelAr ?? filterDept) : tEn('monitorAll')
+    const taskLabel = filterTaskId ? (taskLabelByLang(getTaskById(filterTaskId), lang) || filterTaskId) : tEn('monitorAll')
+    const zoneLabel = filterZone ? (ZONE_LABELS[filterZone] || filterZone) : tEn('monitorAll')
+    const statusLabel = filterStatus
+      ? (filterStatus === 'completed'
+        ? t('monitorCompleted')
+        : filterStatus === SESSION_STATUS.ON_TIME
+          ? t('monitorOnTime')
+          : filterStatus === SESSION_STATUS.DELAYED
+            ? t('monitorDelayed')
+            : filterStatus === SESSION_STATUS.FLAGGED
+              ? t('monitorFlagged')
+              : SESSION_STATUS_LABELS[filterStatus] ?? filterStatus)
+      : tEn('monitorAll')
+    const workerSearch = searchWorker.trim() || '—'
+    const sortCol = sortBy === 'workerName' ? t('monitorWorkerName') : sortBy === 'department' ? t('assignDepartment') : sortBy === 'task' ? t('assignTask') : sortBy === 'zone' ? t('assignZone') : sortBy === 'startTime' ? t('monitorStartTime') : sortBy === 'elapsedMinutes' ? t('monitorDuration') : sortBy === 'status' ? t('monitorStatus') : sortBy
+    const sortDir = sortOrder === 'asc' ? 'asc' : 'desc'
+    const sortLabel = sortBy ? `${sortCol} (${sortDir})` : '—'
+
+    const dir = lang === 'ar' ? 'rtl' : 'ltr'
+    const rowsHtml = sortedFiltered.map((s) => {
+      const workerStr = `${s.workerName || ''}${s.employeeId ? ` (${s.employeeId})` : ''}`.trim() || '—'
+      const deptStr = getDepartmentDisplayLabel(s.departmentId) || s.department || '—'
+      const taskStr = getTaskDisplayLabel(s) || '—'
+      const zoneStr = s.zone ?? '—'
+      const linesStr = s.linesArea ?? '—'
+      const startStr = s.startTime ? new Date(s.startTime).toLocaleString() : '—'
+      const durStr = formatDuration(s.elapsedMinutes ?? 0)
+      const statusText = s.status === 'completed' ? t('monitorCompleted') : getSessionStatusDisplayLabel(s.status)
+      return `<tr>
+        <td>${escapeHtmlForPrint(workerStr)}</td>
+        <td>${escapeHtmlForPrint(deptStr)}</td>
+        <td>${escapeHtmlForPrint(taskStr)}</td>
+        <td>${escapeHtmlForPrint(zoneStr)}</td>
+        <td>${escapeHtmlForPrint(linesStr)}</td>
+        <td>${escapeHtmlForPrint(startStr)}</td>
+        <td>${escapeHtmlForPrint(durStr)}</td>
+        <td>${escapeHtmlForPrint(statusText)}</td>
+      </tr>`
+    }).join('')
+
+    const filtersInnerHtml = `<div><strong>${escapeHtmlForPrint(t('monitorFiltersApplied'))}</strong></div>
+<div>${escapeHtmlForPrint(t('assignDepartment'))}: ${escapeHtmlForPrint(deptLabel)} · ${escapeHtmlForPrint(t('assignTask'))}: ${escapeHtmlForPrint(taskLabel)} · ${escapeHtmlForPrint(t('assignZone'))}: ${escapeHtmlForPrint(zoneLabel)} · ${escapeHtmlForPrint(t('monitorStatus'))}: ${escapeHtmlForPrint(statusLabel)}</div>
+<div>${escapeHtmlForPrint(t('monitorWorkerSearch'))}: ${escapeHtmlForPrint(workerSearch)}</div>
+<div>${escapeHtmlForPrint(t('monitorSort'))}: ${escapeHtmlForPrint(sortLabel)} · ${escapeHtmlForPrint(t('monitorRows'))}: ${sortedFiltered.length}</div>`
+
+    const theadRowHtml = [
+      t('monitorWorkerName'),
+      t('assignDepartment'),
+      t('assignTask'),
+      t('assignZone'),
+      t('monitorLinesArea'),
+      t('monitorStartTime'),
+      t('monitorDuration'),
+      t('monitorStatus'),
+    ].map((label) => `<th>${escapeHtmlForPrint(label)}</th>`).join('')
+
+    const html = buildSarmsPrintHtml({
+      title: reportTitle,
+      metaLine: new Date().toLocaleString(),
+      filtersInnerHtml,
+      theadRowHtml,
+      tbodyHtml: rowsHtml,
+      dir,
+      lang,
+    })
+    openSarmsPrintWindow(html)
   }
 
   return (
@@ -1041,7 +1006,7 @@ export default function MonitorActiveWork() {
             />
           </div>
         </div>
-        <div className={styles.tableWrap} ref={activeWorkersTableRef}>
+        <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
               <tr>
@@ -1078,7 +1043,7 @@ export default function MonitorActiveWork() {
                     <td>{formatDuration(s.elapsedMinutes)}</td>
                     <td>
                       {s.status === 'completed' ? (
-                        <span className={styles.statusBadge} data-status="completed" style={{ background: '#dcfce7', color: '#166534' }}>
+                        <span className={styles.statusBadge} data-status="completed">
                           {t('monitorCompleted')}
                         </span>
                       ) : (

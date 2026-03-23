@@ -9,49 +9,54 @@
 }
 
 .page {
-  max-width: 1400px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.65rem;
   transition: all 0.3s ease;
   width: 100%;
 }
 
 @media (min-width: 768px) {
   .page {
-    gap: 1.5rem;
+    gap: 0.8rem;
   }
 }
 
 .sectionTitle {
-  margin: 0 0 1rem;
-  font-size: 1.25rem;
+  margin: 0 0 0.45rem;
+  font-size: 0.92rem;
   font-weight: 700;
   color: #0f172a;
   letter-spacing: -0.02em;
 }
 
+.sectionTitle .fa-fw {
+  margin-inline-end: 0.35em;
+  font-size: 0.92em;
+}
+
 /* 1. Operations Management KPIs – always visible */
 .kpiSection {
   background: #fff;
-  border-radius: 16px;
-  padding: 1.25rem;
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   border: 1px solid #e2e8f0;
 }
 
 .kpiSectionTitle {
-  margin: 0 0 1rem;
-  font-size: 1.2rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.92rem;
   font-weight: 700;
   color: #0f172a;
 }
 
 .kpiGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 0.45rem;
 }
 
 @media (min-width: 768px) {
@@ -64,9 +69,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.35rem;
-  padding: 1rem;
-  border-radius: 12px;
+  gap: 0.2rem;
+  padding: 0.45rem 0.5rem;
+  border-radius: 8px;
   border: 1px solid #e2e8f0;
   background: #f8fafc;
   cursor: pointer;
@@ -114,28 +119,33 @@
 .kpiCard_zones:hover { border-color: #5c7b5c; }
 
 .kpiQuickList {
-  margin-top: 1rem;
-  padding-top: 1rem;
+  margin-top: 0.45rem;
+  padding-top: 0.45rem;
   border-top: 1px solid #e2e8f0;
+  overflow: hidden;
 }
 
 .kpiQuickListHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 0.5rem;
-  font-size: 0.9rem;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: #0f172a;
 }
 
 .kpiQuickListClose {
-  padding: 0.25rem 0.5rem;
+  padding: 0.15rem 0.35rem;
   background: transparent;
   border: none;
   color: #64748b;
   cursor: pointer;
   border-radius: 6px;
+  font-size: 0.85rem;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 .kpiQuickListClose:hover {
@@ -162,14 +172,14 @@
 }
 
 .kpiQuickListItem {
-  padding: 0.5rem 0.75rem;
-  font-size: 0.9rem;
-  border-radius: 8px;
+  padding: 0.35rem 0.45rem;
+  font-size: 0.72rem;
+  border-radius: 6px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: 0.35rem;
   border-bottom: 1px solid #f1f5f9;
 }
 
@@ -217,8 +227,8 @@
 /* 2. Zones Section + Add Zone */
 .zoneSection {
   background: #fff;
-  border-radius: 16px;
-  padding: 1.25rem;
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   border: 1px solid #e2e8f0;
 }
@@ -228,8 +238,8 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
+  gap: 0.45rem;
+  margin-bottom: 0.5rem;
 }
 
 .zoneSectionHeader .sectionTitle {
@@ -239,19 +249,20 @@
 .zoneHeaderActions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.35rem;
   align-items: center;
+  justify-content: flex-end;
 }
 
 .addZoneBtn {
-  min-height: 44px;
-  padding: 0.5rem 1rem;
-  font-size: 0.9rem;
+  min-height: 30px;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: var(--sarms-primary, #5c7b5c);
   background: #e8efe8;
   border: 1px solid var(--sarms-primary, #5c7b5c);
-  border-radius: 10px;
+  border-radius: 7px;
   cursor: pointer;
   transition: background 0.2s, border-color 0.2s;
   -webkit-tap-highlight-color: transparent;
@@ -266,8 +277,8 @@
 /* Merged section: Batch + Greenhouse + Workers + All Operations (one card) */
 .mergedAssignSection {
   background: #fff;
-  border-radius: 16px;
-  padding: 1.25rem;
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   border: 1px solid #e2e8f0;
   display: flex;
@@ -283,16 +294,21 @@
   height: 0;
   border: none;
   border-top: 1px solid #e2e8f0;
-  margin: 1.25rem 0;
+  margin: 0.65rem 0;
+}
+
+.greenhouseInMerged {
+  overflow: hidden;
+  border-radius: 8px;
 }
 
 .greenhouseInMerged .greenhouseHeader {
-  border-radius: 12px;
+  border-radius: 0;
 }
 
 /* Filter + Workers combined section (expand/collapse) */
 .filterWorkersSection {
-  border-radius: 16px;
+  border-radius: 10px;
   padding: 0;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   border: 1px solid #e2e8f0;
@@ -302,16 +318,19 @@
 .filterWorkersHeader {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 1rem 1.25rem;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.55rem 0.75rem;
   background: var(--sarms-primary, #5c7b5c);
   color: #fff;
   flex-wrap: wrap;
-  border-radius: 12px;
+  border-radius: 0;
 }
 
 .filterWorkersBody {
-  padding: 1rem 1.25rem;
+  padding: 0.55rem 0.75rem;
 }
 
 .filterWorkersSubtitle {
@@ -324,8 +343,8 @@
 
 .batchesSection {
   background: #fff;
-  border-radius: 16px;
-  padding: 1.25rem;
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   border: 1px solid #e2e8f0;
 }
@@ -335,8 +354,8 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
+  gap: 0.45rem;
+  margin-bottom: 0.5rem;
 }
 
 .batchesSectionHeader .sectionTitle {
@@ -346,19 +365,20 @@
 .batchHeaderActions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.35rem;
   align-items: center;
+  justify-content: flex-end;
 }
 
 .addBatchBtn {
-  min-height: 44px;
-  padding: 0.5rem 1rem;
-  font-size: 0.9rem;
+  min-height: 30px;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: var(--sarms-primary, #5c7b5c);
   background: #e8efe8;
   border: 1px solid var(--sarms-primary, #5c7b5c);
-  border-radius: 10px;
+  border-radius: 7px;
   cursor: pointer;
   transition: background 0.2s, border-color 0.2s;
   -webkit-tap-highlight-color: transparent;
@@ -370,14 +390,14 @@
 }
 
 .deleteBatchBtn {
-  min-height: 44px;
-  padding: 0.5rem 1rem;
-  font-size: 0.9rem;
+  min-height: 30px;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: #b85c5c;
   background: rgba(184, 92, 92, 0.1);
   border: 1px solid #b85c5c;
-  border-radius: 10px;
+  border-radius: 7px;
   cursor: pointer;
   transition: background 0.2s, color 0.2s;
   -webkit-tap-highlight-color: transparent;
@@ -392,19 +412,19 @@
 .batchTabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
 }
 
 .batchTab {
-  min-height: 44px;
-  padding: 0.5rem 1rem;
-  font-size: 0.9rem;
+  min-height: 30px;
+  padding: 0.22rem 0.55rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: #334155;
   background: #f1f5f9;
-  border: 2px solid #e2e8f0;
-  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
   cursor: pointer;
   transition: background 0.2s, border-color 0.2s;
   -webkit-tap-highlight-color: transparent;
@@ -427,12 +447,12 @@
 }
 
 .defaultBatchRow {
-  margin-top: 0.5rem;
+  margin-top: 0.35rem;
 }
 
 .setDefaultBatchBtn {
-  padding: 0.35rem 0.75rem;
-  font-size: 0.85rem;
+  padding: 0.22rem 0.5rem;
+  font-size: 0.68rem;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 6px;
@@ -447,35 +467,36 @@
 }
 
 .operationPath {
-  margin-bottom: 1rem;
+  margin-bottom: 0.45rem;
 }
 
 .operationPathLabel {
   display: block;
-  font-size: 0.85rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: #64748b;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.3rem;
 }
 
 .operationPathSteps {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.3rem;
+  align-items: center;
 }
 
 .operationPathChip {
-  padding: 0.35rem 0.75rem;
-  font-size: 0.8rem;
+  padding: 0.18rem 0.45rem;
+  font-size: 0.65rem;
   font-weight: 600;
-  border-radius: 8px;
+  border-radius: 6px;
   color: #fff;
 }
 
 /* 4. Expandable Greenhouse Overview */
 .greenhouseSection {
   background: #fff;
-  border-radius: 16px;
+  border-radius: 10px;
   padding: 0;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   border: 1px solid #e2e8f0;
@@ -485,22 +506,25 @@
 .greenhouseHeader {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 1rem 1.25rem;
+  gap: 0.5rem;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.55rem 0.75rem;
   background: var(--sarms-primary, #5c7b5c);
   color: #fff;
   flex-wrap: wrap;
+  border-radius: 0;
 }
 
 .greenhouseToggle {
-  min-height: 44px;
-  padding: 0.5rem 1rem;
-  font-size: 0.95rem;
+  min-height: 30px;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: var(--sarms-primary, #5c7b5c);
   background: rgba(255, 255, 255, 0.95);
   border: none;
-  border-radius: 10px;
+  border-radius: 7px;
   cursor: pointer;
   transition: background 0.2s, transform 0.1s;
   -webkit-tap-highlight-color: transparent;
@@ -513,16 +537,17 @@
 
 .greenhouseTitle {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: 0.8rem;
   font-weight: 700;
   letter-spacing: -0.02em;
+  line-height: 1.3;
 }
 
 .greenhouseLegend {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem 1.25rem;
-  padding: 0.75rem 1.25rem;
+  gap: 0.45rem 0.75rem;
+  padding: 0.45rem 0.75rem;
   background: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
 }
@@ -530,16 +555,16 @@
 .legendItem {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  font-size: 0.85rem;
+  gap: 0.28rem;
+  font-size: 0.72rem;
   font-weight: 500;
   color: #334155;
 }
 
 .legendDot {
-  width: 12px;
-  height: 12px;
-  border-radius: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
   flex-shrink: 0;
 }
 
@@ -557,9 +582,10 @@
 .greenhouseContent {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
+  align-items: stretch;
   gap: 0;
-  padding: 1rem;
-  min-height: 200px;
+  padding: 0.45rem 0.55rem;
+  min-height: 160px;
   max-height: 70vh;
   overflow: auto;
 }
@@ -573,15 +599,34 @@
 .greenhouseSide {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.5rem;
+  gap: 0.28rem;
+  padding: 0.28rem;
+  min-width: 0;
   background: #f8fafc;
-  border-radius: 12px;
   border: 1px solid #e2e8f0;
+  border-radius: 0;
+}
+
+.greenhouseContent > .greenhouseSide:first-of-type {
+  border-radius: 8px 0 0 8px;
+  border-right: none;
+}
+
+.greenhouseContent > .greenhouseSide:last-of-type {
+  border-radius: 0 8px 8px 0;
+  border-left: none;
+}
+
+@media (max-width: 768px) {
+  .greenhouseContent > .greenhouseSide:first-of-type,
+  .greenhouseContent > .greenhouseSide:last-of-type {
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+  }
 }
 
 .sideLabel {
-  font-size: 0.9rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: #475569;
 }
@@ -606,27 +651,29 @@
   gap: 2px;
   overflow-y: auto;
   max-height: 70vh;
+  flex: 1;
+  min-height: 0;
 }
 
 .lineCell {
-  min-height: 18px;
-  padding: 2px 4px;
-  font-size: 0.6rem;
+  min-height: 16px;
+  padding: 1px 3px;
+  font-size: 0.58rem;
   font-weight: 500;
   color: #64748b;
   background: #fff;
   border: 1px solid #e2e8f0;
-  border-radius: 3px;
+  border-radius: 2px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .lineCellMerged {
-  min-height: 20px;
-  font-size: 0.7rem;
+  min-height: 17px;
+  font-size: 0.65rem;
   font-weight: 400;
-  padding: 2px 4px;
+  padding: 1px 3px;
 }
 
 .lineCellCompleted {
@@ -649,25 +696,55 @@
 }
 
 .greenhouseAisle {
-  width: 24px;
-  min-width: 24px;
+  width: 22px;
+  min-width: 22px;
+  align-self: stretch;
   background: var(--sarms-primary, #5c7b5c);
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 0.28rem 0;
+  box-sizing: border-box;
+}
+
+.aisleHeaderSpacer {
+  /* Match .sideLabel line box + gap under .greenhouseSide (0.28rem) */
+  flex-shrink: 0;
+  height: calc(0.72rem * 1.35 + 0.28rem);
+  width: 100%;
+}
+
+.aisleLabelWrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
   justify-content: center;
-  padding-top: 2rem;
+  width: 100%;
 }
 
 @media (max-width: 768px) {
   .greenhouseAisle {
     width: 100%;
-    min-height: 24px;
-    padding: 0.5rem;
+    min-height: 22px;
+    min-width: 0;
+    flex-direction: row;
+    padding: 0.4rem 0.5rem;
+    align-items: center;
+  }
+
+  .aisleHeaderSpacer {
+    display: none;
+  }
+
+  .aisleLabelWrap {
+    flex: 1;
   }
 }
 
 .aisleLabel {
-  font-size: 0.7rem;
+  font-size: 0.62rem;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.9);
   writing-mode: vertical-rl;
@@ -738,24 +815,24 @@
 .zoneList {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.35rem;
 }
 
 @media (min-width: 768px) {
   .zoneList {
-    gap: 0.75rem;
+    gap: 0.4rem;
   }
 }
 
 .zoneBtn {
-  min-height: 44px;
-  padding: 0.6rem 1rem;
-  font-size: 0.9rem;
+  min-height: 30px;
+  padding: 0.22rem 0.55rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: #334155;
   background: #f1f5f9;
-  border: 2px solid #e2e8f0;
-  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
   cursor: pointer;
   transition: background 0.2s, border-color 0.2s, color 0.2s;
   -webkit-tap-highlight-color: transparent;
@@ -763,8 +840,8 @@
 
 @media (min-width: 768px) {
   .zoneBtn {
-    padding: 0.6rem 1.25rem;
-    font-size: 0.95rem;
+    padding: 0.24rem 0.6rem;
+    font-size: 0.74rem;
   }
 }
 
@@ -780,14 +857,14 @@
 }
 
 .deleteZoneBtn {
-  min-height: 44px;
-  padding: 0.5rem 1rem;
-  font-size: 0.9rem;
+  min-height: 30px;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: #b85c5c;
   background: rgba(184, 92, 92, 0.1);
   border: 1px solid #b85c5c;
-  border-radius: 10px;
+  border-radius: 7px;
   cursor: pointer;
   transition: background 0.2s, color 0.2s;
   -webkit-tap-highlight-color: transparent;
@@ -802,8 +879,8 @@
 /* Workspace */
 .workspaceSection {
   background: #fff;
-  border-radius: 16px;
-  padding: 1.25rem;
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   border: 1px solid #e2e8f0;
 }
@@ -825,19 +902,19 @@
 
 .workspaceTitle {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: 0.92rem;
   font-weight: 700;
   color: #0f172a;
 }
 
 .expandBtn {
-  padding: 0.5rem 1rem;
-  font-size: 0.9rem;
+  padding: 0.28rem 0.6rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: var(--sarms-primary, #5c7b5c);
   background: #e8efe8;
   border: 1px solid var(--sarms-primary, #5c7b5c);
-  border-radius: 8px;
+  border-radius: 7px;
   cursor: pointer;
   transition: background 0.2s, transform 0.15s;
 }
@@ -848,22 +925,36 @@
 }
 
 .workspaceToolbar {
-  margin-bottom: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
 }
 
 .assignBtn {
-  min-height: 44px;
-  padding: 0.6rem 1.25rem;
-  font-size: 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  min-height: 30px;
+  padding: 0.28rem 0.75rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: #fff;
   background: var(--sarms-primary, #5c7b5c);
   border: none;
-  border-radius: 10px;
+  border-radius: 7px;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(92, 123, 92, 0.3);
+  box-shadow: 0 1px 4px rgba(92, 123, 92, 0.28);
   transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
   -webkit-tap-highlight-color: transparent;
+  width: auto;
+  max-width: 100%;
+}
+
+.assignBtn .fa-fw {
+  font-size: 0.85em;
 }
 
 .assignBtn:hover {
@@ -1235,8 +1326,8 @@
 /* Review section */
 .reviewSection {
   background: #fff;
-  border-radius: 16px;
-  padding: 1.25rem;
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   border: 1px solid #e2e8f0;
 }
@@ -1317,18 +1408,20 @@
 .taskTable {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9rem;
+  font-size: 0.72rem;
 }
 
 .taskTable th,
 .taskTable td {
-  padding: 0.6rem 0.75rem;
+  padding: 0.28rem 0.4rem;
   text-align: left;
   border-bottom: 1px solid #e2e8f0;
+  vertical-align: middle;
 }
 
 .taskTable th {
   font-weight: 600;
+  font-size: 0.65rem;
   color: #475569;
   background: #f8fafc;
 }
@@ -1338,11 +1431,15 @@
 }
 
 .statusBadge {
-  display: inline-block;
-  padding: 0.25rem 0.6rem;
-  border-radius: 6px;
-  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.12rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
   font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
 }
 
 .statusBadge[data-status="pending_approval"] {
@@ -1372,8 +1469,8 @@
 
 .acceptRejectCell {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
   align-items: center;
   border-bottom: none !important;
 }
@@ -1382,7 +1479,7 @@
   background: none;
   border: none;
   padding: 0;
-  font-size: 0.9rem;
+  font-size: 0.72rem;
   font-weight: 500;
   color: var(--sarms-primary, #5c7b5c);
   cursor: pointer;
@@ -1397,7 +1494,7 @@
   background: none;
   border: none;
   padding: 0;
-  font-size: 0.9rem;
+  font-size: 0.72rem;
   font-weight: 500;
   color: var(--sarms-primary, #5c7b5c);
   cursor: pointer;
@@ -1412,7 +1509,7 @@
   background: none;
   border: none;
   padding: 0;
-  font-size: 0.9rem;
+  font-size: 0.72rem;
   font-weight: 500;
   color: #b91c1c;
   cursor: pointer;
@@ -1423,11 +1520,17 @@
   color: #991b1b;
 }
 
+@media (max-width: 768px) {
+  .acceptRejectCell {
+    flex-wrap: wrap;
+  }
+}
+
 /* Analytics */
 .analyticsSection {
   background: #fff;
-  border-radius: 16px;
-  padding: 1.25rem;
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   border: 1px solid #e2e8f0;
 }

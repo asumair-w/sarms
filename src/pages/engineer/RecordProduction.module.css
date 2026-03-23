@@ -6,19 +6,19 @@
 
 .page {
   width: 100%;
-  max-width: 1400px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   padding: 0;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.65rem;
   transition: all 0.3s ease;
 }
 
 @media (min-width: 768px) {
   .page {
-    gap: 1.5rem;
+    gap: 0.8rem;
   }
 }
 
@@ -26,8 +26,8 @@
   width: 100%;
   box-sizing: border-box;
   background: #fff;
-  border-radius: 16px;
-  padding: 1.25rem;
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   border: 1px solid #e2e8f0;
 }
@@ -38,10 +38,10 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  padding: 0 0 1rem;
-  margin: 0 0 1rem;
-  padding-bottom: 1rem;
+  gap: 0.4rem;
+  padding: 0 0 0.45rem;
+  margin: 0 0 0.45rem;
+  padding-bottom: 0.45rem;
   background: none;
   border: none;
   border-bottom: 1px solid #e2e8f0;
@@ -68,26 +68,31 @@
 
 .expandLabel {
   margin-left: auto;
-  font-size: 0.85rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: var(--sarms-primary, #5c7b5c);
 }
 
 .chevron {
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   color: #64748b;
 }
 
 .sectionBody {
-  margin-top: 1rem;
+  margin-top: 0.45rem;
 }
 
 .sectionTitle {
-  margin: 0 0 1rem;
-  font-size: 1.25rem;
+  margin: 0 0 0.35rem;
+  font-size: 0.92rem;
   font-weight: 700;
   color: #0f172a;
   letter-spacing: -0.02em;
+}
+
+.sectionTitle .fa-fw {
+  margin-inline-end: 0.35em;
+  font-size: 0.92em;
 }
 
 .sectionDesc {
@@ -108,17 +113,17 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.55rem;
 }
 
 .formBlock {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.3rem;
 }
 
 .formBlock .label {
-  font-size: 0.9rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: #334155;
 }
@@ -132,7 +137,7 @@
 .row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  gap: 0.45rem;
 }
 
 @media (max-width: 600px) {
@@ -148,7 +153,7 @@
 }
 
 .field label {
-  font-size: 0.9rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: #334155;
 }
@@ -156,10 +161,10 @@
 .input,
 .select,
 .textarea {
-  padding: 0.5rem 0.75rem;
-  font-size: 0.95rem;
+  padding: 0.28rem 0.45rem;
+  font-size: 0.72rem;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 6px;
   background: #fff;
 }
 
@@ -170,12 +175,12 @@
 
 .textarea {
   resize: vertical;
-  min-height: 80px;
+  min-height: 64px;
 }
 
 .fileInput {
-  font-size: 0.9rem;
-  padding: 0.35rem 0;
+  font-size: 0.72rem;
+  padding: 0.2rem 0;
 }
 
 .imagePreviewWrap {
@@ -186,20 +191,20 @@
 }
 
 .imagePreview {
-  max-width: 160px;
-  max-height: 120px;
+  max-width: 140px;
+  max-height: 100px;
   object-fit: contain;
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid #e2e8f0;
 }
 
 .removeImageBtn {
-  padding: 0.35rem 0.75rem;
-  font-size: 0.85rem;
+  padding: 0.22rem 0.5rem;
+  font-size: 0.68rem;
   color: #b85c5c;
   background: rgba(184, 92, 92, 0.1);
   border: 1px solid #fecaca;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -209,20 +214,20 @@
 
 .actions {
   display: flex;
-  gap: 0.75rem;
+  gap: 0.35rem;
   flex-wrap: wrap;
-  margin-top: 0.5rem;
+  margin-top: 0.25rem;
 }
 
 .btnPrimary {
-  min-height: 44px;
-  padding: 0.6rem 1.25rem;
-  font-size: 0.95rem;
+  min-height: 0;
+  padding: 0.28rem 0.75rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: #fff;
   background: var(--sarms-primary, #5c7b5c);
   border: none;
-  border-radius: 10px;
+  border-radius: 7px;
   cursor: pointer;
   transition: transform 0.15s, background 0.15s;
 }
@@ -233,13 +238,14 @@
 }
 
 .btnSecondary {
-  padding: 0.6rem 1.25rem;
-  font-size: 0.95rem;
+  min-height: 0;
+  padding: 0.28rem 0.75rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: var(--sarms-text, #333);
   background: var(--sarms-card, #e8e8e8);
   border: 1px solid var(--sarms-border, #d4d4d4);
-  border-radius: 10px;
+  border-radius: 7px;
   cursor: pointer;
   transition: background 0.2s;
 }
@@ -249,22 +255,150 @@
 }
 
 .savedBanner {
-  margin-top: 1rem;
-  padding: 0.75rem 1rem;
+  margin-top: 0.45rem;
+  padding: 0.4rem 0.55rem;
   background: #e8efe8;
   border: 1px solid var(--sarms-primary, #5c7b5c);
-  border-radius: 10px;
-  font-size: 0.9rem;
+  border-radius: 8px;
+  font-size: 0.72rem;
   color: var(--sarms-primary, #5c7b5c);
   font-weight: 500;
 }
 
-/* Operations log (worker + engineer records) */
+/* Harvest log – filters, PDF, table (matches Monitor export density) */
+.rpHarvestFilters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem !important;
+  padding: 0 0 0.45rem !important;
+  margin: 0 !important;
+}
+
+.rpHarvestFilters select,
+.rpHarvestFilters input[type="text"],
+.rpHarvestFilters input[type="date"] {
+  padding: 0.28rem 0.45rem !important;
+  font-size: 0.72rem !important;
+  border-radius: 6px !important;
+}
+
+.rpHarvestExportWrap {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.rpHarvestFilters .rpHarvestExportWrap {
+  margin-left: auto !important;
+}
+
+.rpExportPdfBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 0;
+  padding: 0.28rem 0.55rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #475569;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.rpExportPdfBtn:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+.rpExportPdfBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.rpExportPdfBtn :global(.fa-fw) {
+  font-size: 0.85em;
+}
+
+.rpHarvestTableWrap {
+  overflow-x: auto;
+  padding: 0 0 0.45rem !important;
+}
+
+.rpHarvestTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem !important;
+}
+
+.rpHarvestTable th,
+.rpHarvestTable td {
+  padding: 0.28rem 0.4rem !important;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0 !important;
+  vertical-align: middle;
+}
+
+.rpHarvestTable th {
+  font-weight: 600;
+  font-size: 0.65rem !important;
+  color: #475569;
+  background: #f8fafc !important;
+}
+
+.rpHarvestTable tbody tr:hover {
+  background: #f8fafc;
+}
+
+.rpCellNotes {
+  max-width: 14rem;
+  font-size: 0.68rem !important;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-word;
+  vertical-align: top;
+  color: #334155;
+}
+
+.rpPhotoThumb {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  display: inline-block;
+  line-height: 0;
+}
+
+.rpPhotoThumb img {
+  display: block;
+  width: 40px !important;
+  height: 40px !important;
+  object-fit: cover;
+}
+
+.rpPhotoThumb:hover {
+  border-color: var(--sarms-primary, #5c7b5c);
+}
+
+.rpHarvestEmpty {
+  margin: 0;
+  padding: 0.45rem 0 !important;
+  font-size: 0.72rem !important;
+  color: #64748b;
+}
+
+/* Operations log (worker + engineer records) — compact, aligned with Monitor Active Work */
 .operationsLogSection {
-  margin-top: 1.5rem;
+  margin-top: 0.65rem;
   background: #fff;
-  border-radius: 16px;
-  padding: 1.25rem;
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
   box-shadow: 0 1px 3px rgba(0,0,0,0.08);
   border: 1px solid #e2e8f0;
 }
@@ -273,66 +407,79 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 0.4rem;
   flex-wrap: wrap;
-  margin-bottom: 1rem;
+  margin-bottom: 0.45rem;
 }
 
 .opsLogHeader .sectionTitle {
   margin: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.opsLogHeader .sectionTitle .fa-fw {
+  margin-inline-end: 0.35em;
+  font-size: 0.92em;
 }
 
 .opsLogHeaderActions {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
 }
 
 .opsFilters {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 0.35rem;
   align-items: center;
-  margin-bottom: 1rem;
+  margin-bottom: 0.45rem;
 }
 
 .opsFilterSelect {
-  padding: 0.5rem 0.75rem;
-  font-size: 0.9rem;
+  padding: 0.28rem 0.45rem;
+  font-size: 0.72rem;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 6px;
   background: #fff;
 }
 
 .opsFilterDate {
-  padding: 0.5rem 0.75rem;
-  font-size: 0.9rem;
+  padding: 0.28rem 0.45rem;
+  font-size: 0.72rem;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 6px;
   background: #fff;
 }
 
 .opsFilterSearch {
-  flex: 1;
-  min-width: 120px;
-  max-width: 280px;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.9rem;
+  flex: 1 1 140px;
+  min-width: 100px;
+  max-width: 320px;
+  padding: 0.28rem 0.45rem;
+  font-size: 0.72rem;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 6px;
   background: #fff;
 }
 
 .opsExportBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   flex: 0 0 auto;
-  min-height: 44px;
-  padding: 0.6rem 1.25rem;
-  font-size: 0.95rem;
+  min-height: 0;
+  padding: 0.28rem 0.55rem;
+  font-size: 0.68rem;
   font-weight: 600;
   color: #475569;
   background: #f1f5f9;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  border-radius: 6px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -342,20 +489,23 @@
 }
 
 .opsExportBtn:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
 .opsPrintBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   flex: 0 0 auto;
-  min-height: 44px;
-  padding: 0.6rem 1.25rem;
-  font-size: 0.95rem;
+  min-height: 0;
+  padding: 0.28rem 0.55rem;
+  font-size: 0.68rem;
   font-weight: 600;
   color: #475569;
   background: #f1f5f9;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  border-radius: 6px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -365,8 +515,13 @@
 }
 
 .opsPrintBtn:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
+}
+
+.opsPrintBtn :global(.fa-fw),
+.opsExportBtn :global(.fa-fw) {
+  font-size: 0.85em;
 }
 
 /* KPI Summary section – above Harvest Record */
@@ -374,56 +529,59 @@
   width: 100%;
   box-sizing: border-box;
   background: #fff;
-  border-radius: 16px;
-  padding: 1.25rem;
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   border: 1px solid #e2e8f0;
 }
 
 .kpiSection .sectionTitle {
-  margin: 0 0 1rem;
+  margin: 0 0 0.45rem;
 }
 
-/* Summary: 3 cards – same grid/gap as reference (gap 1rem throughout) */
+/* Summary: 3 cards – compact grid */
 .summaryCardsThree {
   grid-template-columns: 1fr !important;
-  gap: 1rem !important;
+  gap: 0.45rem !important;
 }
 
 @media (min-width: 768px) {
   .summaryCardsThree {
     grid-template-columns: repeat(2, 1fr) !important;
-    gap: 1rem !important;
+    gap: 0.5rem !important;
   }
 }
 
 @media (min-width: 1024px) {
   .summaryCardsThree {
     grid-template-columns: repeat(3, 1fr) !important;
-    gap: 1rem !important;
+    gap: 0.5rem !important;
   }
 }
 
-/* Production summary cards – Monitor spec (force with !important so overrides inv styles) */
+/* Production summary cards – aligned strips; padding matches card body (no misaligned highlight) */
 .kpiSection :global([class*="summaryCard"]):not([class*="summaryCardLabel"]):not([class*="summaryCardBody"]) {
-  border-radius: 12px !important;
-  border-width: 2px !important;
+  border-radius: 8px !important;
+  border-width: 1px !important;
   background: #fff !important;
   padding: 0 !important;
-  min-height: 72px !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
 }
 .kpiSection :global([class*="summaryCardLabel"]) {
-  font-size: 0.85rem !important;
+  font-size: 0.68rem !important;
   font-weight: 700 !important;
-  padding: 0.5rem 0.75rem 0.35rem !important;
+  padding: 0.35rem 0.5rem 0.25rem !important;
   border-bottom: 1px solid #e2e8f0 !important;
-  border-radius: 10px 10px 0 0 !important;
+  border-radius: 0 !important;
   background: #f8fafc !important;
   color: #475569 !important;
 }
 .kpiSection :global([class*="summaryCardBody"]) {
   background: #fff !important;
-  padding: 0.75rem !important;
+  padding: 0.45rem 0.5rem !important;
+  min-height: 0 !important;
+  gap: 0.28rem !important;
 }
 /* Harvest card – SARMS primary olive */
 .kpiSection :global([class*="summaryCardHarvest"]) {
@@ -452,16 +610,26 @@
 .kpiSection .summaryKpiCard:hover {
   border-color: #cbd5e1;
 }
-/* Unified content layout: label left, value right; same row gap and min height */
-.kpiSection :global([class*="summaryCardBody"]) {
-  min-height: 5rem;
-  gap: 0.5rem;
-}
+/* Unified content layout */
 .kpiSection :global([class*="summaryRow"]) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: 0.35rem;
+  font-size: 0.72rem !important;
+}
+.kpiSection :global([class*="summaryRowSub"]) {
+  font-size: 0.62rem !important;
+}
+.kpiSection :global([class*="summaryHarvestSelect"]),
+.kpiSection :global([class*="summaryHarvestMonthInput"]) {
+  font-size: 0.72rem !important;
+  padding: 0.28rem 0.45rem !important;
+  border-radius: 6px !important;
+}
+.kpiSection :global([class*="summaryHarvestHead"]) {
+  gap: 0.28rem !important;
+  margin-bottom: 0.2rem !important;
 }
 /* Production by Zone card – SARMS soft blue */
 .kpiSection .summaryKpiCardZone:global([class*="summaryCard"]) {
@@ -483,7 +651,7 @@
 }
 
 .zoneRowSub {
-  font-size: 0.8rem;
+  font-size: 0.65rem;
   color: #64748b;
 }
 
@@ -492,9 +660,9 @@
 }
 
 .zoneCardHint {
-  font-size: 0.7rem;
+  font-size: 0.6rem;
   color: #64748b;
-  margin-top: 0.5rem;
+  margin-top: 0.25rem;
 }
 
 .zoneDetailList {
@@ -504,7 +672,7 @@
 }
 
 .zoneDetailItem {
-  padding: 0.6rem 0;
+  padding: 0.35rem 0;
   border-bottom: 1px solid #e2e8f0;
 }
 
@@ -514,9 +682,10 @@
 
 .zoneDetailZoneName {
   font-weight: 700;
+  font-size: 0.8rem;
   color: #0f172a;
   display: block;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.2rem;
 }
 
 .zoneDetailUnits {
@@ -526,10 +695,10 @@
 }
 
 .zoneDetailUnitBadge {
-  font-size: 0.85rem;
-  padding: 0.25rem 0.5rem;
+  font-size: 0.68rem;
+  padding: 0.12rem 0.35rem;
   background: #f1f5f9;
-  border-radius: 6px;
+  border-radius: 4px;
   color: #334155;
 }
 
@@ -538,14 +707,14 @@
   color: #64748b;
 }
 
-/* Summary KPI cards – aligned with Harvest card (padding, radius, shadow) */
+/* Summary KPI cards */
 .summaryKpiCard {
-  min-height: 72px;
+  min-height: 0;
 }
 
 .summaryKpiTrend {
-  font-size: 0.75rem;
-  margin-top: 0.35rem;
+  font-size: 0.62rem;
+  margin-top: 0.2rem;
 }
 
 .summaryKpiTrendUp {
@@ -557,7 +726,7 @@
 }
 
 .summaryKpiGrowthValue {
-  font-size: 1.5rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: #0f172a;
 }
@@ -644,43 +813,49 @@ button.opsKpiAvgHigh:hover { background: #fee2e2; border-color: #f87171; }
 
 .operationsLogEmpty {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 0.72rem;
   color: #64748b;
 }
 
 .operationsLogList {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.4rem;
 }
 
 .opsCard {
-  padding: 1rem;
+  padding: 0.45rem 0.55rem;
   background: #f8fafc;
-  border-radius: 12px;
+  border-radius: 8px;
   border: 1px solid #e2e8f0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.22rem;
 }
 
 .opsRow {
   display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  font-size: 0.9rem;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
 }
 
 .opsLabel {
-  flex: 0 0 100px;
+  flex: 0 0 4.75rem;
   font-weight: 600;
-  color: #475569;
+  font-size: 0.62rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .opsValue {
   flex: 1;
+  min-width: 0;
   color: #0f172a;
   word-break: break-word;
+  font-size: 0.72rem;
 }
 
 .opsPhotoThumb {
@@ -696,8 +871,8 @@ button.opsKpiAvgHigh:hover { background: #fee2e2; border-color: #f87171; }
 
 .opsPhotoThumb img {
   display: block;
-  width: 80px;
-  height: 80px;
+  width: 56px;
+  height: 56px;
   object-fit: cover;
 }
 
@@ -709,7 +884,7 @@ button.opsKpiAvgHigh:hover { background: #fee2e2; border-color: #f87171; }
   background: none;
   border: none;
   padding: 0;
-  font-size: 0.9rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: var(--sarms-primary, #5c7b5c);
   cursor: pointer;
@@ -734,8 +909,8 @@ button.opsKpiAvgHigh:hover { background: #fee2e2; border-color: #f87171; }
 
 .modal {
   background: #fff;
-  border-radius: 16px;
-  padding: 1.5rem;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
   max-width: 480px;
   width: 100%;
   max-height: 90vh;
@@ -748,12 +923,12 @@ button.opsKpiAvgHigh:hover { background: #fee2e2; border-color: #f87171; }
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .modalTitle {
-  margin: 0 0 1.25rem;
-  font-size: 1.25rem;
+  margin: 0 0 0.65rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: #0f172a;
 }
@@ -762,24 +937,25 @@ button.opsKpiAvgHigh:hover { background: #fee2e2; border-color: #f87171; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  margin-top: 0.5rem;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
   flex-wrap: wrap;
 }
 
 .modalActionsRight {
   display: flex;
-  gap: 0.75rem;
+  gap: 0.35rem;
+  flex-wrap: wrap;
 }
 
 .btnDeleteInModal {
-  padding: 0.4rem 0.75rem;
-  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.68rem;
   font-weight: 600;
   color: #b85c5c;
   background: transparent;
   border: 1px solid #fecaca;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -789,13 +965,14 @@ button.opsKpiAvgHigh:hover { background: #fee2e2; border-color: #f87171; }
 }
 
 .btnDanger {
-  padding: 0.6rem 1.25rem;
-  font-size: 0.95rem;
+  min-height: 0;
+  padding: 0.28rem 0.75rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: #fff;
   background: #b85c5c;
   border: none;
-  border-radius: 10px;
+  border-radius: 7px;
   cursor: pointer;
 }
 
@@ -804,14 +981,14 @@ button.opsKpiAvgHigh:hover { background: #fee2e2; border-color: #f87171; }
 }
 
 .deleteConfirmText {
-  margin: 0 0 0.5rem;
-  font-size: 0.95rem;
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
   color: #334155;
 }
 
 .deleteConfirmSub {
-  margin: 0 0 1rem;
-  font-size: 0.85rem;
+  margin: 0 0 0.65rem;
+  font-size: 0.65rem;
   color: #64748b;
 }
 
@@ -819,22 +996,28 @@ button.opsKpiAvgHigh:hover { background: #fee2e2; border-color: #f87171; }
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.35rem;
+  gap: 0.25rem;
   white-space: nowrap;
-  padding-top: 0.75rem;
+  padding-top: 0;
   border-top: none !important;
   border-bottom: none !important;
 }
 
 .btnEdit,
 .btnDelete {
-  padding: 0.35rem 0.5rem;
+  padding: 0.2rem 0.4rem;
   border: 1px solid #e2e8f0;
-  border-radius: 6px;
+  border-radius: 5px;
   background: #f8fafc;
   color: #475569;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.68rem;
+  line-height: 1;
+}
+
+.btnEdit .fa-fw,
+.btnDelete .fa-fw {
+  font-size: 0.85em;
 }
 
 .btnEdit:hover {
@@ -903,10 +1086,6 @@ button.opsKpiAvgHigh:hover { background: #fee2e2; border-color: #f87171; }
   margin: 0.5rem auto 0;
   border-radius: 8px;
   border: 1px solid #e2e8f0;
-}
-
-.modalActions {
-  margin-top: 1rem;
 }
 
 .imageOverlay {

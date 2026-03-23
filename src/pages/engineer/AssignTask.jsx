@@ -988,7 +988,10 @@ export default function AssignTask() {
                       </div>
                     </div>
                     <div className={styles.greenhouseAisle}>
-                      <span className={styles.aisleLabel}>{t('assignAisle')}</span>
+                      <div className={styles.aisleHeaderSpacer} aria-hidden="true" />
+                      <div className={styles.aisleLabelWrap}>
+                        <span className={styles.aisleLabel}>{t('assignAisle')}</span>
+                      </div>
                     </div>
                     <div className={styles.greenhouseSide}>
                       <span className={styles.sideLabel}>{t('rightSide')}</span>

@@ -1,31 +1,33 @@
-/* Admin Settings – sections, form controls */
+/* Admin Settings – aligned with admin dashboard density (~80% zoom, full width) */
 
-/* Shared page/section specs (Assign Task reference) */
 .page {
   width: 100%;
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 1rem;
+  max-width: none;
+  margin: 0;
+  padding: 0;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  width: 100%;
+  gap: 0.65rem;
 }
 
 @media (min-width: 768px) {
   .page {
-    padding: 1.5rem;
-    gap: 1.5rem;
+    gap: 0.8rem;
   }
 }
 
 .pageTitle {
-  margin: 0 0 1rem;
-  font-size: 1.25rem;
+  margin: 0 0 0.25rem;
+  font-size: 0.92rem;
   font-weight: 700;
   color: #0f172a;
   letter-spacing: -0.02em;
+}
+
+.pageTitle .fa-fw {
+  margin-inline-end: 0.35em;
+  font-size: 0.92em;
 }
 
 .resetSuccessBanner {
@@ -44,32 +46,38 @@
 
 .section {
   background: #fff;
-  border-radius: 16px;
-  padding: 1.25rem;
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   border: 1px solid #e2e8f0;
 }
 
 .sectionTitle {
-  margin: 0 0 1rem;
-  font-size: 1.25rem;
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
   font-weight: 700;
   color: #0f172a;
   letter-spacing: -0.02em;
 }
 
-.sectionDesc {
-  margin: 0 0 1rem;
-  font-size: 0.9rem;
+.sectionTitle .fa-fw {
+  margin-inline-end: 0.35em;
+  font-size: 0.92em;
   color: #64748b;
-  line-height: 1.45;
+}
+
+.sectionDesc {
+  margin: 0 0 0.45rem;
+  font-size: 0.68rem;
+  color: #64748b;
+  line-height: 1.35;
 }
 
 .row {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  margin-bottom: 1rem;
+  gap: 0.3rem;
+  margin-bottom: 0.45rem;
 }
 
 .row:last-child {
@@ -77,7 +85,7 @@
 }
 
 .label {
-  font-size: 0.9rem;
+  font-size: 0.65rem;
   font-weight: 600;
   color: #334155;
 }
@@ -85,10 +93,11 @@
 .input {
   width: 100%;
   max-width: 100%;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.95rem;
+  padding: 0.28rem 0.45rem;
+  font-size: 0.72rem;
+  min-height: 0;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 6px;
   background: #fff;
   color: #0f172a;
   box-sizing: border-box;
@@ -107,8 +116,8 @@
 .langRow {
   display: inline-flex;
   align-items: stretch;
-  align-self: center;
-  border-radius: 8px;
+  align-self: flex-start;
+  border-radius: 6px;
   overflow: hidden;
   background: #ebebeb;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
@@ -116,9 +125,9 @@
 
 .langBtn,
 .langBtnActive {
-  min-height: 32px;
-  padding: 0.3rem 0.85rem;
-  font-size: 0.8rem;
+  min-height: 0;
+  padding: 0.22rem 0.6rem;
+  font-size: 0.68rem;
   font-weight: 600;
   border: none;
   cursor: pointer;
@@ -152,33 +161,67 @@
 }
 
 .hint {
-  font-size: 0.8rem;
+  font-size: 0.68rem;
   color: #94a3b8;
-  margin-top: 0.35rem;
-  line-height: 1.4;
+  margin-top: 0.15rem;
+  line-height: 1.35;
 }
 
 .accountRow {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-  padding: 0.75rem 0;
-  font-size: 0.9rem;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.2rem 0 0;
+  font-size: 0.72rem;
   color: #475569;
+}
+
+.accountItem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  min-width: 0;
 }
 
 .accountLabel {
   font-weight: 600;
   color: #334155;
+  min-width: 3.2rem;
+}
+
+.accountValue {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.settingsGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.65rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (min-width: 640px) {
+  .settingsGrid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.8rem;
+  }
+}
+
+.wideSection {
+  grid-column: 1 / -1;
 }
 
 .saveBtn {
-  margin-top: 0.5rem;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
+  align-self: flex-start;
+  margin-top: 0.35rem;
+  padding: 0.32rem 0.85rem;
+  font-size: 0.72rem;
   font-weight: 600;
   border: none;
-  border-radius: 10px;
+  border-radius: 6px;
   background: #0f172a;
   color: #fff;
   cursor: pointer;
@@ -195,9 +238,9 @@
 }
 
 .saved {
-  font-size: 0.8rem;
+  font-size: 0.68rem;
   color: #16a34a;
-  margin-left: 0.5rem;
+  margin-inline-start: 0.4rem;
 }
 
 .clearDataBtn {
@@ -220,11 +263,12 @@
 }
 
 .resetSystemBtn {
-  padding: 0.6rem 1.25rem;
-  font-size: 0.95rem;
+  align-self: flex-start;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  border: 2px solid #dc2626;
-  border-radius: 10px;
+  border: 1px solid #dc2626;
+  border-radius: 7px;
   background: #dc2626;
   color: #fff;
   cursor: pointer;

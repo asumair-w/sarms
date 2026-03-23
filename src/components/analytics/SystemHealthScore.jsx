@@ -12,7 +12,7 @@ const WEIGHTS = {
  * System Health Score: single 0–100% from weighted risk metrics.
  * Green ≥80, yellow 60–79, red <60.
  */
-export default function SystemHealthScore({ overviewData }) {
+export default function SystemHealthScore({ overviewData, compact = false }) {
   const { score, band } = useMemo(() => {
     if (!overviewData?.riskMetrics?.values?.length) return { score: 100, band: 'high' }
     const [delayedPct, criticalFaultPct, criticalInvPct, , overduePct] = overviewData.riskMetrics.values
@@ -27,8 +27,8 @@ export default function SystemHealthScore({ overviewData }) {
   }, [overviewData])
 
   return (
-    <div className={styles.wrap} role="status" aria-label={`System health score ${score} percent`}>
-      <div className={`${styles.ring} ${styles[band]}`}>
+    <div className={compact ? `${styles.wrap} ${styles.wrapCompact}` : styles.wrap} role="status" aria-label={`System health score ${score} percent`}>
+      <div className={`${styles.ring} ${compact ? styles.ringCompact : ''} ${styles[band]}`}>
         <svg viewBox="0 0 36 36" className={styles.svg}>
           <path
             className={styles.bg}

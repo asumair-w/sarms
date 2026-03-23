@@ -568,3 +568,145 @@
   color: #64748b;
   margin: 1rem 0 1.25rem;
 }
+
+/* ─── Admin route (/admin/register): compact density ~75% zoom, full width ─── */
+
+.registerAdmin {
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  gap: 0.75rem;
+}
+
+@media (min-width: 768px) {
+  .registerAdmin {
+    gap: 0.9rem;
+  }
+}
+
+.adminRankingSurface {
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+}
+
+.adminRankingHeading {
+  font-size: 1.05rem;
+  margin-bottom: 0.6rem;
+}
+
+.rankingStatGridAdmin {
+  gap: 0.55rem;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+}
+
+@media (min-width: 640px) {
+  .rankingStatGridAdmin {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.registerAdmin .rankingCard {
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  gap: 0.18rem;
+}
+
+.registerAdmin .rankingLabel {
+  font-size: 0.64rem;
+  letter-spacing: 0.02em;
+}
+
+.registerAdmin .rankingName,
+.registerAdmin .rankingLink {
+  font-size: 0.82rem;
+}
+
+.registerAdmin .rankingMetric {
+  font-size: 0.74rem;
+}
+
+.filtersAdmin {
+  gap: 0.5rem;
+  row-gap: 0.5rem;
+}
+
+.registerAdmin .search {
+  min-width: 150px;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.8rem;
+  min-height: 36px;
+  border-radius: 7px;
+}
+
+.registerAdmin .filter {
+  padding: 0.35rem 0.5rem;
+  font-size: 0.78rem;
+  min-height: 36px;
+  border-radius: 7px;
+}
+
+.registerAdmin .addWorkerBtn,
+.registerAdmin .exportPdfBtn {
+  min-height: 36px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.78rem;
+  border-radius: 8px;
+}
+
+.registerAdmin .addWorkerBtn {
+  margin-left: auto;
+}
+
+.adminTableSurface {
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+}
+
+.registerAdmin .table {
+  min-width: 760px;
+}
+
+.registerAdmin .table th,
+.registerAdmin .table td {
+  padding: 0.38rem 0.5rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.registerAdmin .table th {
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.registerAdmin .cellId {
+  font-size: 0.74rem;
+}
+
+.registerAdmin .skillTag {
+  padding: 0.14rem 0.38rem;
+  font-size: 0.68rem;
+  border-radius: 5px;
+}
+
+.registerAdmin .badgeActive,
+.registerAdmin .badgeNotActive,
+.registerAdmin .badgeInTask,
+.registerAdmin .badgeNotInTask {
+  padding: 0.12rem 0.42rem;
+  font-size: 0.66rem;
+}
+
+.registerAdmin .actionBtn {
+  padding: 0.26rem 0.48rem;
+  font-size: 0.72rem;
+  border-radius: 6px;
+}
+
+.registerAdmin .actionsCell {
+  gap: 0.35rem;
+}
+
+.registerAdmin .empty {
+  padding: 1.25rem;
+  font-size: 0.82rem;
+}

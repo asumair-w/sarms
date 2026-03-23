@@ -1,8 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { jsPDF } from 'jspdf'
-import html2canvas from 'html2canvas'
 import { EQUIPMENT_STATUS, EQUIPMENT_STATUS_LABELS } from '../../data/inventory'
 import {
   FAULT_CATEGORIES,
@@ -22,6 +20,7 @@ import { useAppStore } from '../../context/AppStoreContext'
 import { useLanguage } from '../../context/LanguageContext'
 import { getTranslation } from '../../i18n/translations'
 import { nextFaultId, nextMaintenancePlanId, nextEquipmentId } from '../../utils/idGenerators'
+import { escapeHtmlForPrint, buildSarmsPrintHtml, openSarmsPrintWindow } from '../../utils/sarmsPrintHtml'
 import styles from './LogFaultMaintenance.module.css'
 import eqStyles from './InventoryEquipment.module.css'
 
@@ -82,7 +81,6 @@ export default function LogFaultMaintenance() {
   const [activeTicketsFilter, setActiveTicketsFilter] = useState('all') // 'all' | 'overdue' | 'this_week'
   const activeTicketsSectionRef = useRef(null)
   const equipmentSectionRef = useRef(null)
-  const equipmentTableRef = useRef(null)
 
   function scrollToTickets(filter) {
     setActiveTicketsFilter(filter)
@@ -446,65 +444,53 @@ export default function LogFaultMaintenance() {
   }, [equipmentWithInspection, faults, addFault, updateFault])
 
   function exportEquipmentPDF() {
-    const el = equipmentTableRef.current
-    if (!el) return
-    html2canvas(el, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-    }).then((canvas) => {
-      const imgData = canvas.toDataURL('image/png')
-      const pdf = new jsPDF({
-        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
-        unit: 'mm',
-        format: 'a4',
-      })
-      const pdfW = pdf.internal.pageSize.getWidth()
-      const pdfH = pdf.internal.pageSize.getHeight()
-      const margin = 10
-      const w = pdfW - margin * 2
-      const h = (canvas.height * w) / canvas.width
+    if (filteredEquipment.length === 0) return
 
-      pdf.setFontSize(14)
-      pdf.setFont('helvetica', 'bold')
-      pdf.text(t('eqManageEquipment'), margin, 12)
-      pdf.setFontSize(9)
-      pdf.setFont('helvetica', 'normal')
-      pdf.text(new Date().toLocaleString(), margin, 18)
+    const dir = lang === 'ar' ? 'rtl' : 'ltr'
+    const zoneLabelVal = eqFilterZone ? (equipmentZoneLabel(eqFilterZone) || eqFilterZone) : t('eqAll')
+    const statusLabelVal = eqFilterStatus ? getEquipmentStatusDisplayLabel(eqFilterStatus) : t('eqAll')
+    const searchValue = eqFilterSearch.trim() || '—'
+    const sortColLabel = eqSortBy === 'name' ? t('equipmentName') : eqSortBy === 'zone' ? t('assignedZone') : eqSortBy === 'lastInspection' ? t('eqNextService') : eqSortBy
+    const sortLabel = `${sortColLabel} (${eqSortDir === 'asc' ? 'asc' : 'desc'})`
 
-      let y = 24
-      pdf.setFontSize(10)
-      pdf.setFont('helvetica', 'bold')
-      pdf.text(t('eqFiltersApplied'), margin, y)
-      y += 5
-      const zoneLabelVal = eqFilterZone ? (equipmentZoneLabel(eqFilterZone) || eqFilterZone) : t('eqAll')
-      const statusLabelVal = eqFilterStatus ? getEquipmentStatusDisplayLabel(eqFilterStatus) : t('eqAll')
-      const searchValue = eqFilterSearch.trim() || '—'
-      const sortColLabel = eqSortBy === 'name' ? t('equipmentName') : eqSortBy === 'zone' ? t('assignedZone') : eqSortBy === 'lastInspection' ? t('eqNextService') : eqSortBy
-      const sortLabel = `${sortColLabel} (${eqSortDir === 'asc' ? 'asc' : 'desc'})`
-      pdf.setFont('helvetica', 'normal')
-      pdf.setFontSize(9)
-      const filterLine1 = `${t('eqZone')}: ${zoneLabelVal}   ·   ${t('eqStatus')}: ${statusLabelVal}   ·   ${t('eqHighFailureOnly')}: ${eqFilterHighFailure ? 'Yes' : 'No'}`
-      const filterLine2 = `${t('eqSearch')}: ${searchValue}`
-      const filterLine3 = `${t('eqSort')}: ${sortLabel}   ·   ${t('eqRows')}: ${filteredEquipment.length}`
-      const lineH = 5
-      const split1 = pdf.splitTextToSize(filterLine1, w)
-      split1.forEach((line) => { pdf.text(line, margin, y); y += lineH })
-      pdf.text(filterLine2, margin, y); y += lineH
-      const split3 = pdf.splitTextToSize(filterLine3, w)
-      split3.forEach((line) => { pdf.text(line, margin, y); y += lineH })
-      y += 3
-      pdf.setDrawColor(220, 220, 220)
-      pdf.line(margin, y, margin + w, y)
-      y += 4
-      const headerH = y
-      const imgH = Math.min(h, pdfH - headerH - 4)
-      const imgW = (canvas.width * imgH) / canvas.height
-      const imgX = margin + (w - imgW) / 2
-      pdf.addImage(imgData, 'PNG', imgX, headerH, imgW, imgH)
-      pdf.save(`Equipment-${new Date().toISOString().slice(0, 10)}.pdf`)
-    }).catch(() => {})
+    const rowsHtml = filteredEquipment.map((e) => {
+      const nameStr = String(e.name ?? '')
+      const zoneStr = String(equipmentZoneLabel(e.zone))
+      const statusStr = getEquipmentStatusDisplayLabel(e.status)
+      const nextStr = e.lastCheck ?? '—'
+      const lastStr = e.lastTicketCreated ?? '—'
+      return `<tr>
+        <td>${escapeHtmlForPrint(nameStr)}</td>
+        <td>${escapeHtmlForPrint(zoneStr)}</td>
+        <td>${escapeHtmlForPrint(statusStr)}</td>
+        <td>${escapeHtmlForPrint(nextStr)}</td>
+        <td>${escapeHtmlForPrint(lastStr)}</td>
+      </tr>`
+    }).join('')
+
+    const filtersInnerHtml = `<div><strong>${escapeHtmlForPrint(t('eqFiltersApplied'))}</strong></div>
+<div>${escapeHtmlForPrint(t('eqZone'))}: ${escapeHtmlForPrint(zoneLabelVal)} · ${escapeHtmlForPrint(t('eqStatus'))}: ${escapeHtmlForPrint(statusLabelVal)} · ${escapeHtmlForPrint(t('eqHighFailureOnly'))}: ${escapeHtmlForPrint(eqFilterHighFailure ? t('yes') : t('no'))}</div>
+<div>${escapeHtmlForPrint(t('eqSearch'))}: ${escapeHtmlForPrint(searchValue)}</div>
+<div>${escapeHtmlForPrint(t('eqSort'))}: ${escapeHtmlForPrint(sortLabel)} · ${escapeHtmlForPrint(t('eqRows'))}: ${filteredEquipment.length}</div>`
+
+    const theadRowHtml = [
+      t('equipmentName'),
+      t('assignedZone'),
+      t('operationalStatus'),
+      t('eqNextService'),
+      t('eqLastService'),
+    ].map((label) => `<th>${escapeHtmlForPrint(label)}</th>`).join('')
+
+    const html = buildSarmsPrintHtml({
+      title: t('eqManageEquipment'),
+      metaLine: new Date().toLocaleString(),
+      filtersInnerHtml,
+      theadRowHtml,
+      tbodyHtml: rowsHtml,
+      dir,
+      lang,
+    })
+    openSarmsPrintWindow(html)
   }
   function handleSaveEditEquipment(e) {
     e.preventDefault()
@@ -786,7 +772,7 @@ export default function LogFaultMaintenance() {
                 {inspectionOverdueCount > 0 && <span className={eqStyles.inspectionCounterOverdue}>{t('eqOverdueInspections')}: {inspectionOverdueCount}</span>}
           </div>
             )}
-            <div className={eqStyles.tableWrap} ref={equipmentTableRef}>
+            <div className={eqStyles.tableWrap}>
               <table className={eqStyles.table}>
                 <thead>
                   <tr>
