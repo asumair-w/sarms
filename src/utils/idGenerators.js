@@ -54,7 +54,15 @@ export function nextMovementId(movements) {
 
 /** Inventory item: inv1, inv2, ... inv13 */
 export function nextInventoryItemId(inventory) {
-  return getNextId(inventory, 'inv', {})
+  const list = Array.isArray(inventory) ? inventory : []
+  const candidates = list.map((item) => {
+    if (item && typeof item === 'object') {
+      // In Supabase mode, `id` is UUID while legacy app id is stored in `legacyId`.
+      return item.legacyId ?? item.id
+    }
+    return item
+  })
+  return getNextId(candidates, 'inv', {})
 }
 
 /** Equipment: eq1, eq2, ... eq9 */
