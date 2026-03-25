@@ -107,6 +107,7 @@ function toDbZone(item) {
 
 const BATCHES_BY_ZONE_SETTINGS_KEY = 'sarms-batches-by-zone'
 const DEFAULT_BATCH_BY_ZONE_SETTINGS_KEY = 'sarms-default-batch-by-zone'
+const POWER_BI_SETTINGS_KEY = 'sarms-powerbi-url'
 
 /** Zones + batch settings from `zones` + `settings`. */
 export async function fetchZonesAndSettingsAppShaped() {
@@ -120,8 +121,15 @@ export async function fetchZonesAndSettingsAppShaped() {
     const rows = settingsRows || []
     const batchesRow = rows.find((r) => r.key === BATCHES_BY_ZONE_SETTINGS_KEY)
     const defaultRow = rows.find((r) => r.key === DEFAULT_BATCH_BY_ZONE_SETTINGS_KEY)
+    const powerBiRow = rows.find((r) => r.key === POWER_BI_SETTINGS_KEY)
     const batchesByZone = batchesRow && typeof batchesRow.value === 'object' ? batchesRow.value : {}
     const defaultBatchByZone = defaultRow && typeof defaultRow.value === 'object' ? defaultRow.value : {}
+    const powerBiUrl =
+      powerBiRow && typeof powerBiRow.value === 'object'
+        ? powerBiRow.value.url || ''
+        : powerBiRow && typeof powerBiRow.value === 'string'
+          ? powerBiRow.value
+          : ''
 
     const { data: zonesData, error: zErr } = await supabase.from('zones').select('*')
     if (zErr) {
@@ -129,7 +137,7 @@ export async function fetchZonesAndSettingsAppShaped() {
       return null
     }
     const zones = (zonesData || []).map(fromDbZone).filter(Boolean)
-    return { zones, batchesByZone, defaultBatchByZone }
+    return { zones, batchesByZone, defaultBatchByZone, powerBiUrl }
   } catch (e) {
     console.error('[SARMS][Supabase] error', 'fetchZonesAndSettingsAppShaped', e)
     return null

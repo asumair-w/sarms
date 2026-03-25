@@ -19,6 +19,7 @@ import {
   fetchZonesAndSettingsAppShaped,
 } from '../lib/supabaseSchema'
 import { USE_SUPABASE, USE_SUPABASE_ACTIVE } from '../config/dataBackend'
+import { setPowerBiEmbedUrlCache } from '../config/powerBi'
 import { fetchTasksAppShaped, persistTask, replaceAllTasks } from '../lib/supabaseTasksAdapter'
 import {
   fetchSessionsAppShaped,
@@ -629,6 +630,7 @@ export function AppStoreProvider({ children }) {
         console.error('[SARMS][Supabase] error', 'refreshSupabaseCoreState', 'one or more fetches returned null')
         return
       }
+      setPowerBiEmbedUrlCache(zonesSettings?.powerBiUrl || '')
       let harvestApp = []
       try {
         harvestApp = await fetchHarvestLogRecordsAppShaped()
@@ -707,6 +709,7 @@ export function AppStoreProvider({ children }) {
           supabaseHydrateDone.current = true
           return
         }
+      setPowerBiEmbedUrlCache(zonesSettings?.powerBiUrl || '')
         let harvestApp = []
         try {
           harvestApp = await fetchHarvestLogRecordsAppShaped()

@@ -1,17 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useLanguage } from '../context/LanguageContext'
 import { getTranslation } from '../i18n/translations'
-import { POWER_BI_STORAGE_KEY } from '../config/powerBi'
+import { getPowerBiEmbedUrl, savePowerBiEmbedUrl } from '../config/powerBi'
 import { resetSystem } from '../lib/resetSystem'
 import styles from './AdminSettings.module.css'
-
-function getStoredPowerBiUrl() {
-  try {
-    return localStorage.getItem(POWER_BI_STORAGE_KEY) || ''
-  } catch {
-    return ''
-  }
-}
 
 export default function AdminSettings() {
   const { lang, setLang } = useLanguage()
@@ -21,7 +13,7 @@ export default function AdminSettings() {
   const [account, setAccount] = useState({ userId: '', role: '' })
 
   useEffect(() => {
-    setPowerBiUrl(getStoredPowerBiUrl())
+    setPowerBiUrl(getPowerBiEmbedUrl())
   }, [])
 
   useEffect(() => {
@@ -35,9 +27,9 @@ export default function AdminSettings() {
     }
   }, [])
 
-  function handleSavePowerBi() {
+  async function handleSavePowerBi() {
     try {
-      localStorage.setItem(POWER_BI_STORAGE_KEY, powerBiUrl.trim())
+      await savePowerBiEmbedUrl(powerBiUrl.trim())
       setPowerBiSaved(true)
       setTimeout(() => setPowerBiSaved(false), 2000)
     } catch {
